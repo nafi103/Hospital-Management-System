@@ -15,5 +15,6 @@ namespace HospitalManagementSystem.Models
         public string ContactInfo { get; set; } // contact_info - VARCHAR
 
         public string CurrentStatus { get; set; } // current_status - VARCHAR (e.g., 'Waiting', 'In Consultation', 'Admitted', 'Cleared for Discharge')[cite: 1]
+        public List<Admission> Admissions { get; set; } = new List<Admission>(); // Admissions - List of Admission objects (One-to-Many relationship)
     }
 }
