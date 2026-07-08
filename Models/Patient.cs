@@ -1,20 +1,28 @@
+using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
 
 namespace HospitalManagementSystem.Models
 {
-    // সিপিতে যেমন struct Patient লিখো, এটা ঠিক তেমনই
+    [Index(nameof(Uhid), IsUnique = true)]
+    [Index(nameof(CreatedAt))]
     public class Patient
     {
         [Key]
-        public int Id { get; set; } // id (PK) - INT
+        public int Id { get; set; }
 
-        public string Uhid { get; set; } // uhid - VARCHAR (Unique Hospital Identification Number)
+        public string Uhid { get; set; }
+        public string FullName { get; set; }
+        public string ContactInfo { get; set; }
+        public DateTime DateOfBirth { get; set; }
+        public string Gender { get; set; }
+        public string BloodGroup { get; set; }
+        public string EmergencyContact { get; set; }
 
-        public string FullName { get; set; } // full_name - VARCHAR
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
 
-        public string ContactInfo { get; set; } // contact_info - VARCHAR
-
-        public string CurrentStatus { get; set; } // current_status - VARCHAR (e.g., 'Waiting', 'In Consultation', 'Admitted', 'Cleared for Discharge')[cite: 1]
-        public List<Admission> Admissions { get; set; } = new List<Admission>(); // Admissions - List of Admission objects (One-to-Many relationship)
+        public List<Admission> Admissions { get; set; } = new List<Admission>();
     }
 }

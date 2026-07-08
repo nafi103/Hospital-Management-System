@@ -1,16 +1,36 @@
+using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Linq;
+using Microsoft.EntityFrameworkCore;
 
 namespace HospitalManagementSystem.Models
 {
-    // সিপিতে যেমন struct Patient লিখো, এটা ঠিক তেমনই
+    [Index(nameof(BedNumber), IsUnique = true)]
+    [Index(nameof(CreatedAt))]
     public class Bed
     {
         [Key]
-        public int Id { get; set; } // id (PK) - INT
-        public string BedNumber { get; set; } // bed_number - VARCHAR (Unique Bed Number)
-        public string Type { get; set; } // bed_type - VARCHAR (e.g., 'General', 'ICU', 'Private')[cite: 1]
-        public string Status { get; set; } // status - VARCHAR (e.g., 'Available', 'Occupied', 'Under Maintenance')[cite: 1]
-        public decimal DailyRate { get; set; } // daily_rate - DECIMAL (Cost per day for the bed)[cite: 1]
-        public List<Admission> Admissions { get; set; } = new List<Admission>(); // Admissions - List of Admission objects (One-to-Many relationship)
+        public int Id { get; set; }
+
+        public string BedNumber { get; set; }
+        public BedCategory Category { get; set; }
+        public decimal DailyRate { get; set; }
+
+        [NotMapped]
+        public string Status 
+        {
+            get 
+            {
+                bool isOccupied = BedTransfers != null && BedTransfers.Any(bt => bt.EndDate == null);
+                return isOccupied ? "Occupied" : "Available";
+            }
+        }
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+
+        public List<BedTransfer> BedTransfers { get; set; } = new List<BedTransfer>();
     }
 }

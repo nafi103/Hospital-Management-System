@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
@@ -6,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace HospitalManagementSystem.Models
 {
     [Index(nameof(CreatedAt))]
-    public class Appointment
+    public class Prescription
     {
         [Key]
         public int Id { get; set; }
@@ -18,12 +19,12 @@ namespace HospitalManagementSystem.Models
         [ForeignKey("DoctorId")]
         public User Doctor { get; set; }
 
-        public DateTime AppointmentDatetime { get; set; }
-        public DateTime EndTime { get; set; }
-        public string ReasonForVisit { get; set; }
-        public AppointmentStatus Status { get; set; }
+        public string Notes { get; set; }
+        public PrescriptionStatus Status { get; set; }
 
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+
+        public List<PrescriptionItem> PrescriptionItems { get; set; } = new List<PrescriptionItem>();
     }
 }

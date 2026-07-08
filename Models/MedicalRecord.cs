@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace HospitalManagementSystem.Models
 {
     [Index(nameof(CreatedAt))]
-    public class Appointment
+    public class MedicalRecord
     {
         [Key]
         public int Id { get; set; }
@@ -18,10 +18,14 @@ namespace HospitalManagementSystem.Models
         [ForeignKey("DoctorId")]
         public User Doctor { get; set; }
 
-        public DateTime AppointmentDatetime { get; set; }
-        public DateTime EndTime { get; set; }
-        public string ReasonForVisit { get; set; }
-        public AppointmentStatus Status { get; set; }
+        public int? AppointmentId { get; set; }
+        public Appointment Appointment { get; set; }
+
+        public int? AdmissionId { get; set; }
+        public Admission Admission { get; set; }
+
+        public string Diagnosis { get; set; }
+        public string Treatment { get; set; }
 
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
