@@ -21,4 +21,11 @@ public class HomeController : Controller
     {
         return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
     }
+
+    [HttpGet("/ClearAdmissions")]
+    public async Task<IActionResult> ClearAdmissions([FromServices] HospitalManagementSystem.Models.ApplicationDbContext context)
+    {
+        await Microsoft.EntityFrameworkCore.RelationalDatabaseFacadeExtensions.ExecuteSqlRawAsync(context.Database, "TRUNCATE TABLE \"BedTransfers\", \"Admissions\" CASCADE;");
+        return Content("Cleared.");
+    }
 }

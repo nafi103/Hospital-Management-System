@@ -1,0 +1,80 @@
+@model HospitalManagementSystem.Models.Admission
+
+@{
+    ViewData["Title"] = "Edit Admission";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
+    <div>
+        <h2 class="mb-1">Edit Admission</h2>
+        <p class="text-muted mb-0">Update admission details for @(Model.Patient?.FullName ?? "Patient").</p>
+    </div>
+    <a asp-action="Index" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back to Admissions
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-lg-8 col-xl-6">
+        <div class="pro-card">
+            <form asp-action="Edit">
+                <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                <input type="hidden" asp-for="Id" />
+                <input type="hidden" asp-for="PatientId" />
+                <input type="hidden" asp-for="CreatedAt" />
+                
+                <h5 class="card-title text-primary mb-4 border-bottom pb-2">Admission Details</h5>
+                
+                <div class="mb-4">
+                    <label class="form-label fw-medium">Patient</label>
+                    <input type="text" class="form-control bg-light" value="@Model.Patient?.FullName (@Model.Patient?.Uhid)" readonly />
+                    <small class="text-muted mt-1 d-block">Patient cannot be changed. Delete and readmit if needed.</small>
+                </div>
+
+                <div class="row g-4 mb-4">
+                    <div class="col-md-6">
+                        <label asp-for="AdmittingDoctorId" class="form-label fw-medium">Admitting Doctor <span class="text-danger">*</span></label>
+                        <select asp-for="AdmittingDoctorId" class="form-select" asp-items="ViewBag.DoctorId" required>
+                            <option value="">-- Select Doctor --</option>
+                        </select>
+                        <span asp-validation-for="AdmittingDoctorId" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="AdmissionDate" class="form-label fw-medium">Admission Date & Time <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white"><i class="bi bi-calendar-event text-muted"></i></span>
+                            <input asp-for="AdmissionDate" type="datetime-local" class="form-control" required />
+                        </div>
+                        <span asp-validation-for="AdmissionDate" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                @if (Model.DischargeDate.HasValue)
+                {
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-6">
+                            <label asp-for="DischargeDate" class="form-label fw-medium">Discharge Date & Time</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white"><i class="bi bi-calendar-check text-muted"></i></span>
+                                <input asp-for="DischargeDate" type="datetime-local" class="form-control" />
+                            </div>
+                            <span asp-validation-for="DischargeDate" class="text-danger small"></span>
+                        </div>
+                    </div>
+                }
+
+                <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                    <a asp-action="Index" class="btn btn-light">Cancel</a>
+                    <button type="submit" class="btn btn-primary px-4">
+                        <i class="bi bi-save me-1"></i> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}

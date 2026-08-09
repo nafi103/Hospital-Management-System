@@ -13,12 +13,21 @@ namespace HospitalManagementSystem.Models
         public int Id { get; set; }
 
         public string Uhid { get; set; }
-        public string FullName { get; set; }
-        public string ContactInfo { get; set; }
+        
+        public bool IsChild { get; set; }
+        
+        public string? FullName { get; set; }
+        
+        [RegularExpression(@"^1[3-9]\d{8}$", ErrorMessage = "Phone number must be exactly 10 digits and start with a valid operator prefix (13-19).")]
+        public long? ContactInfo { get; set; }
+        
         public DateTime DateOfBirth { get; set; }
         public string Gender { get; set; }
         public string BloodGroup { get; set; }
-        public string EmergencyContact { get; set; }
+        public string? EmergencyContactName { get; set; }
+        
+        [RegularExpression(@"^1[3-9]\d{8}$", ErrorMessage = "Phone number must be exactly 10 digits and start with a valid operator prefix (13-19).")]
+        public long? EmergencyContactPhone { get; set; }
 
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }

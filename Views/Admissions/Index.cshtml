@@ -1,0 +1,108 @@
+@model IEnumerable<HospitalManagementSystem.Models.Admission>
+
+@{
+    ViewData["Title"] = "Admissions";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
+    <div>
+        <h2 class="mb-1">Admissions Directory</h2>
+        <p class="text-muted mb-0">Manage active and past patient admissions.</p>
+    </div>
+    <a asp-action="Create" class="btn btn-primary">
+        <i class="bi bi-person-plus-fill me-1"></i> Admit Patient
+    </a>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="pro-card p-0 overflow-hidden">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th class="ps-4">Patient</th>
+                    <th>Admitting Doctor</th>
+                    <th>Bed</th>
+                    <th>Admitted On</th>
+                    <th>Status</th>
+                    <th class="text-end pe-4">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model != null && Model.Any())
+                {
+                    foreach (var item in Model)
+                    {
+                        var activeTransfer = item.BedTransfers.FirstOrDefault(bt => bt.EndDate == null);
+                        var isDischarged = item.DischargeDate.HasValue;
+
+                        <tr>
+                            <td class="ps-4">
+                                <p class="fw-bold mb-0">
+                                    @(string.IsNullOrEmpty(item.Patient.FullName) ? $"Baby of {item.Patient.EmergencyContactName}" : item.Patient.FullName)
+                                </p>
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle">@item.Patient.Uhid</span>
+                            </td>
+                            <td>@item.AdmittingDoctor.FullName</td>
+                            <td>
+                                @if (activeTransfer != null)
+                                {
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle px-2 py-1">
+                                        <i class="bi bi-hospital me-1"></i> @activeTransfer.Bed.BedNumber
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted fst-italic">Unassigned</span>
+                                }
+                            </td>
+                            <td>@item.AdmissionDate.ToString("dd/MM/yy hh:mm tt")</td>
+                            <td>
+                                @if (isDischarged)
+                                {
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-1">Discharged</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning bg-opacity-10 text-warning border border-warning-subtle px-2 py-1">Admitted</span>
+                                }
+                            </td>
+                            <td class="text-end pe-4">
+                                <div class="btn-group">
+                                    <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary" title="Edit">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    @if (!isDischarged)
+                                    {
+                                        <a asp-action="Discharge" asp-route-id="@item.Id" class="btn btn-sm btn-outline-success" title="Discharge">
+                                            <i class="bi bi-door-open"></i>
+                                        </a>
+                                    }
+                                    <a asp-action="Delete" asp-route-id="@item.Id" class="btn btn-sm btn-outline-danger" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox fs-2 d-block mb-3"></i>
+                            No admissions found.
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

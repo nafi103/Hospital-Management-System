@@ -1,0 +1,132 @@
+@model HospitalManagementSystem.Models.Patient
+
+@{
+    ViewData["Title"] = "Register Patient";
+}
+
+<div class="mb-4 border-bottom pb-3">
+    <a asp-action="Index" class="text-decoration-none text-muted mb-2 d-inline-block">
+        <i class="bi bi-arrow-left"></i> Back to Directory
+    </a>
+    <h2 class="mb-1">Register New Patient</h2>
+    <p class="text-muted mb-0">Enter the patient's demographic details to generate a UHID.</p>
+</div>
+
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="pro-card">
+            <form asp-action="Create">
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+                
+                <div class="mb-4 form-check form-switch fs-5 pb-3 border-bottom">
+                    <input class="form-check-input" type="checkbox" role="switch" id="IsChildToggle" asp-for="IsChild">
+                    <label class="form-check-label fw-medium text-primary" for="IsChildToggle">Registering a Minor/Child?</label>
+                </div>
+
+                <h5 class="card-title text-primary mb-4 border-bottom pb-2">Personal Information</h5>
+                
+                <div class="row g-4 mb-4">
+                    <div class="col-md-12">
+                        <label asp-for="FullName" id="lblFullName" class="form-label fw-medium">Patient Name <span class="text-danger">*</span></label>
+                        <input asp-for="FullName" class="form-control" placeholder="e.g. John Doe" />
+                        <span asp-validation-for="FullName" class="text-danger small"></span>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label asp-for="DateOfBirth" class="form-label fw-medium">Date of Birth <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white"><i class="bi bi-calendar-date text-muted"></i></span>
+                            <input asp-for="DateOfBirth" type="text" class="form-control datepicker" placeholder="dd/mm/yy" required />
+                        </div>
+                        <span asp-validation-for="DateOfBirth" class="text-danger small"></span>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label asp-for="Gender" class="form-label fw-medium">Gender <span class="text-danger">*</span></label>
+                        <select asp-for="Gender" class="form-select" required>
+                            <option value="">Select Gender...</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                        </select>
+                        <span asp-validation-for="Gender" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                <h5 class="card-title text-primary mb-4 border-bottom pb-2">Contact & Emergency</h5>
+                
+                <div class="row g-4 mb-4">
+                    <div class="col-md-6" id="contactInfoDiv">
+                        <label asp-for="ContactInfo" id="lblContactInfo" class="form-label fw-medium">Phone Number <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text">+880</span>
+                            <input asp-for="ContactInfo" type="number" class="form-control" placeholder="1712312322" />
+                        </div>
+                        <span asp-validation-for="ContactInfo" class="text-danger small"></span>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label asp-for="BloodGroup" class="form-label fw-medium">Blood Group</label>
+                        <select asp-for="BloodGroup" class="form-select">
+                            <option value="">Unknown</option>
+                            <option value="A+">A+</option>
+                            <option value="A-">A-</option>
+                            <option value="B+">B+</option>
+                            <option value="B-">B-</option>
+                            <option value="AB+">AB+</option>
+                            <option value="AB-">AB-</option>
+                            <option value="O+">O+</option>
+                            <option value="O-">O-</option>
+                        </select>
+                        <span asp-validation-for="BloodGroup" class="text-danger small"></span>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label asp-for="EmergencyContactName" id="lblEmergencyName" class="form-label fw-medium">Emergency Name <span class="text-danger">*</span></label>
+                        <input asp-for="EmergencyContactName" class="form-control" placeholder="e.g. Jane Doe" />
+                        <span asp-validation-for="EmergencyContactName" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="EmergencyContactPhone" id="lblEmergencyPhone" class="form-label fw-medium">Emergency Phone <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text">+880</span>
+                            <input asp-for="EmergencyContactPhone" type="number" class="form-control" placeholder="1712312322" />
+                        </div>
+                        <span asp-validation-for="EmergencyContactPhone" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-5">
+                    <a asp-action="Index" class="btn btn-light border">Cancel</a>
+                    <button type="submit" class="btn btn-primary px-4">Register Patient</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        $(document).ready(function() {
+            function toggleChildMode() {
+                var isChild = $('#IsChildToggle').is(':checked');
+                if (isChild) {
+                    $('#lblFullName').html('Child\'s Name <span class="text-muted fs-6 fw-normal">(Optional)</span>');
+                    $('#contactInfoDiv').hide();
+                    $('#lblEmergencyName').html('Guardian Name <span class="text-danger">*</span>');
+                    $('#lblEmergencyPhone').html('Guardian Phone <span class="text-danger">*</span>');
+                } else {
+                    $('#lblFullName').html('Patient Name <span class="text-danger">*</span>');
+                    $('#contactInfoDiv').show();
+                    $('#lblContactInfo').html('Phone Number <span class="text-danger">*</span>');
+                    $('#lblEmergencyName').html('Emergency Name <span class="text-danger">*</span>');
+                    $('#lblEmergencyPhone').html('Emergency Phone <span class="text-danger">*</span>');
+                }
+            }
+            $('#IsChildToggle').change(toggleChildMode);
+            toggleChildMode(); // Initial run on page load
+        });
+    </script>
+}

@@ -1,0 +1,106 @@
+@model IEnumerable<HospitalManagementSystem.Models.Bed>
+
+@{
+    ViewData["Title"] = "Bed Management";
+    var groupedBeds = Model.GroupBy(b => b.Category);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
+    <div>
+        <h2 class="mb-1">Bed Management</h2>
+        <p class="text-muted mb-0">Monitor hospital bed capacity and statuses.</p>
+    </div>
+    <a asp-action="Create" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i> Add New Bed
+    </a>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (!Model.Any())
+{
+    <div class="text-center py-5 text-muted pro-card">
+        <i class="bi bi-inbox fs-2 d-block mb-3"></i>
+        No beds configured in the system.
+    </div>
+}
+else
+{
+    <!-- Summary Cards -->
+    <div class="row g-3 mb-4">
+        @foreach (var group in groupedBeds)
+        {
+            var total = group.Count();
+            var available = group.Count(b => b.Status == "Available");
+            var occColor = available > 0 ? "success" : "danger";
+            
+            <div class="col-sm-6 col-md-3">
+                <div class="pro-card border-bottom border-4 border-@occColor text-center h-100 p-3 py-2">
+                    <p class="text-muted fw-medium mb-1" style="font-size: 0.85rem;">@group.Key.ToString()</p>
+                    <h3 class="mb-0 fw-bold">@available <span class="text-muted fw-normal" style="font-size: 0.9rem;">/ @total</span></h3>
+                    <p class="text-muted mb-0 mt-1" style="font-size: 0.75rem;">Available</p>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Category Lists -->
+    @foreach (var group in groupedBeds)
+    {
+        var sortedBeds = group.OrderByDescending(b => b.Status == "Available").ThenBy(b => b.BedNumber);
+        
+        <div class="mb-5">
+            <h4 class="mb-3 text-primary border-bottom pb-2">@group.Key.ToString()</h4>
+            <div class="pro-card p-0 overflow-hidden">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Bed Number</th>
+                                <th>Status</th>
+                                <th>Daily Rate</th>
+                                <th class="text-end pe-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var bed in sortedBeds)
+                            {
+                                var isOccupied = bed.Status == "Occupied";
+                                var statusColor = isOccupied ? "danger" : "success";
+                                var statusIcon = isOccupied ? "bi-person-fill" : "bi-check-circle-fill";
+
+                                <tr>
+                                    <td class="ps-4 fw-bold">@bed.BedNumber</td>
+                                    <td>
+                                        <span class="badge bg-@statusColor bg-opacity-10 text-@statusColor border border-@statusColor-subtle">
+                                            <i class="bi @statusIcon me-1"></i> @bed.Status
+                                        </span>
+                                    </td>
+                                    <td>৳@bed.DailyRate.ToString("0.00")</td>
+                                    <td class="text-end pe-4">
+                                        <div class="btn-group">
+                                            <a asp-action="Edit" asp-route-id="@bed.Id" class="btn btn-sm btn-outline-primary" title="Edit">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <form asp-action="Delete" asp-route-id="@bed.Id" method="post" onsubmit="return confirm('Delete this bed?');" style="display:inline;">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete" @(isOccupied ? "disabled" : "")>
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+}

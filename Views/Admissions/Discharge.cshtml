@@ -1,0 +1,41 @@
+@model HospitalManagementSystem.Models.Admission
+
+@{
+    ViewData["Title"] = "Discharge Patient";
+}
+
+<div class="mb-4 border-bottom pb-3">
+    <a asp-action="Index" class="text-decoration-none text-muted mb-2 d-inline-block">
+        <i class="bi bi-arrow-left"></i> Back to Directory
+    </a>
+    <h2 class="mb-1 text-success">Discharge Patient</h2>
+</div>
+
+<div class="row">
+    <div class="col-md-6 mx-auto">
+        <div class="pro-card border-success border-top border-4">
+            <h4 class="mb-4 text-center">Confirm Discharge</h4>
+            
+            <div class="bg-light p-3 rounded mb-4 text-center">
+                <p class="text-muted mb-1">Patient</p>
+                <h5 class="fw-bold text-primary">
+                    @(string.IsNullOrEmpty(Model.Patient.FullName) ? $"Baby of {Model.Patient.EmergencyContactName}" : Model.Patient.FullName)
+                </h5>
+                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle">@Model.Patient.Uhid</span>
+            </div>
+
+            <p class="text-center mb-4">
+                Are you sure you want to discharge this patient? <br />
+                This will automatically free up their currently assigned bed.
+            </p>
+
+            <form asp-action="Discharge">
+                <input type="hidden" asp-for="Id" />
+                <div class="d-flex justify-content-center gap-2">
+                    <a asp-action="Index" class="btn btn-light border px-4">Cancel</a>
+                    <button type="submit" class="btn btn-success px-4">Confirm Discharge</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

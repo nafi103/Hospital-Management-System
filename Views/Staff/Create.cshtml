@@ -1,0 +1,67 @@
+@model HospitalManagementSystem.Models.User
+
+@{
+    ViewData["Title"] = "Add Staff";
+}
+
+<div class="mb-4 border-bottom pb-3">
+    <a asp-action="Index" class="text-decoration-none text-muted mb-2 d-inline-block">
+        <i class="bi bi-arrow-left"></i> Back to Directory
+    </a>
+    <h2 class="mb-1">Add Staff Member</h2>
+</div>
+
+<div class="row">
+    <div class="col-md-6 mx-auto">
+        <div class="pro-card">
+            <form asp-action="Create">
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+                
+                <div class="mb-3">
+                    <label asp-for="FullName" class="form-label fw-medium">Full Name <span class="text-danger">*</span></label>
+                    <input asp-for="FullName" class="form-control" required />
+                    <span asp-validation-for="FullName" class="text-danger small"></span>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label asp-for="RoleId" class="form-label fw-medium">System Role <span class="text-danger">*</span></label>
+                        <select asp-for="RoleId" class="form-select" asp-items="ViewBag.RoleId" required>
+                            <option value="">Select Role...</option>
+                        </select>
+                        <span asp-validation-for="RoleId" class="text-danger small"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="Category" class="form-label fw-medium">Department / Specialty</label>
+                        <input asp-for="Category" class="form-control" placeholder="e.g. Cardiology" />
+                        <span asp-validation-for="Category" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                <h6 class="mt-4 mb-3 text-primary border-bottom pb-2">Login Credentials</h6>
+
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <label asp-for="Username" class="form-label fw-medium">Username <span class="text-danger">*</span></label>
+                        <input asp-for="Username" class="form-control" required />
+                        <span asp-validation-for="Username" class="text-danger small"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="Password" class="form-label fw-medium">Initial Password <span class="text-danger">*</span></label>
+                        <input asp-for="Password" type="password" class="form-control" required />
+                        <span asp-validation-for="Password" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                    <a asp-action="Index" class="btn btn-light border">Cancel</a>
+                    <button type="submit" class="btn btn-primary px-4">Register Staff</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}

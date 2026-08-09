@@ -1,0 +1,252 @@
+@model HospitalManagementSystem.Models.Admission
+
+@{
+    ViewData["Title"] = "Admit Patient";
+}
+
+<div class="mb-4 border-bottom pb-3">
+    <a asp-action="Index" class="text-decoration-none text-muted mb-2 d-inline-block">
+        <i class="bi bi-arrow-left"></i> Back to Directory
+    </a>
+    <h2 class="mb-1">Admit Patient</h2>
+    <p class="text-muted mb-0">Record a new inpatient admission and allocate a bed.</p>
+</div>
+
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="pro-card">
+            <form asp-action="Create">
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+                
+                <h5 class="card-title text-primary mb-4 border-bottom pb-2">Admission Details</h5>
+                
+                <div class="row g-4 mb-4">
+                    <div class="col-md-12">
+                        <label class="form-label fw-medium">Find Patient <span class="text-danger">*</span></label>
+                        
+                        <div class="position-relative mb-2" id="SearchWrapper">
+                            <div class="input-group" id="SearchGroup">
+                                <span class="input-group-text bg-white text-muted"><i class="bi bi-search"></i></span>
+                                <input type="text" id="PatientSearchInput" class="form-control" placeholder="Type UHID, Phone, or Name to search..." autocomplete="off">
+                            </div>
+                            
+                            <!-- Search Results Dropdown -->
+                            <div id="SearchResults" class="list-group position-absolute w-100 shadow-sm" style="display: none; z-index: 1000; max-height: 250px; overflow-y: auto; top: 100%; left: 0; margin-top: 4px;"></div>
+                        </div>
+
+                        <!-- Selected Patient Card -->
+                        <div id="SelectedPatientCard" class="card border-primary bg-primary bg-opacity-10 mb-2" style="display: none;">
+                            <div class="card-body d-flex justify-content-between align-items-center py-2">
+                                <div>
+                                    <h6 class="mb-0 fw-bold text-primary" id="SP_Name"></h6>
+                                    <small class="text-muted" id="SP_Uhid"></small>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-light text-danger rounded-circle" id="ClearPatientBtn" title="Clear selection">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Hidden Input for Form Submission -->
+                        <input type="hidden" asp-for="PatientId" id="PatientIdHidden" required />
+                        <span asp-validation-for="PatientId" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="AdmittingDoctorId" class="form-label fw-medium">Admitting Doctor <span class="text-danger">*</span></label>
+                        <select asp-for="AdmittingDoctorId" class="form-select" asp-items="ViewBag.DoctorId" required>
+                            <option value="">-- Assign Doctor --</option>
+                        </select>
+                        <span asp-validation-for="AdmittingDoctorId" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="AdmissionDate" class="form-label fw-medium">Admission Date & Time <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white"><i class="bi bi-calendar-event text-muted"></i></span>
+                            <input asp-for="AdmissionDate" type="datetime-local" class="form-control" value="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" required />
+                        </div>
+                        <span asp-validation-for="AdmissionDate" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                <h5 class="card-title text-primary mb-4 border-bottom pb-2">Bed Allocation</h5>
+                
+                <div class="row g-4 mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label fw-medium">Bed Category Filter</label>
+                        <select id="BedCategoryFilter" class="form-select">
+                            <option value="">All Categories</option>
+                            <option value="ICU">ICU</option>
+                            <option value="GeneralWard">General Ward</option>
+                            <option value="Cabin">Cabin</option>
+                            <option value="VIPCabin">VIP Cabin</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="BedId" class="form-label fw-medium">Assign Bed <span class="text-muted fs-6 fw-normal">(Optional)</span></label>
+                        <select id="BedId" name="BedId" class="form-select">
+                            <option value="">-- Assign Bed Later --</option>
+                        </select>
+                        <small class="text-muted mt-1 d-block">Only currently available beds are shown.</small>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-5">
+                    <a asp-action="Index" class="btn btn-light border">Cancel</a>
+                    <button type="submit" class="btn btn-primary px-4">Admit Patient</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        $(document).ready(function() {
+            var availableBeds = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.AvailableBedsList));
+            var selectedBedId = @(ViewBag.SelectedBedId != null ? ViewBag.SelectedBedId : "null");
+
+            function populateBeds() {
+                var category = $('#BedCategoryFilter').val();
+                var bedSelect = $('#BedId');
+                
+                var currentVal = bedSelect.val();
+                
+                bedSelect.empty();
+                bedSelect.append('<option value="">-- Assign Bed Later --</option>');
+                
+                var filtered = availableBeds;
+                if(category !== "") {
+                    filtered = availableBeds.filter(function(b) { return b.Category === category; });
+                }
+                
+                filtered.forEach(function(b) {
+                    var option = $('<option></option>').val(b.Id).text(b.DisplayName);
+                    bedSelect.append(option);
+                });
+
+                if (currentVal && bedSelect.find("option[value='" + currentVal + "']").length > 0) {
+                    bedSelect.val(currentVal);
+                } else if (selectedBedId) {
+                    bedSelect.val(selectedBedId);
+                    selectedBedId = null;
+                }
+            }
+
+            $('#BedCategoryFilter').change(populateBeds);
+            populateBeds();
+
+            var searchTimeout;
+            
+            $('#PatientSearchInput').on('input', function() {
+                clearTimeout(searchTimeout);
+                var query = $(this).val().trim();
+                
+                if(query.length < 1) {
+                    $('#SearchResults').hide();
+                    return;
+                }
+
+                searchTimeout = setTimeout(function() {
+                    performSearch(query);
+                }, 300); // 300ms debounce
+            });
+
+            var currentFocus = -1;
+
+            $('#PatientSearchInput').keydown(function(e) {
+                var list = $('#SearchResults .list-group-item:not(.text-center)'); // ignore "No patients found"
+                if (e.which == 40) { // Down arrow
+                    e.preventDefault();
+                    currentFocus++;
+                    addActive(list);
+                } else if (e.which == 38) { // Up arrow
+                    e.preventDefault();
+                    currentFocus--;
+                    addActive(list);
+                } else if (e.which == 13) { // Enter
+                    e.preventDefault();
+                    if (currentFocus > -1) {
+                        if (list) list[currentFocus].click();
+                    } else {
+                        var query = $(this).val().trim();
+                        if(query.length >= 1) performSearch(query);
+                    }
+                }
+            });
+
+            function addActive(x) {
+                if (!x || x.length === 0) return false;
+                removeActive(x);
+                if (currentFocus >= x.length) currentFocus = 0;
+                if (currentFocus < 0) currentFocus = (x.length - 1);
+                $(x[currentFocus]).addClass('active bg-primary text-white').removeClass('text-muted');
+                $(x[currentFocus]).find('.text-muted').removeClass('text-muted').addClass('text-white-50');
+                
+                // Scroll into view if needed
+                x[currentFocus].scrollIntoView({ block: 'nearest' });
+            }
+
+            function removeActive(x) {
+                for (var i = 0; i < x.length; i++) {
+                    $(x[i]).removeClass('active bg-primary text-white');
+                    $(x[i]).find('.text-white-50').removeClass('text-white-50').addClass('text-muted');
+                }
+            }
+
+            function performSearch(query) {
+                $.ajax({
+                    url: '@Url.Action("Search", "Patients")',
+                    data: { q: query },
+                    success: function(data) {
+                        $('#SearchResults').empty().show();
+                        currentFocus = -1;
+                        if(data.results.length === 0) {
+                            $('#SearchResults').append('<div class="list-group-item text-muted text-center py-3">No patients found matching "'+query+'"</div>');
+                        } else {
+                            data.results.forEach(function(p) {
+                                var parts = p.text.split(" - ");
+                                var uhid = parts[0];
+                                var name = parts[1];
+
+                                var item = $('<a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"></a>')
+                                    .html('<div><span class="fw-bold">' + name + '</span><br><small class="text-muted">' + uhid + '</small></div> <i class="bi bi-chevron-right text-muted"></i>')
+                                    .click(function(e) {
+                                        e.preventDefault();
+                                        selectPatient(p.id, uhid, name);
+                                    });
+                                $('#SearchResults').append(item);
+                            });
+                        }
+                    }
+                });
+            }
+
+            // Hide results when clicking outside
+            $(document).click(function(e) {
+                if (!$(e.target).closest('#SearchWrapper').length) {
+                    $('#SearchResults').hide();
+                }
+            });
+
+            function selectPatient(id, uhid, name) {
+                $('#PatientIdHidden').val(id);
+                $('#SP_Uhid').text(uhid);
+                $('#SP_Name').text(name);
+                
+                $('#SearchResults').hide();
+                $('#SearchWrapper').hide();
+                $('#SelectedPatientCard').fadeIn();
+            }
+
+            $('#ClearPatientBtn').click(function() {
+                $('#PatientIdHidden').val('');
+                $('#SelectedPatientCard').hide();
+                $('#SearchWrapper').fadeIn();
+                $('#PatientSearchInput').val('').focus();
+            });
+        });
+    </script>
+}
