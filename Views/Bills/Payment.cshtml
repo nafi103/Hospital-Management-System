@@ -1,0 +1,58 @@
+@model HospitalManagementSystem.Models.Bill
+
+@{
+    ViewData["Title"] = "Record Payment";
+    var balanceDue = Model.NetTotal - Model.PaidAmount;
+}
+
+<div class="mb-4 border-bottom pb-3">
+    <a asp-action="Details" asp-route-id="@Model.Id" class="text-decoration-none text-muted mb-2 d-inline-block">
+        <i class="bi bi-arrow-left"></i> Back to Invoice
+    </a>
+    <h2 class="mb-1">Record Payment</h2>
+    <p class="text-muted mb-0">Apply a payment to Invoice #@Model.Id.ToString("D5").</p>
+</div>
+
+<div class="row">
+    <div class="col-md-6 mx-auto">
+        <div class="pro-card">
+            
+            <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+                <div>
+                    <h5 class="text-primary mb-1">@Model.Patient.FullName</h5>
+                    <div class="text-muted small">UHID: @Model.Patient.Uhid</div>
+                </div>
+                <div class="text-end">
+                    <h5 class="mb-1">Net Total: ৳@Model.NetTotal.ToString("0.00")</h5>
+                    <div class="text-success small">Paid: ৳@Model.PaidAmount.ToString("0.00")</div>
+                </div>
+            </div>
+
+            <div class="alert alert-warning mb-4">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="bi bi-exclamation-circle me-1"></i> Balance Due:</span>
+                    <span class="fs-4 fw-bold">৳@balanceDue.ToString("0.00")</span>
+                </div>
+            </div>
+
+            <form asp-action="Payment">
+                <input type="hidden" name="id" value="@Model.Id" />
+                
+                <div class="mb-4">
+                    <label class="form-label fw-medium">Payment Amount (৳) <span class="text-danger">*</span></label>
+                    <div class="input-group input-group-lg">
+                        <span class="input-group-text bg-white">৳</span>
+                        <input type="number" name="PaymentAmount" step="0.01" max="@balanceDue" class="form-control fw-bold" placeholder="0.00" value="@balanceDue.ToString("0.00")" required />
+                    </div>
+                    <small class="text-muted mt-1 d-block">You can enter a partial amount if needed.</small>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                    <a asp-action="Details" asp-route-id="@Model.Id" class="btn btn-light border">Cancel</a>
+                    <button type="submit" class="btn btn-success px-4"><i class="bi bi-cash-coin me-1"></i> Apply Payment</button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>

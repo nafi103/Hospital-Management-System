@@ -1,0 +1,56 @@
+@model HospitalManagementSystem.Controllers.JsonMedicalRecord
+
+@{
+    ViewData["Title"] = "Record Details";
+}
+
+<div class="mb-4 border-bottom pb-3">
+    <a asp-action="Index" class="text-decoration-none text-muted mb-2 d-inline-block">
+        <i class="bi bi-arrow-left"></i> Back to Medical Records
+    </a>
+    <div class="d-flex justify-content-between align-items-end">
+        <div>
+            <h2 class="mb-1">Record Details</h2>
+            <p class="text-muted mb-0">Clinical findings and treatment history (JSON).</p>
+        </div>
+        <div>
+            <a asp-action="Delete" asp-route-id="@Model.Id" class="btn btn-outline-danger"><i class="bi bi-trash"></i></a>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="pro-card mb-4">
+            <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
+                <div class="d-flex align-items-center">
+                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-3 me-3">
+                        <i class="bi bi-person-fill fs-3"></i>
+                    </div>
+                    <div>
+                        <h5 class="mb-0 fw-bold">@Model.PatientName</h5>
+                        <div class="text-muted">UHID: @Model.PatientUhid</div>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <div class="text-muted small">Date Recorded</div>
+                    <div class="fw-bold">@Model.Date.ToLocalTime().ToString("MMM dd, yyyy")</div>
+                    <small class="text-muted">@Model.Date.ToLocalTime().ToString("hh:mm tt")</small>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-12">
+                    <div class="text-muted small mb-1">Attending Doctor</div>
+                    <div class="fw-medium"><i class="bi bi-heart-pulse text-primary me-1"></i> @Model.DoctorName</div>
+                </div>
+            </div>
+
+            <h6 class="text-primary fw-bold mb-3 border-bottom pb-2">Diagnosis</h6>
+            <div class="p-3 bg-light rounded-3 mb-4 border" style="white-space: pre-wrap;">@Model.Diagnosis</div>
+
+            <h6 class="text-primary fw-bold mb-3 border-bottom pb-2">Treatment Plan</h6>
+            <div class="p-3 bg-light rounded-3 border" style="white-space: pre-wrap;">@Model.Treatment</div>
+        </div>
+    </div>
+</div>

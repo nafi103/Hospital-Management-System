@@ -1,0 +1,274 @@
+@model HospitalManagementSystem.Models.Prescription
+
+@{
+    ViewData["Title"] = "New Prescription";
+}
+
+<div class="mb-4 border-bottom pb-3">
+    <a asp-action="Index" class="text-decoration-none text-muted mb-2 d-inline-block">
+        <i class="bi bi-arrow-left"></i> Back to Prescriptions
+    </a>
+    <h2 class="mb-1">New Prescription</h2>
+    <p class="text-muted mb-0">Select a patient and add medicines.</p>
+</div>
+
+<form asp-action="Create" id="prescriptionForm">
+    <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+    
+    <div class="row g-4">
+        <!-- Left Column: Patient & Doctor -->
+        <div class="col-md-4">
+            <div class="pro-card h-100">
+                <h5 class="card-title text-primary mb-4 border-bottom pb-2">Details</h5>
+                
+                <div class="mb-4">
+                    <label class="form-label fw-medium">@(ViewBag.PreselectedPatientId != null ? "Patient" : "Find Patient") <span class="text-danger">*</span></label>
+                    <div class="position-relative mb-2" id="SearchWrapper" @(ViewBag.PreselectedPatientId != null ? "style=\"display:none;\"" : "")>
+                        <div class="input-group" id="SearchGroup">
+                            <span class="input-group-text bg-white text-muted"><i class="bi bi-search"></i></span>
+                            <input type="text" id="PatientSearchInput" class="form-control" placeholder="Type UHID, Phone, or Name to search..." autocomplete="off">
+                        </div>
+                        <div id="SearchResults" class="list-group position-absolute w-100 shadow-sm" style="display: none; z-index: 1000; max-height: 250px; overflow-y: auto; top: 100%; left: 0; margin-top: 4px;"></div>
+                    </div>
+
+                    <div id="SelectedPatientCard" class="card border-primary bg-primary bg-opacity-10 mb-2" style="display: none;">
+                        <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-0 fw-bold text-primary" id="SP_Name"></h6>
+                                <small class="text-muted" id="SP_Uhid"></small>
+                            </div>
+                            @if (ViewBag.PreselectedPatientId == null)
+                            {
+                                <button type="button" class="btn btn-sm btn-light text-danger rounded-circle" id="ClearPatientBtn" title="Clear selection">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                    <input type="hidden" asp-for="PatientId" id="PatientIdHidden" required />
+                </div>
+
+                @if (ViewBag.PreselectedDoctorId != null)
+                {
+                    <input type="hidden" asp-for="DoctorId" value="@ViewBag.PreselectedDoctorId" />
+                }
+                else
+                {
+                    <div class="mb-4">
+                        <label asp-for="DoctorId" class="form-label fw-medium">Attending Doctor <span class="text-danger">*</span></label>
+                        <select asp-for="DoctorId" class="form-select" asp-items="ViewBag.DoctorId" required>
+                            <option value="">-- Assign Doctor --</option>
+                        </select>
+                        <span asp-validation-for="DoctorId" class="text-danger small"></span>
+                    </div>
+                }
+
+                <div class="mb-2">
+                    <label asp-for="Notes" class="form-label fw-medium">General Notes / Instructions</label>
+                    <textarea asp-for="Notes" class="form-control" rows="4" placeholder="Take after meals..."></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Medicines -->
+        <div class="col-md-8">
+            <div class="pro-card h-100">
+                <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
+                    <h5 class="card-title text-primary mb-0">Prescribed Medicines</h5>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="addMedicineBtn">
+                        <i class="bi bi-plus-circle"></i> Add Item
+                    </button>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-bordered align-middle" id="medicinesTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Medicine</th>
+                                <th width="120">Quantity</th>
+                                <th width="60"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="medicinesBody">
+                            <!-- Items will be appended here via JS -->
+                        </tbody>
+                    </table>
+                    <div id="noItemsMsg" class="text-center text-muted py-4">
+                        <i class="bi bi-capsule fs-2 d-block mb-2 text-black-50"></i>
+                        No medicines added yet. Click "Add Item".
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                    <a asp-action="Index" class="btn btn-light border">Cancel</a>
+                    <button type="submit" class="btn btn-primary px-4" id="submitBtn"><i class="bi bi-save me-1"></i> Save & Send to Pharmacy</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- Hidden Template for new row -->
+<script type="text/template" id="rowTemplate">
+    <tr class="medicine-row">
+        <td>
+            <select name="PrescriptionItems[{index}].MedicineId" class="form-select medicine-select" required>
+                <option value="">-- Select Medicine --</option>
+                @foreach(var m in ViewBag.MedicinesList)
+                {
+                    <option value="@m.Id" data-stock="@m.StockQuantity">@m.DisplayName</option>
+                }
+            </select>
+            <small class="text-muted stock-info d-block mt-1"></small>
+        </td>
+        <td>
+            <input type="number" name="PrescriptionItems[{index}].Quantity" class="form-control qty-input" min="1" required placeholder="Qty" />
+        </td>
+        <td class="text-center">
+            <button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="bi bi-trash"></i></button>
+        </td>
+    </tr>
+</script>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        $(document).ready(function() {
+            // -- Patient Search Logic (reused) --
+            var searchTimeout;
+            $('#PatientSearchInput').on('input', function() {
+                clearTimeout(searchTimeout);
+                var query = $(this).val().trim();
+                if(query.length < 1) { $('#SearchResults').hide(); return; }
+                searchTimeout = setTimeout(function() { performSearch(query); }, 300);
+            });
+            var currentFocus = -1;
+            $('#PatientSearchInput').keydown(function(e) {
+                var list = $('#SearchResults .list-group-item:not(.text-center)');
+                if (e.which == 40) { e.preventDefault(); currentFocus++; addActive(list); }
+                else if (e.which == 38) { e.preventDefault(); currentFocus--; addActive(list); }
+                else if (e.which == 13) {
+                    e.preventDefault();
+                    if (currentFocus > -1) { if (list) list[currentFocus].click(); }
+                    else { var q = $(this).val().trim(); if(q.length >= 1) performSearch(q); }
+                }
+            });
+            function addActive(x) {
+                if (!x || x.length === 0) return false;
+                removeActive(x);
+                if (currentFocus >= x.length) currentFocus = 0;
+                if (currentFocus < 0) currentFocus = (x.length - 1);
+                $(x[currentFocus]).addClass('active bg-primary text-white').removeClass('text-muted');
+                $(x[currentFocus]).find('.text-muted').removeClass('text-muted').addClass('text-white-50');
+                x[currentFocus].scrollIntoView({ block: 'nearest' });
+            }
+            function removeActive(x) {
+                for (var i = 0; i < x.length; i++) {
+                    $(x[i]).removeClass('active bg-primary text-white');
+                    $(x[i]).find('.text-white-50').removeClass('text-white-50').addClass('text-muted');
+                }
+            }
+            function performSearch(query) {
+                $.ajax({
+                    url: '@Url.Action("Search", "Patients")', data: { q: query },
+                    success: function(data) {
+                        $('#SearchResults').empty().show(); currentFocus = -1;
+                        if(data.results.length === 0) {
+                            $('#SearchResults').append('<div class="list-group-item text-muted text-center py-3">No patients found</div>');
+                        } else {
+                            data.results.forEach(function(p) {
+                                var parts = p.text.split(" - ");
+                                var uhid = parts[0]; var name = parts[1];
+                                var item = $('<a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"></a>')
+                                    .html('<div><span class="fw-bold">' + name + '</span><br><small class="text-muted">' + uhid + '</small></div> <i class="bi bi-chevron-right text-muted"></i>')
+                                    .click(function(e) { e.preventDefault(); selectPatient(p.id, uhid, name); });
+                                $('#SearchResults').append(item);
+                            });
+                        }
+                    }
+                });
+            }
+            $(document).click(function(e) { if (!$(e.target).closest('#SearchWrapper').length) $('#SearchResults').hide(); });
+            function selectPatient(id, uhid, name) {
+                $('#PatientIdHidden').val(id); $('#SP_Uhid').text(uhid); $('#SP_Name').text(name);
+                $('#SearchResults').hide(); $('#SearchWrapper').hide(); $('#SelectedPatientCard').fadeIn();
+            }
+            $('#ClearPatientBtn').click(function() {
+                $('#PatientIdHidden').val('');
+                $('#SelectedPatientCard').hide();
+                $('#SearchWrapper').fadeIn();
+                $('#PatientSearchInput').val('').focus();
+            });
+
+            @if (ViewBag.PreselectedPatientId != null)
+            {
+                @:selectPatient('@ViewBag.PreselectedPatientId', '@ViewBag.PreselectedPatientUhid', '@Html.Raw(ViewBag.PreselectedPatientName)');
+            }
+
+            // -- Dynamic Medicine Rows Logic --
+            var rowCount = 0;
+            
+            function checkEmptyState() {
+                if ($('#medicinesBody tr').length === 0) {
+                    $('#noItemsMsg').show();
+                    $('#medicinesTable').hide();
+                } else {
+                    $('#noItemsMsg').hide();
+                    $('#medicinesTable').show();
+                }
+            }
+            
+            function reindexRows() {
+                $('#medicinesBody tr').each(function(index) {
+                    $(this).find('select, input').each(function() {
+                        var name = $(this).attr('name');
+                        if (name) {
+                            name = name.replace(/\[\d+\]/, '[' + index + ']');
+                            $(this).attr('name', name);
+                        }
+                    });
+                });
+            }
+
+            $('#addMedicineBtn').click(function() {
+                var template = $('#rowTemplate').html();
+                template = template.replace(/{index}/g, rowCount);
+                $('#medicinesBody').append(template);
+                rowCount++;
+                checkEmptyState();
+            });
+
+            $(document).on('click', '.remove-row', function() {
+                $(this).closest('tr').remove();
+                reindexRows();
+                checkEmptyState();
+            });
+
+            $(document).on('change', '.medicine-select', function() {
+                var stock = $(this).find(':selected').data('stock');
+                var stockInfo = $(this).siblings('.stock-info');
+                var qtyInput = $(this).closest('tr').find('.qty-input');
+                
+                if (stock !== undefined) {
+                    stockInfo.text('Stock: ' + stock);
+                    qtyInput.attr('max', stock);
+                } else {
+                    stockInfo.text('');
+                    qtyInput.removeAttr('max');
+                }
+            });
+
+            // Form submission validation
+            $('#prescriptionForm').submit(function(e) {
+                if ($('#medicinesBody tr').length === 0) {
+                    e.preventDefault();
+                    alert("Please add at least one medicine to the prescription.");
+                    return false;
+                }
+            });
+
+            // Initialize UI state
+            checkEmptyState();
+        });
+    </script>
+}

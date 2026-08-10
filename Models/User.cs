@@ -21,5 +21,8 @@ namespace HospitalManagementSystem.Models
 
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+
+        public int? AssignedDoctorId { get; set; }
+        public User? AssignedDoctor { get; set; }
     }
 }

@@ -1,0 +1,173 @@
+@model HospitalManagementSystem.Models.Bill
+@using HospitalManagementSystem.Models
+
+@{
+    ViewData["Title"] = "Invoice #" + Model.Id;
+    var isPaid = Model.Status == BillStatus.Paid;
+}
+
+<div class="mb-4 border-bottom pb-3 d-print-none">
+    <a asp-action="Index" class="text-decoration-none text-muted mb-2 d-inline-block">
+        <i class="bi bi-arrow-left"></i> Back to Billing
+    </a>
+    <div class="d-flex justify-content-between align-items-end">
+        <div>
+            <h2 class="mb-1">Invoice #@Model.Id.ToString("D5")</h2>
+            <p class="text-muted mb-0">Generated on @Model.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy")</p>
+        </div>
+        <div class="d-flex gap-2">
+            @if (!isPaid)
+            {
+                <a asp-action="Payment" asp-route-id="@Model.Id" class="btn btn-success">
+                    <i class="bi bi-cash-coin me-1"></i> Add Payment
+                </a>
+            }
+            <button class="btn btn-outline-secondary" onclick="window.print()">
+                <i class="bi bi-printer me-1"></i> Print
+            </button>
+        </div>
+    </div>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show d-print-none" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="card border-0 shadow-sm invoice-container mb-5">
+    <div class="card-body p-5">
+        <!-- Invoice Header -->
+        <div class="row mb-5 pb-4 border-bottom">
+            <div class="col-sm-6">
+                <h3 class="fw-bold text-primary mb-1">CITY HOSPITAL</h3>
+                <p class="text-muted mb-0">123 Health Avenue, Medical District<br>Dhaka, 1200, Bangladesh<br>Phone: +880 123 456 7890</p>
+            </div>
+            <div class="col-sm-6 text-sm-end mt-4 mt-sm-0">
+                <h4 class="text-uppercase text-muted fw-bold mb-3">Invoice</h4>
+                <div class="d-flex justify-content-sm-end mb-1">
+                    <span class="text-muted me-2">Invoice No:</span>
+                    <span class="fw-bold">#@Model.Id.ToString("D5")</span>
+                </div>
+                <div class="d-flex justify-content-sm-end mb-1">
+                    <span class="text-muted me-2">Date:</span>
+                    <span class="fw-bold">@Model.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy")</span>
+                </div>
+                <div class="d-flex justify-content-sm-end">
+                    <span class="text-muted me-2">Status:</span>
+                    @if (isPaid)
+                    {
+                        <span class="fw-bold text-success">FULLY PAID</span>
+                    }
+                    else if (Model.Status == BillStatus.PartiallyPaid)
+                    {
+                        <span class="fw-bold text-warning">PARTIAL</span>
+                    }
+                    else
+                    {
+                        <span class="fw-bold text-danger">UNPAID</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Patient Info -->
+        <div class="row mb-5">
+            <div class="col-sm-6">
+                <h6 class="text-muted text-uppercase fw-bold mb-3">Bill To:</h6>
+                <h5 class="fw-bold mb-1">@Model.Patient.FullName</h5>
+                <p class="text-muted mb-1">UHID: @Model.Patient.Uhid</p>
+                <p class="text-muted mb-0">Phone: @Model.Patient.ContactInfo</p>
+            </div>
+            @if (Model.AdmissionId.HasValue)
+            {
+                <div class="col-sm-6 text-sm-end">
+                    <h6 class="text-muted text-uppercase fw-bold mb-3">Reference:</h6>
+                    <p class="text-muted mb-1">Admission #@Model.AdmissionId</p>
+                    <p class="text-muted mb-0">Discharged: @(Model.Admission?.DischargeDate?.ToString("MMM dd, yyyy") ?? "Not Discharged")</p>
+                </div>
+            }
+        </div>
+
+        <!-- Items Table -->
+        <div class="table-responsive mb-5">
+            <table class="table table-striped align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Department</th>
+                        <th>Description</th>
+                        <th class="text-end">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model.BillItems)
+                    {
+                        <tr>
+                            <td><span class="badge bg-secondary">@item.Department</span></td>
+                            <td>@item.Description</td>
+                            <td class="text-end">৳@item.Amount.ToString("0.00")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Totals -->
+        <div class="row">
+            <div class="col-sm-7">
+                <p class="text-muted small">
+                    <strong>Note:</strong> Please retain this invoice for your records. All accounts are due upon receipt.
+                </p>
+            </div>
+            <div class="col-sm-5">
+                <table class="table table-borderless table-sm mb-0">
+                    <tbody>
+                        <tr>
+                            <td class="text-end text-muted">Subtotal:</td>
+                            <td class="text-end fw-medium" width="120">৳@Model.SubtotalAmount.ToString("0.00")</td>
+                        </tr>
+                        @if (Model.DiscountAmount > 0)
+                        {
+                            <tr>
+                                <td class="text-end text-success">Discount:</td>
+                                <td class="text-end text-success fw-medium">- ৳@Model.DiscountAmount.ToString("0.00")</td>
+                            </tr>
+                        }
+                        <tr class="border-top border-bottom border-2">
+                            <td class="text-end fw-bold py-3 fs-5">Net Total:</td>
+                            <td class="text-end fw-bold text-primary py-3 fs-5">৳@Model.NetTotal.ToString("0.00")</td>
+                        </tr>
+                        <tr>
+                            <td class="text-end text-muted py-2">Paid Amount:</td>
+                            <td class="text-end text-success fw-medium py-2">৳@Model.PaidAmount.ToString("0.00")</td>
+                        </tr>
+                        <tr class="bg-light">
+                            <td class="text-end fw-bold py-3">Balance Due:</td>
+                            <td class="text-end fw-bold text-danger py-3">৳@((Model.NetTotal - Model.PaidAmount).ToString("0.00"))</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (isPaid)
+        {
+            <div class="position-absolute" style="top: 200px; right: 80px; opacity: 0.1; transform: rotate(-30deg); pointer-events: none;">
+                <h1 style="font-size: 8rem; color: #198754; font-weight: 900; border: 8px solid #198754; padding: 20px 40px; border-radius: 20px;">PAID</h1>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    @@media print {
+        body * { visibility: hidden; }
+        .invoice-container, .invoice-container * { visibility: visible; }
+        .invoice-container { position: absolute; left: 0; top: 0; width: 100%; border: none !important; box-shadow: none !important; }
+        .badge { border: 1px solid #ccc; color: #333 !important; background: transparent !important; }
+        .table-dark { background-color: #f8f9fa !important; color: #000 !important; }
+        .table-dark th { background-color: #f8f9fa !important; color: #000 !important; border-bottom: 2px solid #000 !important; }
+    }
+</style>

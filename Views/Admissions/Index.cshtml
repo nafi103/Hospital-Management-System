@@ -81,6 +81,9 @@
                                     </a>
                                     @if (!isDischarged)
                                     {
+                                        <a asp-action="TransferBed" asp-route-id="@item.Id" class="btn btn-sm btn-outline-secondary" title="Transfer Bed">
+                                            <i class="bi bi-arrow-left-right"></i>
+                                        </a>
                                         <a asp-action="Discharge" asp-route-id="@item.Id" class="btn btn-sm btn-outline-success" title="Discharge">
                                             <i class="bi bi-door-open"></i>
                                         </a>

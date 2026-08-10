@@ -2,42 +2,107 @@
     ViewData["Title"] = "Dashboard";
 }
 
-<div class="mb-5 border-bottom pb-4">
-    <h2 class="mb-1">Hospital Dashboard</h2>
-    <p class="text-muted mb-0">Overview of facility operations and quick access modules.</p>
-</div>
-
-<div class="row g-4">
-    <div class="col-md-4">
-        <div class="pro-card h-100">
-            <div class="icon-box">
-                <i class="bi bi-people-fill"></i>
-            </div>
-            <h4 class="mb-2">Patient Directory</h4>
-            <p class="text-muted mb-4 small">Manage patient registrations, search medical records, and oversee hospital admissions.</p>
-            <a asp-controller="Patients" asp-action="Index" class="btn btn-primary w-100">Manage Patients</a>
-        </div>
-    </div>
-    
-    <div class="col-md-4">
-        <div class="pro-card h-100">
-            <div class="icon-box" style="background-color: rgba(25, 135, 84, 0.1); color: #198754;">
-                <i class="bi bi-file-medical-fill"></i>
-            </div>
-            <h4 class="mb-2">Bed Availability</h4>
-            <p class="text-muted mb-4 small">Monitor real-time occupancy status for ICUs, General Wards, and private Cabins.</p>
-            <button class="btn btn-outline-secondary w-100" disabled>View Beds (Pending)</button>
-        </div>
+@if (User.IsInRole("Assistant"))
+{
+    <div class="mb-5 border-bottom pb-4">
+        <h2 class="mb-1">Assistant Command Center</h2>
+        <p class="text-muted mb-0">Managing Queue for <strong>@ViewBag.DoctorName</strong></p>
     </div>
 
-    <div class="col-md-4">
-        <div class="pro-card h-100">
-            <div class="icon-box" style="background-color: rgba(253, 126, 20, 0.1); color: #fd7e14;">
-                <i class="bi bi-calendar2-check-fill"></i>
+    <div class="row g-4 mb-5">
+        <div class="col-md-3">
+            <div class="pro-card h-100 text-center border-start border-4 border-primary">
+                <h6 class="text-muted text-uppercase mb-2">Total Scheduled</h6>
+                <h1 class="display-4 fw-bold text-primary mb-0">@ViewBag.TotalScheduled</h1>
+                <small class="text-muted">Today</small>
             </div>
-            <h4 class="mb-2">Appointments</h4>
-            <p class="text-muted mb-4 small">Schedule Outpatient Department (OPD) visits and track surgical operation schedules.</p>
-            <button class="btn btn-outline-secondary w-100" disabled>Schedule (Pending)</button>
+        </div>
+        <div class="col-md-3">
+            <div class="pro-card h-100 text-center border-start border-4 border-warning">
+                <h6 class="text-muted text-uppercase mb-2">Waiting</h6>
+                <h1 class="display-4 fw-bold text-warning mb-0">@ViewBag.Waiting</h1>
+                <small class="text-muted">In Queue</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="pro-card h-100 text-center border-start border-4 border-info">
+                <h6 class="text-muted text-uppercase mb-2">With Doctor</h6>
+                <h4 class="fw-bold text-info mt-3 mb-0 text-truncate px-2" title="@ViewBag.InProgressPatient">@ViewBag.InProgressPatient</h4>
+                <small class="text-muted">Currently Inside</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="pro-card h-100 text-center border-start border-4 border-success">
+                <h6 class="text-muted text-uppercase mb-2">Completed</h6>
+                <h1 class="display-4 fw-bold text-success mb-0">@ViewBag.Completed</h1>
+                <small class="text-muted">Patients Seen</small>
+            </div>
         </div>
     </div>
-</div>
+
+    <div class="row g-4">
+        <div class="col-md-6">
+            <div class="pro-card h-100">
+                <div class="icon-box mb-3" style="background-color: rgba(13, 110, 253, 0.1); color: #0d6efd;">
+                    <i class="bi bi-list-ol"></i>
+                </div>
+                <h4 class="mb-2">Manage Queue</h4>
+                <p class="text-muted mb-4 small">Update patient statuses, add new patients to the queue, and track wait times.</p>
+                <a asp-controller="Appointments" asp-action="Index" class="btn btn-primary w-100">Go to Consultations Queue</a>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="pro-card h-100">
+                <div class="icon-box mb-3" style="background-color: rgba(25, 135, 84, 0.1); color: #198754;">
+                    <i class="bi bi-person-plus-fill"></i>
+                </div>
+                <h4 class="mb-2">Register Walk-in</h4>
+                <p class="text-muted mb-4 small">Register a new patient and instantly generate a UHID before adding them to the queue.</p>
+                <a asp-controller="Patients" asp-action="Create" class="btn btn-outline-success w-100">Register New Patient</a>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="mb-5 border-bottom pb-4">
+        <h2 class="mb-1">Hospital Dashboard</h2>
+        <p class="text-muted mb-0">Overview of facility operations and quick access modules.</p>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="pro-card h-100">
+                <div class="icon-box">
+                    <i class="bi bi-people-fill"></i>
+                </div>
+                <h4 class="mb-2">Patient Directory</h4>
+                <p class="text-muted mb-4 small">Manage patient registrations, search medical records, and oversee hospital admissions.</p>
+                <a asp-controller="Patients" asp-action="Index" class="btn btn-primary w-100">Manage Patients</a>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="pro-card h-100">
+                <div class="icon-box" style="background-color: rgba(25, 135, 84, 0.1); color: #198754;">
+                    <i class="bi bi-file-medical-fill"></i>
+                </div>
+                <h4 class="mb-2">Bed Availability</h4>
+                <p class="text-muted mb-4 small">Monitor real-time occupancy status for ICUs, General Wards, and private Cabins.</p>
+                <button class="btn btn-outline-secondary w-100" disabled>View Beds (Pending)</button>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="pro-card h-100">
+                <div class="icon-box" style="background-color: rgba(253, 126, 20, 0.1); color: #fd7e14;">
+                    <i class="bi bi-calendar2-check-fill"></i>
+                </div>
+                <h4 class="mb-2">Appointments</h4>
+                <p class="text-muted mb-4 small">Schedule Outpatient Department (OPD) visits and track surgical operation schedules.</p>
+                <button class="btn btn-outline-secondary w-100" disabled>Schedule (Pending)</button>
+            </div>
+        </div>
+    </div>
+}

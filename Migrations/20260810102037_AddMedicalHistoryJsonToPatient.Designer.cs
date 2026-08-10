@@ -3,6 +3,7 @@ using System;
 using HospitalManagementSystem.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Hospital_Management_System.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260810102037_AddMedicalHistoryJsonToPatient")]
+    partial class AddMedicalHistoryJsonToPatient
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -397,9 +400,6 @@ namespace Hospital_Management_System.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int?>("RegisteredById")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Uhid")
                         .IsRequired()
                         .HasColumnType("text");
@@ -410,8 +410,6 @@ namespace Hospital_Management_System.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedAt");
-
-                    b.HasIndex("RegisteredById");
 
                     b.HasIndex("Uhid")
                         .IsUnique();
@@ -432,9 +430,6 @@ namespace Hospital_Management_System.Migrations
 
                     b.Property<int>("DoctorId")
                         .HasColumnType("integer");
-
-                    b.Property<bool>("IsBilled")
-                        .HasColumnType("boolean");
 
                     b.Property<string>("Notes")
                         .IsRequired()
@@ -537,7 +532,7 @@ namespace Hospital_Management_System.Migrations
                             Id = 3,
                             CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Permissions = "Read, Write_Admission",
-                            RoleName = "Assistant",
+                            RoleName = "Receptionist",
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
@@ -549,9 +544,6 @@ namespace Hospital_Management_System.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int?>("AssignedDoctorId")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Category")
                         .IsRequired()
@@ -580,8 +572,6 @@ namespace Hospital_Management_System.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AssignedDoctorId");
-
                     b.HasIndex("CreatedAt");
 
                     b.HasIndex("RoleId");
@@ -602,17 +592,6 @@ namespace Hospital_Management_System.Migrations
                             RoleId = 1,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Username = "admin"
-                        },
-                        new
-                        {
-                            Id = 100,
-                            Category = "Consultant",
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            FullName = "Dr. Mock",
-                            Password = "password123",
-                            RoleId = 2,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Username = "drmock"
                         });
                 });
 
@@ -727,15 +706,6 @@ namespace Hospital_Management_System.Migrations
                     b.Navigation("Surgeon");
                 });
 
-            modelBuilder.Entity("HospitalManagementSystem.Models.Patient", b =>
-                {
-                    b.HasOne("HospitalManagementSystem.Models.User", "RegisteredBy")
-                        .WithMany()
-                        .HasForeignKey("RegisteredById");
-
-                    b.Navigation("RegisteredBy");
-                });
-
             modelBuilder.Entity("HospitalManagementSystem.Models.Prescription", b =>
                 {
                     b.HasOne("HospitalManagementSystem.Models.User", "Doctor")
@@ -776,17 +746,11 @@ namespace Hospital_Management_System.Migrations
 
             modelBuilder.Entity("HospitalManagementSystem.Models.User", b =>
                 {
-                    b.HasOne("HospitalManagementSystem.Models.User", "AssignedDoctor")
-                        .WithMany()
-                        .HasForeignKey("AssignedDoctorId");
-
                     b.HasOne("HospitalManagementSystem.Models.Role", "Role")
                         .WithMany("Users")
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("AssignedDoctor");
 
                     b.Navigation("Role");
                 });

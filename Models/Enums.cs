@@ -19,9 +19,10 @@ namespace HospitalManagementSystem.Models
 
     public enum AppointmentStatus
     {
-        Scheduled,
-        Completed,
-        Cancelled
+        Scheduled = 0,
+        Completed = 1,
+        Cancelled = 2,
+        InConsultation = 3
     }
 
     public enum PrescriptionStatus

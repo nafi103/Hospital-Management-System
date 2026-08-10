@@ -31,25 +31,59 @@
                 </button>
                 <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
                     <ul class="navbar-nav flex-grow-1 ms-4 gap-1">
-                        <li class="nav-item">
-                            <a class="nav-link" asp-area="" asp-controller="Home" asp-action="Index">Dashboard</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" asp-area="" asp-controller="Patients" asp-action="Index">Patients</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" asp-area="" asp-controller="Beds" asp-action="Index">Beds</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" asp-area="" asp-controller="Admissions" asp-action="Index">Admissions</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" asp-area="" asp-controller="Staff" asp-action="Index">Staff</a>
-                        </li>
+                        @if (User.IsInRole("Doctor"))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="DoctorDashboard" asp-action="Index">Active Consultations</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="DoctorDashboard" asp-action="MyAssistant">My Assistant</a>
+                            </li>
+                        }
+                        else if (User.IsInRole("Assistant"))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Home" asp-action="Index">Dashboard</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Appointments" asp-action="Index">Consultations</a>
+                            </li>
+                        }
+                        else
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Home" asp-action="Index">Dashboard</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Patients" asp-action="Index">Patients</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Beds" asp-action="Index">Beds</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Admissions" asp-action="Index">Admissions</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Staff" asp-action="Index">Staff</a>
+                            </li>
+                        }
                     </ul>
-                    <div class="d-flex align-items-center text-muted gap-2">
-                        <i class="bi bi-person-circle fs-5"></i> 
-                        <span class="fw-medium">Administrator</span>
+                    <div class="d-flex align-items-center gap-3">
+                        @if (User.Identity.IsAuthenticated)
+                        {
+                            <div class="d-flex align-items-center text-muted gap-2">
+                                <i class="bi bi-person-circle fs-5"></i> 
+                                <span class="fw-medium">@User.Identity.Name</span>
+                                <span class="badge bg-secondary">@User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Role)?.Value</span>
+                            </div>
+                            <form asp-controller="Auth" asp-action="Logout" method="post" class="m-0">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Log Out</button>
+                            </form>
+                        }
+                        else
+                        {
+                            <a class="btn btn-sm btn-primary" asp-controller="Auth" asp-action="Login">Log In</a>
+                        }
                     </div>
                 </div>
             </div>
@@ -67,6 +101,23 @@
             <small>&copy; 2026 - Nexus Hospital Management System - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy Policy</a></small>
         </div>
     </footer>
+
+    <!-- Global Toast Container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-4" style="z-index: 1055;">
+        <div id="notificationToast" class="toast shadow-lg border-0" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="10000">
+            <div class="toast-header bg-success text-white border-0 py-2">
+                <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+                <strong class="me-auto fs-6">Consultation Completed!</strong>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body bg-white text-dark fs-6 p-3">
+                <span id="notificationMessage"></span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Audio for Ding -->
+    <audio id="dingSound" src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3" preload="auto"></audio>
     
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
@@ -80,11 +131,31 @@
                 altInput: true,
                 altFormat: "d/m/y", 
                 allowInput: true,
-                disableMobile: "true", // Forces the premium UI on mobile too
-                wrap: true // Enables custom HTML structure if needed
+                disableMobile: "true",
+                wrap: true
             });
         });
     </script>
+    @if (User.IsInRole("Assistant") || User.IsInRole("Doctor"))
+    {
+        var assignedDoctorId = User.Claims.FirstOrDefault(c => c.Type == "AssignedDoctorId")?.Value;
+        if (User.IsInRole("Doctor"))
+        {
+            assignedDoctorId = User.Claims.FirstOrDefault(c => c.Type == "UserId")?.Value;
+            if (string.IsNullOrEmpty(assignedDoctorId))
+            {
+                var dbContext = Context.RequestServices.GetService(typeof(HospitalManagementSystem.Models.ApplicationDbContext)) as HospitalManagementSystem.Models.ApplicationDbContext;
+                var docUser = dbContext?.Users.FirstOrDefault(u => u.FullName == User.Identity.Name);
+                assignedDoctorId = docUser?.Id.ToString();
+            }
+        }
+        <script>
+            window.MySignalRGroupId = "@assignedDoctorId";
+            window.UserRole = "@(User.IsInRole("Doctor") ? "Doctor" : "Assistant")";
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.12/signalr.min.js"></script>
+        <script src="~/js/notifications.js" asp-append-version="true"></script>
+    }
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

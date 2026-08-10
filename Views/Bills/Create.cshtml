@@ -1,0 +1,250 @@
+@model HospitalManagementSystem.Models.Bill
+@using HospitalManagementSystem.Models
+
+@{
+    ViewData["Title"] = "Generate Bill";
+    var isPrepopulated = Model.AdmissionId.HasValue;
+}
+
+<div class="mb-4 border-bottom pb-3">
+    <a asp-action="Index" class="text-decoration-none text-muted mb-2 d-inline-block">
+        <i class="bi bi-arrow-left"></i> Back to Billing
+    </a>
+    <h2 class="mb-1">Generate Bill</h2>
+    <p class="text-muted mb-0">Create an invoice and add line items.</p>
+</div>
+
+<form asp-action="Create" id="billForm">
+    <div class="row g-4">
+        <!-- Left: Patient Info -->
+        <div class="col-md-4">
+            <div class="pro-card h-100">
+                <h5 class="card-title text-primary mb-4 border-bottom pb-2">Patient Selection</h5>
+
+                @if (isPrepopulated)
+                {
+                    <div class="card border-primary bg-primary bg-opacity-10 mb-4">
+                        <div class="card-body">
+                            <h6 class="mb-0 fw-bold text-primary">@ViewBag.PatientName</h6>
+                            <small class="text-muted">@ViewBag.PatientUhid</small>
+                            <div class="badge bg-info mt-2">Linked to Admission #@Model.AdmissionId</div>
+                        </div>
+                    </div>
+                    <input type="hidden" asp-for="PatientId" />
+                    <input type="hidden" asp-for="AdmissionId" />
+                }
+                else
+                {
+                    <div class="mb-4">
+                        <label class="form-label fw-medium">Find Patient <span class="text-danger">*</span></label>
+                        <div class="position-relative mb-2" id="SearchWrapper">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white text-muted"><i class="bi bi-search"></i></span>
+                                <input type="text" id="PatientSearchInput" class="form-control" placeholder="Search UHID or Name..." autocomplete="off">
+                            </div>
+                            <div id="SearchResults" class="list-group position-absolute w-100 shadow-sm" style="display: none; z-index: 1000; max-height: 200px; overflow-y: auto; top: 100%; left: 0;"></div>
+                        </div>
+
+                        <div id="SelectedPatientCard" class="card border-primary bg-primary bg-opacity-10" style="display: none;">
+                            <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-0 fw-bold text-primary" id="SP_Name"></h6>
+                                    <small class="text-muted" id="SP_Uhid"></small>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-light text-danger rounded-circle" id="ClearPatientBtn">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <input type="hidden" asp-for="PatientId" id="PatientIdHidden" required />
+                    </div>
+                }
+
+                <div class="mb-4 pt-3 border-top">
+                    <label asp-for="DiscountAmount" class="form-label fw-medium text-success">Discount Amount (৳)</label>
+                    <input asp-for="DiscountAmount" type="number" step="0.01" class="form-control border-success text-success fw-bold" placeholder="0.00" value="0.00" />
+                    <small class="text-muted">Discount will be applied to the final subtotal.</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Bill Items -->
+        <div class="col-md-8">
+            <div class="pro-card h-100">
+                <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
+                    <h5 class="card-title text-primary mb-0">Bill Items</h5>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="addItemBtn">
+                        <i class="bi bi-plus-circle"></i> Add Item
+                    </button>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-bordered align-middle" id="itemsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="150">Department</th>
+                                <th>Description</th>
+                                <th width="150">Amount (৳)</th>
+                                <th width="60"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="itemsBody">
+                            @if (Model.BillItems != null && Model.BillItems.Any())
+                            {
+                                int idx = 0;
+                                foreach (var item in Model.BillItems)
+                                {
+                                    <tr>
+                                        <td>
+                                            <input type="hidden" name="BillItems[@idx].Department" value="@item.Department" />
+                                            <span class="badge bg-secondary">@item.Department</span>
+                                        </td>
+                                        <td>
+                                            <input type="text" name="BillItems[@idx].Description" class="form-control" value="@item.Description" required />
+                                        </td>
+                                        <td>
+                                            <input type="number" name="BillItems[@idx].Amount" step="0.01" class="form-control amount-input" value="@item.Amount" required />
+                                        </td>
+                                        <td class="text-center">
+                                            <button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="bi bi-trash"></i></button>
+                                        </td>
+                                    </tr>
+                                    idx++;
+                                }
+                            }
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <td colspan="2" class="text-end fw-bold">Subtotal:</td>
+                                <td colspan="2" class="fw-bold fs-5 text-primary">৳<span id="subtotalDisplay">0.00</span></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    <div id="noItemsMsg" class="text-center text-muted py-4" style="display:none;">
+                        <i class="bi bi-receipt fs-2 d-block mb-2 text-black-50"></i>
+                        No items added yet. Click "Add Item".
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                    <a asp-action="Index" class="btn btn-light border">Cancel</a>
+                    <button type="submit" class="btn btn-primary px-4"><i class="bi bi-file-earmark-text me-1"></i> Generate Final Bill</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- Hidden Template for new row -->
+<script type="text/template" id="rowTemplate">
+    <tr>
+        <td>
+            <select name="BillItems[{index}].Department" class="form-select" required>
+                @foreach (var dept in Enum.GetValues(typeof(DepartmentType)))
+                {
+                    <option value="@dept">@dept</option>
+                }
+            </select>
+        </td>
+        <td>
+            <input type="text" name="BillItems[{index}].Description" class="form-control" placeholder="e.g. Consultation Fee" required />
+        </td>
+        <td>
+            <input type="number" name="BillItems[{index}].Amount" step="0.01" class="form-control amount-input" placeholder="0.00" required />
+        </td>
+        <td class="text-center">
+            <button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="bi bi-trash"></i></button>
+        </td>
+    </tr>
+</script>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            // -- Search Logic --
+            var searchTimeout;
+            $('#PatientSearchInput').on('input', function() {
+                clearTimeout(searchTimeout);
+                var query = $(this).val().trim();
+                if(query.length < 1) { $('#SearchResults').hide(); return; }
+                searchTimeout = setTimeout(function() { performSearch(query); }, 300);
+            });
+            function performSearch(query) {
+                $.ajax({
+                    url: '@Url.Action("Search", "Patients")', data: { q: query },
+                    success: function(data) {
+                        $('#SearchResults').empty().show();
+                        if(data.results.length === 0) {
+                            $('#SearchResults').append('<div class="list-group-item text-muted text-center py-3">No patients found</div>');
+                        } else {
+                            data.results.forEach(function(p) {
+                                var parts = p.text.split(" - ");
+                                var item = $('<a href="#" class="list-group-item list-group-item-action"></a>')
+                                    .html('<span class="fw-bold">' + parts[1] + '</span><br><small class="text-muted">' + parts[0] + '</small>')
+                                    .click(function(e) { e.preventDefault(); selectPatient(p.id, parts[0], parts[1]); });
+                                $('#SearchResults').append(item);
+                            });
+                        }
+                    }
+                });
+            }
+            $(document).click(function(e) { if (!$(e.target).closest('#SearchWrapper').length) $('#SearchResults').hide(); });
+            function selectPatient(id, uhid, name) {
+                $('#PatientIdHidden').val(id); $('#SP_Uhid').text(uhid); $('#SP_Name').text(name);
+                $('#SearchResults').hide(); $('#SearchWrapper').hide(); $('#SelectedPatientCard').fadeIn();
+            }
+            $('#ClearPatientBtn').click(function() {
+                $('#PatientIdHidden').val(''); $('#SelectedPatientCard').hide(); $('#SearchWrapper').fadeIn(); $('#PatientSearchInput').val('').focus();
+            });
+
+            // -- Dynamic Rows & Totals --
+            var rowCount = $('#itemsBody tr').length;
+            
+            function calculateTotals() {
+                var sum = 0;
+                $('.amount-input').each(function() {
+                    var val = parseFloat($(this).val());
+                    if (!isNaN(val)) sum += val;
+                });
+                $('#subtotalDisplay').text(sum.toFixed(2));
+                
+                if ($('#itemsBody tr').length === 0) {
+                    $('#noItemsMsg').show(); $('#itemsTable').hide();
+                } else {
+                    $('#noItemsMsg').hide(); $('#itemsTable').show();
+                }
+            }
+
+            function reindexRows() {
+                $('#itemsBody tr').each(function(index) {
+                    $(this).find('select, input').each(function() {
+                        var name = $(this).attr('name');
+                        if (name) {
+                            name = name.replace(/\[\d+\]/, '[' + index + ']');
+                            $(this).attr('name', name);
+                        }
+                    });
+                });
+            }
+
+            $('#addItemBtn').click(function() {
+                var template = $('#rowTemplate').html();
+                template = template.replace(/{index}/g, rowCount);
+                $('#itemsBody').append(template);
+                rowCount++;
+                calculateTotals();
+            });
+
+            $(document).on('click', '.remove-row', function() {
+                $(this).closest('tr').remove();
+                reindexRows();
+                calculateTotals();
+            });
+
+            $(document).on('input', '.amount-input', calculateTotals);
+            
+            // Initial call
+            calculateTotals();
+        });
+    </script>
+}

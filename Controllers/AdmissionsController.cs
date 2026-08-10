@@ -4,10 +4,12 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 using HospitalManagementSystem.Models;
 
 namespace HospitalManagementSystem.Controllers
 {
+    [Authorize(Roles = "Admin")]
     public class AdmissionsController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -201,6 +203,72 @@ namespace HospitalManagementSystem.Controllers
             admission.Patient = await _context.Patients.FindAsync(admission.PatientId);
             
             return View(admission);
+        }
+
+        // GET: Admissions/TransferBed/5
+        public async Task<IActionResult> TransferBed(int? id)
+        {
+            if (id == null) return NotFound();
+
+            var admission = await _context.Admissions
+                .Include(a => a.Patient)
+                .Include(a => a.BedTransfers).ThenInclude(bt => bt.Bed)
+                .FirstOrDefaultAsync(a => a.Id == id && a.DischargeDate == null);
+                
+            if (admission == null) return NotFound();
+
+            var currentTransfer = admission.BedTransfers.FirstOrDefault(bt => bt.EndDate == null);
+            ViewBag.CurrentBed = currentTransfer?.Bed;
+
+            var availableBeds = _context.Beds
+                .Include(b => b.BedTransfers)
+                .ToList()
+                .Where(b => b.Status == "Available")
+                .Select(b => new {
+                    Id = b.Id,
+                    Category = b.Category.ToString(),
+                    DisplayName = b.BedNumber + " (" + b.Category + ")"
+                }).ToList();
+
+            ViewBag.AvailableBedsList = availableBeds;
+            return View(admission);
+        }
+
+        // POST: Admissions/TransferBed/5
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> TransferBed(int id, int BedId)
+        {
+            var admission = await _context.Admissions
+                .Include(a => a.BedTransfers)
+                .FirstOrDefaultAsync(a => a.Id == id && a.DischargeDate == null);
+
+            if (admission == null) return NotFound();
+
+            var activeTransfer = admission.BedTransfers.FirstOrDefault(bt => bt.EndDate == null);
+            if (activeTransfer != null)
+            {
+                if (activeTransfer.BedId == BedId)
+                {
+                    TempData["SuccessMessage"] = "Patient is already in this bed.";
+                    return RedirectToAction(nameof(Index));
+                }
+                activeTransfer.EndDate = DateTime.UtcNow;
+            }
+
+            var newTransfer = new BedTransfer
+            {
+                BedId = BedId,
+                StartDate = DateTime.UtcNow
+            };
+            
+            admission.BedTransfers.Add(newTransfer);
+            admission.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            TempData["SuccessMessage"] = "Patient successfully transferred to the new bed.";
+            
+            return RedirectToAction(nameof(Index));
         }
 
         // GET: Admissions/Delete/5

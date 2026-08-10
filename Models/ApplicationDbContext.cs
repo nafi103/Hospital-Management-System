@@ -15,7 +15,6 @@ namespace HospitalManagementSystem.Models
         public DbSet<BedTransfer> BedTransfers { get; set; }
         public DbSet<Admission> Admissions { get; set; }
         public DbSet<Appointment> Appointments { get; set; }
-        public DbSet<MedicalRecord> MedicalRecords { get; set; }
         public DbSet<Operation> Operations { get; set; }
         public DbSet<Medicine> Medicines { get; set; }
         public DbSet<Prescription> Prescriptions { get; set; }
@@ -40,11 +39,7 @@ namespace HospitalManagementSystem.Models
                 .HasForeignKey(a => a.DoctorId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<MedicalRecord>()
-                .HasOne(m => m.Doctor)
-                .WithMany()
-                .HasForeignKey(m => m.DoctorId)
-                .OnDelete(DeleteBehavior.Restrict);
+
 
             modelBuilder.Entity<Operation>()
                 .HasOne(o => o.Surgeon)
@@ -68,7 +63,7 @@ namespace HospitalManagementSystem.Models
             modelBuilder.Entity<Role>().HasData(
                 new Role { Id = 1, RoleName = "Admin", Permissions = "All", CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
                 new Role { Id = 2, RoleName = "Doctor", Permissions = "Read, Write_Patient", CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
-                new Role { Id = 3, RoleName = "Receptionist", Permissions = "Read, Write_Admission", CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) }
+                new Role { Id = 3, RoleName = "Assistant", Permissions = "Read, Write_Admission", CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) }
             );
 
             modelBuilder.Entity<User>().HasData(
@@ -79,6 +74,16 @@ namespace HospitalManagementSystem.Models
                     Password = "admin123", 
                     FullName = "System Admin", 
                     Category = "Management",
+                    CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc),
+                    UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc)
+                },
+                new User { 
+                    Id = 100, 
+                    RoleId = 2, 
+                    Username = "drmock", 
+                    Password = "password123", 
+                    FullName = "Dr. Mock", 
+                    Category = "Consultant",
                     CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc),
                     UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc)
                 }

@@ -5,9 +5,18 @@
 }
 
 <div class="mb-4 border-bottom pb-3">
-    <a asp-action="Index" class="text-decoration-none text-muted mb-2 d-inline-block">
-        <i class="bi bi-arrow-left"></i> Back to Directory
-    </a>
+    @if (User.IsInRole("Admin"))
+    {
+        <a asp-action="Index" class="text-decoration-none text-muted mb-2 d-inline-block">
+            <i class="bi bi-arrow-left"></i> Back to Directory
+        </a>
+    }
+    else
+    {
+        <a asp-controller="Appointments" asp-action="Create" class="text-decoration-none text-muted mb-2 d-inline-block">
+            <i class="bi bi-arrow-left"></i> Back to Queue
+        </a>
+    }
     <h2 class="mb-1">Register New Patient</h2>
     <p class="text-muted mb-0">Enter the patient's demographic details to generate a UHID.</p>
 </div>
@@ -97,9 +106,18 @@
                     </div>
                 </div>
 
-                <div class="d-flex justify-content-end gap-2 mt-5">
-                    <a asp-action="Index" class="btn btn-light border">Cancel</a>
-                    <button type="submit" class="btn btn-primary px-4">Register Patient</button>
+                <div class="alert alert-info mt-4 mb-4 border-0 bg-info bg-opacity-10 d-flex align-items-center">
+                    <i class="bi bi-shield-check fs-4 text-info me-3"></i>
+                    <div>
+                        <strong>Audit Trail Active</strong><br />
+                        <small class="text-muted">This patient will be registered under your signature: <strong>@User.Identity.Name</strong></small>
+                    </div>
+                </div>
+
+                <div class="d-grid mt-4">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="bi bi-person-plus-fill me-1"></i> Register Patient
+                    </button>
                 </div>
             </form>
         </div>

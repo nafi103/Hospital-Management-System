@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using HospitalManagementSystem.Models;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace HospitalManagementSystem.Controllers
 {
+    [Authorize(Roles = "Assistant,Admin,Doctor")]
     public class PatientsController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -14,6 +17,7 @@ namespace HospitalManagementSystem.Controllers
         }
 
         // GET: Patients
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Index(string searchString)
         {
             var patients = from p in _context.Patients
@@ -67,6 +71,7 @@ namespace HospitalManagementSystem.Controllers
             }
 
             var patient = await _context.Patients
+                .Include(p => p.RegisteredBy)
                 .FirstOrDefaultAsync(m => m.Id == id);
             
             if (patient == null)
@@ -78,6 +83,7 @@ namespace HospitalManagementSystem.Controllers
         }
 
         // GET: Patients/Create
+        [Authorize(Roles = "Assistant,Admin")]
         public IActionResult Create()
         {
             return View();
@@ -86,6 +92,7 @@ namespace HospitalManagementSystem.Controllers
         // POST: Patients/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Assistant,Admin")]
         public async Task<IActionResult> Create([Bind("IsChild,FullName,ContactInfo,DateOfBirth,Gender,BloodGroup,EmergencyContactName,EmergencyContactPhone")] Patient patient)
         {
             // Remove properties that are auto-generated from ModelState validation
@@ -114,6 +121,12 @@ namespace HospitalManagementSystem.Controllers
 
             if (ModelState.IsValid)
             {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (int.TryParse(userIdClaim, out int userId))
+                {
+                    patient.RegisteredById = userId;
+                }
+
                 // Auto-generate UHID: PT-YYYYMM-XXXX
                 string prefix = $"PT-{DateTime.UtcNow:yyyyMM}-";
                 
@@ -144,11 +157,16 @@ namespace HospitalManagementSystem.Controllers
                 
                 TempData["SuccessMessage"] = $"Patient {patient.FullName} registered successfully! UHID: {patient.Uhid}";
                 
+                if (User.IsInRole("Assistant"))
+                {
+                    return RedirectToAction("Index", "Appointments");
+                }
                 return RedirectToAction(nameof(Index));
             }
             return View(patient);
         }
         // GET: Patients/Edit/5
+        [Authorize(Roles = "Assistant,Admin")]
         public async Task<IActionResult> Edit(int? id)
         {
             if (id == null) return NotFound();
@@ -162,7 +180,8 @@ namespace HospitalManagementSystem.Controllers
         // POST: Patients/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("Id,Uhid,IsChild,FullName,ContactInfo,DateOfBirth,Gender,BloodGroup,EmergencyContactName,EmergencyContactPhone,CreatedAt")] Patient patient)
+        [Authorize(Roles = "Assistant,Admin")]
+        public async Task<IActionResult> Edit(int id, [Bind("Id,Uhid,IsChild,FullName,ContactInfo,DateOfBirth,Gender,BloodGroup,EmergencyContactName,EmergencyContactPhone,CreatedAt,RegisteredById")] Patient patient)
         {
             if (id != patient.Id) return NotFound();
 
@@ -211,6 +230,7 @@ namespace HospitalManagementSystem.Controllers
         // POST: Patients/Delete/5
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var patient = await _context.Patients.FindAsync(id);

@@ -32,6 +32,11 @@ namespace HospitalManagementSystem.Models
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
 
+        public string MedicalHistoryJson { get; set; } = "[]";
+        
+        public int? RegisteredById { get; set; }
+        public User? RegisteredBy { get; set; }
+
         public List<Admission> Admissions { get; set; } = new List<Admission>();
     }
 }

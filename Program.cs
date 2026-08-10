@@ -1,10 +1,20 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using HospitalManagementSystem.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
+
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/Auth/Login";
+        options.AccessDeniedPath = "/Auth/AccessDenied";
+    });
+
+builder.Services.AddSignalR();
 
 // ডাটাবেস কানেকশন সেটআপ (অবশ্যই builder.Build() এর আগে থাকতে হবে)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -20,8 +30,12 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+app.UseStaticFiles();
+
 app.UseHttpsRedirection();
 app.UseRouting();
+
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapStaticAssets();
 
@@ -29,5 +43,7 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}")
     .WithStaticAssets();
+
+app.MapHub<HospitalManagementSystem.Hubs.NotificationHub>("/notificationHub");
 
 app.Run();

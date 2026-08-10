@@ -1,0 +1,138 @@
+@model HospitalManagementSystem.Models.Prescription
+@using HospitalManagementSystem.Models
+
+@{
+    ViewData["Title"] = "Prescription Details";
+    var isPending = Model.Status == PrescriptionStatus.PendingPharmacy;
+}
+
+<div class="mb-4 border-bottom pb-3">
+    <a asp-action="Index" class="text-decoration-none text-muted mb-2 d-inline-block">
+        <i class="bi bi-arrow-left"></i> Back to Prescriptions
+    </a>
+    <div class="d-flex justify-content-between align-items-end">
+        <div>
+            <h2 class="mb-1">Prescription Details</h2>
+            <p class="text-muted mb-0">View items and dispense status.</p>
+        </div>
+        <div>
+            @if (isPending)
+            {
+                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning-subtle fs-6 py-2 px-3">
+                    <i class="bi bi-hourglass-split me-1"></i> Pending Pharmacy
+                </span>
+            }
+            else
+            {
+                <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle fs-6 py-2 px-3">
+                    <i class="bi bi-check2-all me-1"></i> Dispensed
+                </span>
+            }
+        </div>
+    </div>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="row g-4">
+    <div class="col-md-4">
+        <div class="pro-card h-100">
+            <h5 class="card-title text-primary mb-4 border-bottom pb-2">Information</h5>
+            
+            <div class="mb-4">
+                <label class="text-muted small mb-1">Patient</label>
+                <div class="fw-bold fs-5">@Model.Patient?.FullName</div>
+                <div class="text-muted">@Model.Patient?.Uhid</div>
+            </div>
+
+            <div class="mb-4">
+                <label class="text-muted small mb-1">Prescribed By</label>
+                <div class="fw-medium"><i class="bi bi-heart-pulse text-primary me-1"></i> @Model.Doctor?.FullName</div>
+                <div class="text-muted small mt-1">@Model.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy hh:mm tt")</div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(Model.Notes))
+            {
+                <div class="mb-3">
+                    <label class="text-muted small mb-1">Notes</label>
+                    <div class="p-3 bg-light rounded border">@Model.Notes</div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="pro-card h-100">
+            <h5 class="card-title text-primary mb-4 border-bottom pb-2">Medicines</h5>
+            
+            <div class="table-responsive">
+                <table class="table table-hover align-middle border">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Medicine</th>
+                            <th class="text-center">Quantity</th>
+                            <th class="text-end">Unit Price</th>
+                            <th class="text-end">Total Price</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{ decimal grandTotal = 0; }
+                        @foreach (var item in Model.PrescriptionItems)
+                        {
+                            var total = item.Quantity * item.UnitPrice;
+                            grandTotal += total;
+                            
+                            <tr>
+                                <td class="fw-medium">
+                                    <i class="bi bi-capsule text-primary me-2"></i>@item.Medicine?.Name
+                                    @if(isPending)
+                                    {
+                                        <div class="small text-muted mt-1">Current Stock: @item.Medicine?.StockQuantity</div>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-secondary">@item.Quantity</span>
+                                </td>
+                                <td class="text-end text-muted">৳@item.UnitPrice.ToString("0.00")</td>
+                                <td class="text-end fw-medium">৳@total.ToString("0.00")</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr>
+                            <td colspan="3" class="text-end fw-bold">Grand Total:</td>
+                            <td class="text-end fw-bold text-primary">৳@grandTotal.ToString("0.00")</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            @if (isPending)
+            {
+                <div class="mt-4 pt-3 border-top text-end">
+                    <p class="text-muted small mb-3">Clicking Dispense will permanently deduct the quantities from the inventory stock.</p>
+                    <form asp-action="Dispense" method="post" class="d-inline">
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <button type="submit" class="btn btn-success px-4" onclick="return confirm('Are you sure you want to dispense this prescription? This action will deduct stock.')">
+                            <i class="bi bi-box-arrow-right me-1"></i> Dispense Medicines
+                        </button>
+                    </form>
+                </div>
+            }
+        </div>
+    </div>
+</div>

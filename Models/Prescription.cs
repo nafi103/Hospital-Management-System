@@ -21,6 +21,7 @@ namespace HospitalManagementSystem.Models
 
         public string Notes { get; set; }
         public PrescriptionStatus Status { get; set; }
+        public bool IsBilled { get; set; } = false;
 
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }

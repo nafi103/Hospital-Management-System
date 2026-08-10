@@ -1,0 +1,83 @@
+@{
+    ViewData["Title"] = "Log In";
+    Layout = "_Layout";
+}
+
+<div class="row justify-content-center align-items-center" style="min-height: 70vh;">
+    <div class="col-md-8 col-lg-6">
+        <div class="card border-0 shadow-lg" style="border-radius: 1rem;">
+            <div class="card-body p-5 text-center">
+                <i class="bi bi-hospital text-primary mb-3 d-block" style="font-size: 3rem;"></i>
+                <h3 class="fw-bold mb-1">Welcome Back</h3>
+                <div class="row g-4 mt-2">
+                    <div class="col-md-5">
+                        <h5 class="mb-4 text-secondary border-bottom pb-2">Real Login</h5>
+                        @if (ViewBag.Error != null)
+                        {
+                            <div class="alert alert-danger py-2">@ViewBag.Error</div>
+                        }
+                        <form asp-action="Login" method="post">
+                            <div class="mb-3">
+                                <label class="form-label">Username</label>
+                                <input type="text" name="username" class="form-control" required />
+                            </div>
+                            <div class="mb-4">
+                                <label class="form-label">Password</label>
+                                <input type="password" name="password" class="form-control" required />
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 mb-2">Log In</button>
+                            <small class="text-muted text-center d-block">Doctor Test: drmock / password123</small>
+                        </form>
+                    </div>
+
+                    <div class="col-md-7 border-start">
+                        <h5 class="mb-4 text-secondary border-bottom pb-2">One-Click Mock Login (Testing)</h5>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <form asp-action="MockLogin" method="post">
+                                    <input type="hidden" name="role" value="Assistant" />
+                                    <button type="submit" class="btn btn-outline-primary w-100 py-3 h-100 rounded-3 text-start">
+                                        <div class="d-flex flex-column align-items-center text-center">
+                                            <i class="bi bi-person-badge fs-2 mb-2"></i>
+                                            <h6 class="mb-1 fw-bold">Mock Assistant</h6>
+                                            <small class="text-muted d-block mt-1" style="font-size: 0.75rem;">Registration & Queue</small>
+                                        </div>
+                                    </button>
+                                </form>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <form asp-action="MockLogin" method="post">
+                                    <input type="hidden" name="role" value="Doctor" />
+                                    <button type="submit" class="btn btn-outline-success w-100 py-3 h-100 rounded-3 text-start">
+                                        <div class="d-flex flex-column align-items-center text-center">
+                                            <i class="bi bi-heart-pulse fs-2 mb-2"></i>
+                                            <h6 class="mb-1 fw-bold">Mock Doctor</h6>
+                                            <small class="text-muted d-block mt-1" style="font-size: 0.75rem;">Consultations & Rx</small>
+                                        </div>
+                                    </button>
+                                </form>
+                            </div>
+
+                            <div class="col-md-12 mt-2">
+                                <form asp-action="MockLogin" method="post">
+                                    <input type="hidden" name="role" value="Admin" />
+                                    <button type="submit" class="btn btn-outline-dark w-100 py-2 h-100 rounded-3 text-start">
+                                        <div class="d-flex justify-content-center align-items-center gap-2">
+                                            <i class="bi bi-shield-lock fs-5"></i>
+                                            <span class="fw-bold">Mock System Admin</span>
+                                        </div>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-4 pt-4 border-top text-muted small">
+                    For demonstration purposes, passwords are not required.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

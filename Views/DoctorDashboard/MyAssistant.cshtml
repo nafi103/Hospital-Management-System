@@ -1,0 +1,160 @@
+@model IEnumerable<HospitalManagementSystem.Models.User>
+
+@{
+    ViewData["Title"] = "My Assistant";
+}
+
+<div class="mb-5 border-bottom pb-4 d-flex justify-content-between align-items-center">
+    <div>
+        <h2 class="mb-1">My Assistants</h2>
+        <p class="text-muted mb-0">Manage your assigned assistants and their credentials.</p>
+    </div>
+    <!-- Button to trigger modal for adding new assistant -->
+    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createAssistantModal">
+        <i class="bi bi-person-plus-fill me-1"></i> Add Assistant
+    </button>
+</div>
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger mb-4">@TempData["Error"]</div>
+}
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success mb-4">@TempData["Success"]</div>
+}
+
+<div class="row g-4">
+    @if (Model != null && Model.Any())
+    {
+        foreach (var assistant in Model)
+        {
+            <div class="col-md-6 col-lg-4">
+                <div class="pro-card border-top border-4 border-primary h-100 position-relative">
+                    <!-- Actions -->
+                    <div class="position-absolute top-0 end-0 m-3 d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editAssistantModal-@assistant.Id" title="Edit Assistant">
+                            <i class="bi bi-pencil-fill"></i> Edit
+                        </button>
+                        <form asp-action="FireAssistant" asp-route-id="@assistant.Id" method="post" onsubmit="return confirm('Are you sure you want to fire @assistant.FullName? This will permanently delete their account.');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Fire Assistant">
+                                <i class="bi bi-trash-fill"></i> Fire
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="d-flex align-items-center mb-4 mt-2">
+                        <div class="icon-box me-3 bg-primary text-white rounded-circle d-flex justify-content-center align-items-center" style="width: 50px; height: 50px;">
+                            <i class="bi bi-person-badge fs-3"></i>
+                        </div>
+                        <div>
+                            <h5 class="mb-0 fw-bold">@assistant.FullName</h5>
+                            <span class="badge bg-primary">Assigned Assistant</span>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-light p-3 rounded mb-3 border">
+                        <div class="mb-2">
+                            <label class="text-muted small text-uppercase fw-bold mb-0"><i class="bi bi-person me-1"></i> Username</label>
+                            <p class="fs-6 mb-0 text-dark font-monospace">@assistant.Username</p>
+                        </div>
+                        <div class="mb-0">
+                            <label class="text-muted small text-uppercase fw-bold mb-0"><i class="bi bi-key me-1"></i> Password</label>
+                            <div class="d-flex align-items-center gap-2">
+                                <p class="fs-6 mb-0 text-dark font-monospace" id="pwd-@assistant.Id">@assistant.Password</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-0">
+                        <small class="text-muted"><i class="bi bi-calendar3 me-1"></i> Hired On: @assistant.CreatedAt.ToString("MMM dd, yyyy")</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edit Assistant Modal -->
+            <div class="modal fade" id="editAssistantModal-@assistant.Id" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content border-0 shadow">
+                        <div class="modal-header bg-secondary text-white border-0 py-3">
+                            <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit Assistant Details</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form asp-action="UpdateAssistant" method="post">
+                            <input type="hidden" name="id" value="@assistant.Id" />
+                            <div class="modal-body p-4">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Full Name <span class="text-danger">*</span></label>
+                                    <input type="text" name="fullName" class="form-control" value="@assistant.FullName" required />
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Username (Login ID) <span class="text-danger">*</span></label>
+                                    <input type="text" name="username" class="form-control" value="@assistant.Username" required />
+                                </div>
+
+                                <div class="mb-2">
+                                    <label class="form-label fw-bold">New Password</label>
+                                    <input type="text" name="password" class="form-control" placeholder="Leave blank to keep current password" />
+                                </div>
+                            </div>
+                            <div class="modal-footer bg-light border-0">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-primary px-4">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="col-12 text-center py-5">
+            <i class="bi bi-people text-muted mb-3 d-block" style="font-size: 4rem;"></i>
+            <h4 class="text-secondary">No Assistants Found</h4>
+            <p class="text-muted">You currently don't have any assistants assigned to you.</p>
+            <button type="button" class="btn btn-outline-primary mt-2" data-bs-toggle="modal" data-bs-target="#createAssistantModal">
+                Hire Your First Assistant
+            </button>
+        </div>
+    }
+</div>
+
+<!-- Create Assistant Modal -->
+<div class="modal fade" id="createAssistantModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white border-0 py-3">
+                <h5 class="modal-title"><i class="bi bi-person-plus-fill me-2"></i>Hire New Assistant</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form asp-action="CreateAssistant" method="post">
+                <div class="modal-body p-4">
+                    <div class="alert alert-info border-0 shadow-sm mb-4 pb-2 pt-3">
+                        <p class="mb-0 small"><i class="bi bi-info-circle me-1"></i> When you create this account, hand the <b>Username</b> and <b>Password</b> to your new assistant. They will use the <b>Real Login</b> portal to access their dashboard.</p>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Full Name <span class="text-danger">*</span></label>
+                        <input type="text" name="fullName" class="form-control" placeholder="e.g., Jane Doe" required />
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Username <span class="text-danger">*</span></label>
+                        <input type="text" name="username" class="form-control" placeholder="Unique login ID" required />
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-bold">Password <span class="text-danger">*</span></label>
+                        <input type="text" name="password" class="form-control" placeholder="Choose a password" required />
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary px-4">Hire Assistant</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

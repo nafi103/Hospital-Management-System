@@ -1,0 +1,107 @@
+@model HospitalManagementSystem.Models.Admission
+
+@{
+    ViewData["Title"] = "Transfer Bed";
+    var currentBed = ViewBag.CurrentBed as HospitalManagementSystem.Models.Bed;
+}
+
+<div class="mb-4 border-bottom pb-3">
+    <a asp-action="Index" class="text-decoration-none text-muted mb-2 d-inline-block">
+        <i class="bi bi-arrow-left"></i> Back to Admissions
+    </a>
+    <h2 class="mb-1">Transfer Bed</h2>
+    <p class="text-muted mb-0">Move patient @Model.Patient?.FullName to a different bed.</p>
+</div>
+
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="pro-card">
+            <form asp-action="TransferBed">
+                <input type="hidden" asp-for="Id" />
+                
+                <h5 class="card-title text-primary mb-4 border-bottom pb-2">Current Status</h5>
+                
+                <div class="row g-4 mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small mb-1">Patient</label>
+                        <div class="fw-bold fs-5">@Model.Patient?.FullName</div>
+                        <div class="text-muted">@Model.Patient?.Uhid</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small mb-1">Current Bed</label>
+                        @if(currentBed != null)
+                        {
+                            <div class="fw-bold fs-5 text-primary">@currentBed.BedNumber</div>
+                            <div class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle">@currentBed.Category</div>
+                        }
+                        else
+                        {
+                            <div class="fw-bold fs-5 text-warning">No active bed</div>
+                        }
+                    </div>
+                </div>
+
+                <h5 class="card-title text-primary mb-4 border-bottom pb-2 mt-5">New Bed Allocation</h5>
+
+                <div class="row g-4 mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label fw-medium">Bed Category Filter</label>
+                        <select id="BedCategoryFilter" class="form-select">
+                            <option value="">All Categories</option>
+                            <option value="ICU">ICU</option>
+                            <option value="GeneralWard">General Ward</option>
+                            <option value="Cabin">Cabin</option>
+                            <option value="VIPCabin">VIP Cabin</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="BedId" class="form-label fw-medium">Assign New Bed <span class="text-danger">*</span></label>
+                        <select id="BedId" name="BedId" class="form-select" required>
+                            <option value="">-- Select New Bed --</option>
+                        </select>
+                        <small class="text-muted mt-1 d-block">Only currently available beds are shown.</small>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-5">
+                    <a asp-action="Index" class="btn btn-light border">Cancel</a>
+                    <button type="submit" class="btn btn-primary px-4"><i class="bi bi-arrow-left-right me-1"></i> Transfer Patient</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            var availableBeds = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.AvailableBedsList));
+
+            function populateBeds() {
+                var category = $('#BedCategoryFilter').val();
+                var bedSelect = $('#BedId');
+                var currentVal = bedSelect.val();
+                
+                bedSelect.empty();
+                bedSelect.append('<option value="">-- Select New Bed --</option>');
+                
+                var filtered = availableBeds;
+                if(category !== "") {
+                    filtered = availableBeds.filter(function(b) { return b.Category === category; });
+                }
+                
+                filtered.forEach(function(b) {
+                    var option = $('<option></option>').val(b.Id).text(b.DisplayName);
+                    bedSelect.append(option);
+                });
+
+                if (currentVal && bedSelect.find("option[value='" + currentVal + "']").length > 0) {
+                    bedSelect.val(currentVal);
+                }
+            }
+
+            $('#BedCategoryFilter').change(populateBeds);
+            populateBeds();
+        });
+    </script>
+}

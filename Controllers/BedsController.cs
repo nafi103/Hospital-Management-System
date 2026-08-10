@@ -2,11 +2,13 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using HospitalManagementSystem.Models;
 
 namespace HospitalManagementSystem.Controllers
 {
+    [Authorize(Roles = "Admin")]
     public class BedsController : Controller
     {
         private readonly ApplicationDbContext _context;
