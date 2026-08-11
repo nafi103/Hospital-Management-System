@@ -4,6 +4,18 @@
     ViewData["Title"] = "New Prescription";
 }
 
+@section Styles {
+    <style>
+        .hover-border-primary:hover {
+            border-color: #0d6efd !important;
+        }
+        .transition-all {
+            transition: all 0.2s ease-in-out;
+        }
+        .medicines-container { min-height: 250px; }
+    </style>
+}
+
 <div class="mb-4 border-bottom pb-3">
     <a asp-action="Index" class="text-decoration-none text-muted mb-2 d-inline-block">
         <i class="bi bi-arrow-left"></i> Back to Prescriptions
@@ -63,9 +75,19 @@
                     </div>
                 }
 
+                <div class="mb-3">
+                    <label asp-for="ChiefComplaints" class="form-label fw-medium">Chief Complaints</label>
+                    <textarea asp-for="ChiefComplaints" class="form-control" rows="2" placeholder="Fever, cough for 3 days..."></textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="Diagnosis" class="form-label fw-medium">Diagnosis</label>
+                    <input asp-for="Diagnosis" class="form-control" placeholder="Viral Pharyngitis..." />
+                </div>
+
                 <div class="mb-2">
                     <label asp-for="Notes" class="form-label fw-medium">General Notes / Instructions</label>
-                    <textarea asp-for="Notes" class="form-control" rows="4" placeholder="Take after meals..."></textarea>
+                    <textarea asp-for="Notes" class="form-control" rows="3" placeholder="Take plenty of fluids..."></textarea>
                 </div>
             </div>
         </div>
@@ -80,22 +102,24 @@
                     </button>
                 </div>
 
-                <div class="table-responsive">
-                    <table class="table table-bordered align-middle" id="medicinesTable">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Medicine</th>
-                                <th width="120">Quantity</th>
-                                <th width="60"></th>
-                            </tr>
-                        </thead>
-                        <tbody id="medicinesBody">
-                            <!-- Items will be appended here via JS -->
-                        </tbody>
-                    </table>
-                    <div id="noItemsMsg" class="text-center text-muted py-4">
-                        <i class="bi bi-capsule fs-2 d-block mb-2 text-black-50"></i>
-                        No medicines added yet. Click "Add Item".
+                <div class="medicines-container position-relative" id="medicinesContainer">
+                    <div class="row text-muted small fw-bold text-uppercase px-3 pb-2 border-bottom mb-3 gx-2" id="tableHeader">
+                        <div class="col-md-6">Search Medicine</div>
+                        <div class="col-md-2 text-center">Available Stock</div>
+                        <div class="col-md-3 text-center">Prescribed Qty</div>
+                        <div class="col-md-1"></div>
+                    </div>
+                    
+                    <div id="medicinesBody" class="d-flex flex-column gap-3 mb-4">
+                        <!-- Items will be appended here via JS -->
+                    </div>
+                    
+                    <div id="noItemsMsg" class="text-center text-muted py-5 position-absolute w-100" style="top: 40px; left: 0;">
+                        <div class="bg-light rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 64px; height: 64px;">
+                            <i class="bi bi-capsule fs-3 text-primary opacity-75"></i>
+                        </div>
+                        <h6 class="fw-medium text-dark mb-1">No medicines prescribed</h6>
+                        <p class="small mb-0">Click "Add Item" to add medicines to this prescription.</p>
                     </div>
                 </div>
 
@@ -110,24 +134,47 @@
 
 <!-- Hidden Template for new row -->
 <script type="text/template" id="rowTemplate">
-    <tr class="medicine-row">
-        <td>
-            <select name="PrescriptionItems[{index}].MedicineId" class="form-select medicine-select" required>
-                <option value="">-- Select Medicine --</option>
-                @foreach(var m in ViewBag.MedicinesList)
-                {
-                    <option value="@m.Id" data-stock="@m.StockQuantity">@m.DisplayName</option>
-                }
-            </select>
-            <small class="text-muted stock-info d-block mt-1"></small>
-        </td>
-        <td>
-            <input type="number" name="PrescriptionItems[{index}].Quantity" class="form-control qty-input" min="1" required placeholder="Qty" />
-        </td>
-        <td class="text-center">
-            <button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="bi bi-trash"></i></button>
-        </td>
-    </tr>
+    <div class="medicine-row bg-white border rounded-3 p-3 shadow-sm mb-3 transition-all hover-border-primary">
+        <div class="row g-2 align-items-center mb-2">
+            <div class="col-md-5 position-relative">
+                <input type="hidden" name="PrescriptionItems[{index}].MedicineId" class="medicine-id-hidden" required />
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-secondary-subtle"><i class="bi bi-search text-muted"></i></span>
+                    <input type="text" class="form-control border-secondary-subtle medicine-search-input fw-bold" placeholder="Brand or Generic name..." autocomplete="off" />
+                </div>
+                <div class="list-group position-absolute w-100 shadow mt-1 medicine-search-results" style="z-index: 1050; display: none; max-height: 250px; overflow-y: auto;"></div>
+            </div>
+            <div class="col-md-3">
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-secondary-subtle text-secondary" style="font-size: 0.85rem;">Dose</span>
+                    <input type="text" name="PrescriptionItems[{index}].Dosage" class="form-control border-secondary-subtle text-center" placeholder="e.g. 1+0+1" required />
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-secondary-subtle text-secondary" style="font-size: 0.85rem;"><i class="bi bi-clock"></i></span>
+                    <input type="text" name="PrescriptionItems[{index}].Duration" class="form-control border-secondary-subtle text-center px-1" placeholder="5 Days" required />
+                </div>
+            </div>
+            <div class="col-md-1">
+                <input type="number" name="PrescriptionItems[{index}].Quantity" class="form-control qty-input border-secondary-subtle text-center px-1" placeholder="Qty" min="1" required />
+            </div>
+            <div class="col-md-1 text-end">
+                <button type="button" class="btn btn-outline-danger btn-sm remove-row rounded-circle shadow-sm" title="Remove Medicine">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+        <div class="row g-2 align-items-center">
+            <div class="col-md-12 position-relative">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-light border-secondary-subtle text-secondary">Instructions</span>
+                    <input type="text" name="PrescriptionItems[{index}].Instructions" class="form-control border-secondary-subtle" placeholder="e.g. Take after a meal. Do not take with antacids." />
+                    <span class="stock-info input-group-text bg-light text-secondary border-secondary-subtle fw-medium" style="display:none; font-size: 0.85rem;"></span>
+                </div>
+            </div>
+        </div>
+    </div>
 </script>
 
 @section Scripts {
@@ -158,14 +205,13 @@
                 removeActive(x);
                 if (currentFocus >= x.length) currentFocus = 0;
                 if (currentFocus < 0) currentFocus = (x.length - 1);
-                $(x[currentFocus]).addClass('active bg-primary text-white').removeClass('text-muted');
-                $(x[currentFocus]).find('.text-muted').removeClass('text-muted').addClass('text-white-50');
+                $(x[currentFocus]).addClass('search-item-active').removeClass('text-muted');
                 x[currentFocus].scrollIntoView({ block: 'nearest' });
             }
+
             function removeActive(x) {
                 for (var i = 0; i < x.length; i++) {
-                    $(x[i]).removeClass('active bg-primary text-white');
-                    $(x[i]).find('.text-white-50').removeClass('text-white-50').addClass('text-muted');
+                    $(x[i]).removeClass('search-item-active');
                 }
             }
             function performSearch(query) {
@@ -209,17 +255,17 @@
             var rowCount = 0;
             
             function checkEmptyState() {
-                if ($('#medicinesBody tr').length === 0) {
-                    $('#noItemsMsg').show();
-                    $('#medicinesTable').hide();
+                if ($('#medicinesBody .medicine-row').length === 0) {
+                    $('#noItemsMsg').fadeIn();
+                    $('#tableHeader').hide();
                 } else {
                     $('#noItemsMsg').hide();
-                    $('#medicinesTable').show();
+                    $('#tableHeader').fadeIn();
                 }
             }
             
             function reindexRows() {
-                $('#medicinesBody tr').each(function(index) {
+                $('#medicinesBody .medicine-row').each(function(index) {
                     $(this).find('select, input').each(function() {
                         var name = $(this).attr('name');
                         if (name) {
@@ -233,36 +279,183 @@
             $('#addMedicineBtn').click(function() {
                 var template = $('#rowTemplate').html();
                 template = template.replace(/{index}/g, rowCount);
-                $('#medicinesBody').append(template);
+                var $newRow = $(template);
+                $newRow.hide();
+                $('#medicinesBody').append($newRow);
+                $newRow.slideDown(200);
                 rowCount++;
                 checkEmptyState();
             });
 
             $(document).on('click', '.remove-row', function() {
-                $(this).closest('tr').remove();
-                reindexRows();
-                checkEmptyState();
+                var $row = $(this).closest('.medicine-row');
+                $row.slideUp(200, function() {
+                    $(this).remove();
+                    reindexRows();
+                    checkEmptyState();
+                });
             });
 
-            $(document).on('change', '.medicine-select', function() {
-                var stock = $(this).find(':selected').data('stock');
-                var stockInfo = $(this).siblings('.stock-info');
-                var qtyInput = $(this).closest('tr').find('.qty-input');
+            // -- Medicine Autocomplete Logic --
+            var allMedicines = [
+                @foreach(var m in ViewBag.MedicinesList)
+                {
+                    <text>{ id: '@m.Id', text: '@Html.Raw(m.DisplayName.Replace("'", "\\'"))', generic: '@Html.Raw(m.GenericName.Replace("'", "\\'"))', stock: @m.StockQuantity },</text>
+                }
+            ];
+
+            $(document).on('input', '.medicine-search-input', function() {
+                var query = $(this).val().toLowerCase().trim();
+                var $resultsContainer = $(this).closest('.col-md-5').find('.medicine-search-results');
+                var $hiddenId = $(this).closest('.col-md-5').find('.medicine-id-hidden');
+                var $row = $(this).closest('.medicine-row');
                 
-                if (stock !== undefined) {
-                    stockInfo.text('Stock: ' + stock);
-                    qtyInput.attr('max', stock);
+                // Reset keyboard navigation focus
+                $(this).data('currentFocus', -1);
+                
+                if (!query) {
+                    $hiddenId.val('');
+                    $resultsContainer.hide();
+                    $row.find('.stock-info').hide();
+                    $row.find('.qty-input').removeAttr('max');
+                    return;
+                }
+                
+                // Direct matches (brand or generic)
+                var matches = allMedicines.filter(function(m) {
+                    return m.text.toLowerCase().indexOf(query) !== -1 || m.generic.toLowerCase().indexOf(query) !== -1;
+                });
+
+                // Unique generic names from exact matches
+                var matchedGenerics = [...new Set(matches.map(m => m.generic))];
+
+                // Alternatives (same generic, but didn't strictly match the query text itself, or just other brands of the same generic)
+                var alternatives = allMedicines.filter(function(m) {
+                    return matchedGenerics.includes(m.generic) && !matches.some(matched => matched.id === m.id);
+                });
+
+                // Sort alternatives by stock descending
+                alternatives.sort(function(a, b) { return b.stock - a.stock; });
+
+                $resultsContainer.empty();
+                if (matches.length === 0) {
+                    $resultsContainer.append('<div class="list-group-item text-muted small py-3 text-center">No matches found</div>');
                 } else {
-                    stockInfo.text('');
-                    qtyInput.removeAttr('max');
+                    matches.forEach(function(m) {
+                        appendMedicineItem(m, $resultsContainer, $row, false);
+                    });
+
+                    if (alternatives.length > 0) {
+                        $resultsContainer.append('<div class="list-group-item bg-light text-muted small fw-bold py-1 border-top border-bottom">Alternative Brands (Same Generic)</div>');
+                        alternatives.forEach(function(m) {
+                            appendMedicineItem(m, $resultsContainer, $row, true);
+                        });
+                    }
+                }
+                $resultsContainer.show();
+            });
+
+            function appendMedicineItem(m, container, row, isAlternative) {
+                var badgeClass = m.stock > 0 ? (isAlternative ? 'bg-success-subtle text-success border-success-subtle' : 'bg-light text-secondary border-secondary-subtle') : 'bg-danger-subtle text-danger border-danger-subtle';
+                var textStyle = isAlternative ? 'text-primary fw-medium' : '';
+                var altText = isAlternative ? ' <small class="text-muted ms-2">('+m.generic+')</small>' : ' <small class="text-muted ms-1" style="font-size:0.75rem;">['+m.generic+']</small>';
+                
+                var $item = $('<a href="#" class="list-group-item list-group-item-action py-2 d-flex justify-content-between align-items-center"></a>')
+                    .html('<span class="' + textStyle + '">' + m.text + altText + '</span> <span class="badge ' + badgeClass + ' border">Stock: ' + m.stock + '</span>')
+                    .click(function(e) {
+                        e.preventDefault();
+                        var $input = row.find('.medicine-search-input');
+                        var $hidden = row.find('.medicine-id-hidden');
+                        var $stockInfo = row.find('.stock-info');
+                        var $qtyInput = row.find('.qty-input');
+                        
+                        $input.val(m.text);
+                        $hidden.val(m.id);
+                        container.hide();
+                        
+                        $stockInfo.html('<i class="bi bi-box-seam me-1"></i>Stock: ' + m.stock).fadeIn(200);
+                        $qtyInput.attr('max', m.stock);
+                    });
+                container.append($item);
+            }
+
+            $(document).on('blur', '.medicine-search-input', function() {
+                var $hidden = $(this).closest('.col-md-5').find('.medicine-id-hidden');
+                // If they blured and there's no valid hidden ID, clear input
+                if (!$hidden.val()) {
+                    $(this).val('');
+                }
+            });
+
+            // Keyboard navigation for medicines
+            $(document).on('keydown', '.medicine-search-input', function(e) {
+                var $resultsContainer = $(this).closest('.col-md-5').find('.medicine-search-results');
+                var $list = $resultsContainer.find('a.list-group-item');
+                
+                if ($list.length === 0 || !$resultsContainer.is(':visible')) return;
+                
+                var currentFocus = $(this).data('currentFocus');
+                if (currentFocus === undefined) currentFocus = -1;
+                
+                if (e.which == 40) { // DOWN
+                    e.preventDefault(); 
+                    currentFocus++; 
+                    currentFocus = addMedActive($list, currentFocus);
+                    $(this).data('currentFocus', currentFocus);
+                }
+                else if (e.which == 38) { // UP
+                    e.preventDefault(); 
+                    currentFocus--; 
+                    currentFocus = addMedActive($list, currentFocus);
+                    $(this).data('currentFocus', currentFocus);
+                }
+                else if (e.which == 13) { // ENTER
+                    e.preventDefault();
+                    if (currentFocus > -1) { 
+                        $list[currentFocus].click(); 
+                    }
+                }
+            });
+
+            function addMedActive($list, currentFocus) {
+                if (!$list || $list.length === 0) return -1;
+                $list.removeClass('search-item-active');
+                
+                if (currentFocus >= $list.length) currentFocus = 0;
+                if (currentFocus < 0) currentFocus = ($list.length - 1);
+                
+                var $activeItem = $($list[currentFocus]);
+                $activeItem.addClass('search-item-active');
+                $activeItem[0].scrollIntoView({ block: 'nearest' });
+                return currentFocus;
+            }
+
+            // Hide results when clicking outside
+            $(document).click(function(e) {
+                if (!$(e.target).closest('.medicine-search-input, .medicine-search-results').length) {
+                    $('.medicine-search-results').hide();
                 }
             });
 
             // Form submission validation
             $('#prescriptionForm').submit(function(e) {
-                if ($('#medicinesBody tr').length === 0) {
+                if ($('#medicinesBody .medicine-row').length === 0) {
                     e.preventDefault();
                     alert("Please add at least one medicine to the prescription.");
+                    return false;
+                }
+                
+                var valid = true;
+                $('.medicine-id-hidden').each(function() {
+                    if (!$(this).val()) {
+                        valid = false;
+                        $(this).siblings('.input-group').find('.medicine-search-input').addClass('is-invalid');
+                    }
+                });
+                
+                if (!valid) {
+                    e.preventDefault();
+                    alert("Please select a valid medicine from the search results for all items.");
                     return false;
                 }
             });

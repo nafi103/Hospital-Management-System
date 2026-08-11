@@ -65,10 +65,15 @@
                                     </span>
                                 }
                             </td>
-                            <td class="text-end pe-4">
-                                <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary" title="View Details">
-                                    <i class="bi bi-eye"></i> View
-                                </a>
+                            <td>
+                                <div class="d-flex gap-2 justify-content-end pe-4">
+                                    <a asp-action="Print" asp-route-id="@item.Id" class="btn btn-sm btn-outline-secondary" target="_blank" title="Print Prescription">
+                                        <i class="bi bi-printer"></i>
+                                    </a>
+                                    <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary" title="View Details">
+                                        <i class="bi bi-eye"></i> View
+                                    </a>
+                                </div>
                             </td>
                         </tr>
                     }

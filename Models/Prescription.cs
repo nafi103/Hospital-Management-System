@@ -13,13 +13,17 @@ namespace HospitalManagementSystem.Models
         public int Id { get; set; }
 
         public int PatientId { get; set; }
-        public Patient Patient { get; set; }
+        public Patient? Patient { get; set; }
 
         public int DoctorId { get; set; }
         [ForeignKey("DoctorId")]
-        public User Doctor { get; set; }
+        public User? Doctor { get; set; }
 
-        public string Notes { get; set; }
+        public string? Notes { get; set; }
+        
+        public string? ChiefComplaints { get; set; }
+        public string? Diagnosis { get; set; }
+
         public PrescriptionStatus Status { get; set; }
         public bool IsBilled { get; set; } = false;
 

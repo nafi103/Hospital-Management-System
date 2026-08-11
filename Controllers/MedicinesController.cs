@@ -34,7 +34,7 @@ namespace HospitalManagementSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create([Bind("Name,UnitPrice,StockQuantity")] Medicine medicine)
         {
-            ModelState.Remove("RowVersion");
+
 
             if (ModelState.IsValid)
             {
@@ -63,7 +63,7 @@ namespace HospitalManagementSystem.Controllers
         // POST: Medicines/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("Id,Name,UnitPrice,StockQuantity,RowVersion,CreatedAt")] Medicine medicine)
+        public async Task<IActionResult> Edit(int id, [Bind("Id,Name,UnitPrice,StockQuantity,CreatedAt")] Medicine medicine)
         {
             if (id != medicine.Id) return NotFound();
 

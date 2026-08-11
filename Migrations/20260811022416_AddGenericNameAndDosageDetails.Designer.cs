@@ -3,6 +3,7 @@ using System;
 using HospitalManagementSystem.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Hospital_Management_System.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260811022416_AddGenericNameAndDosageDetails")]
+    partial class AddGenericNameAndDosageDetails
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -499,14 +502,8 @@ namespace Hospital_Management_System.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("ChiefComplaints")
-                        .HasColumnType("text");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Diagnosis")
-                        .HasColumnType("text");
 
                     b.Property<int>("DoctorId")
                         .HasColumnType("integer");
@@ -515,6 +512,7 @@ namespace Hospital_Management_System.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("Notes")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<int>("PatientId")
@@ -627,14 +625,6 @@ namespace Hospital_Management_System.Migrations
                             Permissions = "Read, Write_Admission",
                             RoleName = "Assistant",
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 4,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Permissions = "Read, Write_Inventory",
-                            RoleName = "Pharmacist",
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
 
@@ -709,17 +699,6 @@ namespace Hospital_Management_System.Migrations
                             RoleId = 2,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Username = "drmock"
-                        },
-                        new
-                        {
-                            Id = 1010,
-                            Category = "Pharmacy",
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            FullName = "Pharmacist Mock",
-                            Password = "password123",
-                            RoleId = 4,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Username = "pharmacistmock"
                         });
                 });
 

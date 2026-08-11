@@ -74,21 +74,29 @@ namespace HospitalManagementSystem.Controllers
         [HttpPost]
         public async Task<IActionResult> MockLogin(string role)
         {
-            string userName = role == "Doctor" ? "Dr. Mock" : role == "Assistant" ? "Receptionist Mock" : "Admin Mock";
-            string roleClaim = role; // "Doctor", "Assistant", or "Admin"
+            string username = role == "Doctor" ? "drmock" : 
+                              role == "Assistant" ? "receptionistmock" : 
+                              role == "Pharmacist" ? "pharmacistmock" : "admin";
+            
+            var user = _context.Users
+                .Include(u => u.Role)
+                .FirstOrDefault(u => u.Username == username);
+
+            if (user == null)
+            {
+                return RedirectToAction("Login");
+            }
 
             var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.Name, userName),
-                new Claim(ClaimTypes.Role, roleClaim),
-                // We'll hardcode an ID for the doctor if needed, let's say ID 1
-                new Claim("UserId", "1")
+                new Claim(ClaimTypes.Name, user.FullName),
+                new Claim(ClaimTypes.Role, user.Role.RoleName),
+                new Claim("UserId", user.Id.ToString())
             };
 
-            if (role == "Assistant")
+            if (user.AssignedDoctorId.HasValue)
             {
-                // Assign Assistant to Mock Doctor (ID 1)
-                claims.Add(new Claim("AssignedDoctorId", "1"));
+                claims.Add(new Claim("AssignedDoctorId", user.AssignedDoctorId.Value.ToString()));
             }
 
             var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -98,17 +106,21 @@ namespace HospitalManagementSystem.Controllers
                 new ClaimsPrincipal(claimsIdentity),
                 new AuthenticationProperties { IsPersistent = true });
 
-            if (role == "Doctor")
+            if (user.Role.RoleName == "Doctor")
             {
                 return RedirectToAction("Index", "DoctorDashboard");
             }
-            else if (role == "Assistant")
+            else if (user.Role.RoleName == "Assistant")
             {
-                return RedirectToAction("Index", "Appointments"); // Queue
+                return RedirectToAction("Index", "Appointments");
+            }
+            else if (user.Role.RoleName == "Pharmacist")
+            {
+                return RedirectToAction("Index", "Prescriptions");
             }
             else
             {
-                return RedirectToAction("Index", "Home"); // Admin Dashboard
+                return RedirectToAction("Index", "Home");
             }
         }
 

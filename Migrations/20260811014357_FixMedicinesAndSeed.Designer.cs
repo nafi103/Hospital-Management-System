@@ -3,6 +3,7 @@ using System;
 using HospitalManagementSystem.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Hospital_Management_System.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260811014357_FixMedicinesAndSeed")]
+    partial class FixMedicinesAndSeed
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -285,15 +288,9 @@ namespace Hospital_Management_System.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("GenericName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("text");
 
                     b.Property<int>("StockQuantity")
                         .HasColumnType("integer");
@@ -315,8 +312,7 @@ namespace Hospital_Management_System.Migrations
                         {
                             Id = 1,
                             CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GenericName = "Paracetamol",
-                            Name = "Napa 500mg",
+                            Name = "Paracetamol 500mg",
                             StockQuantity = 1000,
                             UnitPrice = 2.50m,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
@@ -325,60 +321,36 @@ namespace Hospital_Management_System.Migrations
                         {
                             Id = 2,
                             CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GenericName = "Paracetamol",
-                            Name = "Ace 500mg",
-                            StockQuantity = 1500,
-                            UnitPrice = 2.00m,
+                            Name = "Amoxicillin 250mg",
+                            StockQuantity = 500,
+                            UnitPrice = 5.00m,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
                             Id = 3,
                             CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GenericName = "Azithromycin",
-                            Name = "Zithromax 500mg",
-                            StockQuantity = 50,
-                            UnitPrice = 35.00m,
+                            Name = "Ibuprofen 400mg",
+                            StockQuantity = 800,
+                            UnitPrice = 3.00m,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
                             Id = 4,
                             CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GenericName = "Azithromycin",
-                            Name = "Azithral 500mg",
-                            StockQuantity = 300,
-                            UnitPrice = 25.00m,
+                            Name = "Omeprazole 20mg",
+                            StockQuantity = 600,
+                            UnitPrice = 4.50m,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
                         {
                             Id = 5,
                             CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GenericName = "Azithromycin",
-                            Name = "Zmax 500mg",
-                            StockQuantity = 0,
-                            UnitPrice = 30.00m,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 6,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GenericName = "Omeprazole",
-                            Name = "Seclo 20mg",
-                            StockQuantity = 600,
-                            UnitPrice = 5.00m,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 7,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            GenericName = "Cetirizine",
-                            Name = "Alatrol 10mg",
+                            Name = "Cetirizine 10mg",
                             StockQuantity = 1200,
-                            UnitPrice = 2.50m,
+                            UnitPrice = 1.50m,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
@@ -499,14 +471,8 @@ namespace Hospital_Management_System.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("ChiefComplaints")
-                        .HasColumnType("text");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Diagnosis")
-                        .HasColumnType("text");
 
                     b.Property<int>("DoctorId")
                         .HasColumnType("integer");
@@ -515,6 +481,7 @@ namespace Hospital_Management_System.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("Notes")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<int>("PatientId")
@@ -544,17 +511,6 @@ namespace Hospital_Management_System.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Dosage")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Duration")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Instructions")
-                        .HasColumnType("text");
 
                     b.Property<int>("MedicineId")
                         .HasColumnType("integer");
@@ -626,14 +582,6 @@ namespace Hospital_Management_System.Migrations
                             CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Permissions = "Read, Write_Admission",
                             RoleName = "Assistant",
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = 4,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Permissions = "Read, Write_Inventory",
-                            RoleName = "Pharmacist",
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
@@ -709,17 +657,6 @@ namespace Hospital_Management_System.Migrations
                             RoleId = 2,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Username = "drmock"
-                        },
-                        new
-                        {
-                            Id = 1010,
-                            Category = "Pharmacy",
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            FullName = "Pharmacist Mock",
-                            Password = "password123",
-                            RoleId = 4,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Username = "pharmacistmock"
                         });
                 });
 

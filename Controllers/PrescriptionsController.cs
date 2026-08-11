@@ -10,7 +10,7 @@ using HospitalManagementSystem.Models;
 
 namespace HospitalManagementSystem.Controllers
 {
-    [Authorize(Roles = "Doctor")]
+    [Authorize]
     public class PrescriptionsController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -26,23 +26,44 @@ namespace HospitalManagementSystem.Controllers
             var prescriptions = await _context.Prescriptions
                 .Include(p => p.Patient)
                 .Include(p => p.Doctor)
-                .OrderByDescending(p => p.CreatedAt)
+                .OrderBy(p => p.Status)
+                .ThenByDescending(p => p.CreatedAt)
                 .ToListAsync();
             return View(prescriptions);
         }
 
-        // GET: Prescriptions/Create
-        public IActionResult Create(int? patientId, int? doctorId)
+        // GET: Prescriptions/Print/5
+        public async Task<IActionResult> Print(int? id)
         {
-            var doctors = _context.Users
-                .Where(u => u.Role.RoleName == "Doctor")
-                .Select(u => new { u.Id, u.FullName })
-                .ToList();
-            ViewData["DoctorId"] = new SelectList(doctors, "Id", "FullName", doctorId);
-
-            if (doctorId.HasValue)
+            if (id == null)
             {
-                var doctor = _context.Users.Find(doctorId.Value);
+                return NotFound();
+            }
+
+            var prescription = await _context.Prescriptions
+                .Include(p => p.Patient)
+                .Include(p => p.Doctor)
+                .Include(p => p.PrescriptionItems)
+                    .ThenInclude(i => i.Medicine)
+                .FirstOrDefaultAsync(m => m.Id == id);
+            
+            if (prescription == null)
+            {
+                return NotFound();
+            }
+
+            return View(prescription);
+        }
+
+        // GET: Prescriptions/Create
+        [Authorize(Roles = "Doctor")]
+        public IActionResult Create(int? patientId)
+        {
+            var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "UserId")?.Value;
+            if (userIdClaim != null)
+            {
+                int currentDoctorId = int.Parse(userIdClaim);
+                var doctor = _context.Users.Find(currentDoctorId);
                 if (doctor != null)
                 {
                     ViewBag.PreselectedDoctorId = doctor.Id;
@@ -57,7 +78,8 @@ namespace HospitalManagementSystem.Controllers
                     m.Id, 
                     DisplayName = m.Name + " (৳" + m.UnitPrice.ToString("0.00") + ")",
                     m.UnitPrice,
-                    m.StockQuantity
+                    m.StockQuantity,
+                    m.GenericName
                 }).ToList();
                 
             ViewBag.MedicinesList = medicines;
@@ -79,7 +101,8 @@ namespace HospitalManagementSystem.Controllers
         // POST: Prescriptions/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("PatientId,DoctorId,Notes")] Prescription prescription, List<PrescriptionItem> PrescriptionItems)
+        [Authorize(Roles = "Doctor")]
+        public async Task<IActionResult> Create([Bind("PatientId,DoctorId,Notes,ChiefComplaints,Diagnosis")] Prescription prescription, List<PrescriptionItem> PrescriptionItems)
         {
             ModelState.Remove("Patient");
             ModelState.Remove("Doctor");
@@ -114,10 +137,19 @@ namespace HospitalManagementSystem.Controllers
                 ModelState.AddModelError("", "You must add at least one medicine to the prescription.");
             }
 
-            var doctors = _context.Users.Where(u => u.Role.RoleName == "Doctor").Select(u => new { u.Id, u.FullName }).ToList();
-            ViewData["DoctorId"] = new SelectList(doctors, "Id", "FullName", prescription.DoctorId);
+            var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "UserId")?.Value;
+            if (userIdClaim != null)
+            {
+                int currentDoctorId = int.Parse(userIdClaim);
+                var doctor = _context.Users.Find(currentDoctorId);
+                if (doctor != null)
+                {
+                    ViewBag.PreselectedDoctorId = doctor.Id;
+                    ViewBag.PreselectedDoctorName = doctor.FullName;
+                }
+            }
             
-            var medicines = _context.Medicines.Where(m => m.StockQuantity > 0).Select(m => new { m.Id, DisplayName = m.Name + " (৳" + m.UnitPrice.ToString("0.00") + ")", m.UnitPrice, m.StockQuantity }).ToList();
+            var medicines = _context.Medicines.Where(m => m.StockQuantity > 0).Select(m => new { m.Id, DisplayName = m.Name + " (৳" + m.UnitPrice.ToString("0.00") + ")", m.UnitPrice, m.StockQuantity, m.GenericName }).ToList();
             ViewBag.MedicinesList = medicines;
 
             return View(prescription);
@@ -143,6 +175,7 @@ namespace HospitalManagementSystem.Controllers
         // POST: Prescriptions/Dispense/5
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Pharmacist")]
         public async Task<IActionResult> Dispense(int id)
         {
             var prescription = await _context.Prescriptions

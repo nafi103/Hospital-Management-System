@@ -47,7 +47,7 @@ namespace HospitalManagementSystem.Controllers
                     p.Uhid.ToLower().Contains(qLower) || 
                     (p.FullName != null && p.FullName.ToLower().Contains(qLower)) || 
                     p.ContactInfo.ToString().Contains(qLower) ||
-                    (p.EmergencyContactName != null && p.EmergencyContactName.ToLower().Contains(qLower)));
+                    (p.IsChild && p.EmergencyContactName != null && p.EmergencyContactName.ToLower().Contains(qLower)));
             }
 
             var results = await query

@@ -16,6 +16,8 @@
     <!-- Select2 for AJAX searchable dropdowns -->
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.1/dist/sweetalert2.min.css" rel="stylesheet">
+    @await RenderSectionAsync("Styles", required: false)
 </head>
 <body>
     <header>
@@ -39,6 +41,9 @@
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="DoctorDashboard" asp-action="MyAssistant">My Assistant</a>
                             </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Prescriptions" asp-action="Index">Prescriptions</a>
+                            </li>
                         }
                         else if (User.IsInRole("Assistant"))
                         {
@@ -47,6 +52,15 @@
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="Appointments" asp-action="Index">Consultations</a>
+                            </li>
+                        }
+                        else if (User.IsInRole("Pharmacist"))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Prescriptions" asp-action="Index">Prescriptions</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Medicines" asp-action="Index">Inventory</a>
                             </li>
                         }
                         else
@@ -124,6 +138,7 @@
     <script src="~/js/site.js" asp-append-version="true"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.1/dist/sweetalert2.all.min.js"></script>
     <script>
         $(document).ready(function () {
             $(".datepicker").flatpickr({

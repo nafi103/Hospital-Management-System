@@ -136,15 +136,13 @@
                 removeActive(x);
                 if (currentFocus >= x.length) currentFocus = 0;
                 if (currentFocus < 0) currentFocus = (x.length - 1);
-                $(x[currentFocus]).addClass('active bg-primary text-white').removeClass('text-muted');
-                $(x[currentFocus]).find('.text-muted').removeClass('text-muted').addClass('text-white-50');
+                $(x[currentFocus]).addClass('search-item-active').removeClass('text-muted');
                 x[currentFocus].scrollIntoView({ block: 'nearest' });
             }
 
             function removeActive(x) {
                 for (var i = 0; i < x.length; i++) {
-                    $(x[i]).removeClass('active bg-primary text-white');
-                    $(x[i]).find('.text-white-50').removeClass('text-white-50').addClass('text-muted');
+                    $(x[i]).removeClass('search-item-active');
                 }
             }
 

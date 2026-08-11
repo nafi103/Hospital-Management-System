@@ -9,12 +9,16 @@ namespace HospitalManagementSystem.Models
         public int Id { get; set; }
 
         public int PrescriptionId { get; set; }
-        public Prescription Prescription { get; set; }
+        public Prescription? Prescription { get; set; }
 
         public int MedicineId { get; set; }
-        public Medicine Medicine { get; set; }
+        public Medicine? Medicine { get; set; }
 
         public int Quantity { get; set; }
         public decimal UnitPrice { get; set; }
+
+        public string Dosage { get; set; } = string.Empty;
+        public string Duration { get; set; } = string.Empty;
+        public string? Instructions { get; set; }
     }
 }
