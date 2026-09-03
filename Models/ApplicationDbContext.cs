@@ -21,6 +21,7 @@ namespace HospitalManagementSystem.Models
         public DbSet<PrescriptionItem> PrescriptionItems { get; set; }
         public DbSet<Bill> Bills { get; set; }
         public DbSet<BillItem> BillItems { get; set; }
+        public DbSet<PatientVital> PatientVitals { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -58,6 +59,16 @@ namespace HospitalManagementSystem.Models
                 .WithMany()
                 .HasForeignKey(b => b.DiscountApprovedById)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PatientVital>()
+                .HasOne(v => v.RecordedBy)
+                .WithMany()
+                .HasForeignKey(v => v.RecordedById)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PatientVital>()
+                .Property(v => v.RespiratoryDistress)
+                .HasDefaultValue(false);
 
             // Seed Data
             modelBuilder.Entity<Role>().HasData(

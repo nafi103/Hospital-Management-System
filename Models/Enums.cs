@@ -45,4 +45,11 @@ namespace HospitalManagementSystem.Models
         Cabin,
         VIPCabin
     }
+
+    public enum TriagePriority
+    {
+        Normal,
+        Urgent,
+        Emergency
+    }
 }
