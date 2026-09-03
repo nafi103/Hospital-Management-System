@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using HospitalManagementSystem.Models;
+using HospitalManagementSystem.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +20,16 @@ builder.Services.AddSignalR();
 // ডাটাবেস কানেকশন সেটআপ (অবশ্যই builder.Build() এর আগে থাকতে হবে)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// AI spine: one Gemini client, one scrubber, one service every AI feature calls through.
+builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
+builder.Services.AddSingleton(sp =>
+{
+    var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GeminiOptions>>().Value;
+    return new Google.GenAI.Client(apiKey: options.ApiKey);
+});
+builder.Services.AddScoped<PhiScrubber>();
+builder.Services.AddScoped<IClinicalAiService, ClinicalAiService>();
 
 var app = builder.Build();
 

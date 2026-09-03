@@ -24,6 +24,7 @@ namespace HospitalManagementSystem.Models
         public DbSet<PatientVital> PatientVitals { get; set; }
         public DbSet<MedicalRecord> MedicalRecords { get; set; }
         public DbSet<PatientAllergy> PatientAllergies { get; set; }
+        public DbSet<AiSuggestion> AiSuggestions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -100,6 +101,12 @@ namespace HospitalManagementSystem.Models
             modelBuilder.Entity<PatientAllergy>()
                 .HasIndex("PatientId", "SubstanceNormalized")
                 .IsUnique();
+
+            modelBuilder.Entity<AiSuggestion>()
+                .HasOne(s => s.ReviewedBy)
+                .WithMany()
+                .HasForeignKey(s => s.ReviewedById)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // Seed Data
             modelBuilder.Entity<Role>().HasData(

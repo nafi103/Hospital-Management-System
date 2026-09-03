@@ -86,6 +86,15 @@ namespace HospitalManagementSystem.Controllers
                 .OrderBy(g => g)
                 .ToListAsync();
 
+            ViewBag.AiSuggestions = await _context.AiSuggestions
+                .Include(s => s.ReviewedBy)
+                .Where(s => s.PatientId == id)
+                .OrderByDescending(s => s.CreatedAt)
+                .Take(5)
+                .ToListAsync();
+
+            ViewBag.HasMedicalRecords = await _context.MedicalRecords.AnyAsync(r => r.PatientId == id);
+
             return View(patient);
         }
 
