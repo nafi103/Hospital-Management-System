@@ -1,4 +1,4 @@
-@model HospitalManagementSystem.Controllers.JsonMedicalRecord
+@model HospitalManagementSystem.Models.MedicalRecord
 
 @{
     ViewData["Title"] = "Add Medical Record";
@@ -65,6 +65,12 @@
                             <span asp-validation-for="DoctorId" class="text-danger small"></span>
                         </div>
                     }
+
+                    <div class="col-md-12">
+                        <label asp-for="ChiefComplaint" class="form-label fw-medium">Chief Complaint</label>
+                        <textarea asp-for="ChiefComplaint" class="form-control" rows="2" placeholder="What the patient came in for, in their own words..."></textarea>
+                        <span asp-validation-for="ChiefComplaint" class="text-danger small"></span>
+                    </div>
 
                     <div class="col-md-12">
                         <label asp-for="Diagnosis" class="form-label fw-medium">Diagnosis <span class="text-danger">*</span></label>

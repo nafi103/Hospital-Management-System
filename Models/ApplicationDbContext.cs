@@ -22,6 +22,8 @@ namespace HospitalManagementSystem.Models
         public DbSet<Bill> Bills { get; set; }
         public DbSet<BillItem> BillItems { get; set; }
         public DbSet<PatientVital> PatientVitals { get; set; }
+        public DbSet<MedicalRecord> MedicalRecords { get; set; }
+        public DbSet<PatientAllergy> PatientAllergies { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -66,9 +68,23 @@ namespace HospitalManagementSystem.Models
                 .HasForeignKey(v => v.RecordedById)
                 .OnDelete(DeleteBehavior.Restrict);
 
+#pragma warning disable CS0618 // RespiratoryDistress is obsolete but still mapped for existing records.
             modelBuilder.Entity<PatientVital>()
                 .Property(v => v.RespiratoryDistress)
                 .HasDefaultValue(false);
+#pragma warning restore CS0618
+
+            modelBuilder.Entity<MedicalRecord>()
+                .HasOne(r => r.Doctor)
+                .WithMany()
+                .HasForeignKey(r => r.DoctorId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PatientAllergy>()
+                .HasOne(a => a.RecordedBy)
+                .WithMany()
+                .HasForeignKey(a => a.RecordedById)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // Seed Data
             modelBuilder.Entity<Role>().HasData(
@@ -79,37 +95,38 @@ namespace HospitalManagementSystem.Models
             );
 
             modelBuilder.Entity<User>().HasData(
-                new User { 
-                    Id = 1, 
-                    RoleId = 1, 
-                    Username = "admin", 
-                    Password = "admin123", 
-                    FullName = "System Admin", 
+                new User {
+                    Id = 1,
+                    RoleId = 1,
+                    Username = "admin",
+                    FullName = "System Admin",
                     Category = "Management",
                     CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc),
                     UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc)
                 },
-                new User { 
-                    Id = 100, 
-                    RoleId = 2, 
-                    Username = "drmock", 
-                    Password = "password123", 
-                    FullName = "Dr. Mock", 
+                new User {
+                    Id = 100,
+                    RoleId = 2,
+                    Username = "drmock",
+                    FullName = "Dr. Mock",
                     Category = "Consultant",
                     CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc),
                     UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc)
                 },
-                new User { 
-                    Id = 1010, 
-                    RoleId = 4, 
-                    Username = "pharmacistmock", 
-                    Password = "password123", 
-                    FullName = "Pharmacist Mock", 
+                new User {
+                    Id = 1010,
+                    RoleId = 4,
+                    Username = "pharmacistmock",
+                    FullName = "Pharmacist Mock",
                     Category = "Pharmacy",
                     CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc),
                     UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc)
                 }
             );
+            // NOTE: PasswordHash for these seeded rows is populated by the raw-SQL backfill in the
+            // AddClinicalDataModel migration (hashing whatever plaintext already lives in the legacy
+            // Password column), not here — HasData can't call BCrypt at migration-generation time
+            // without baking a fixed hash into the snapshot for every future re-seed.
 
             modelBuilder.Entity<Bed>().HasData(
                 new Bed { Id = 1, BedNumber = "ICU-01", Category = BedCategory.ICU, DailyRate = 5000, CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
@@ -118,13 +135,13 @@ namespace HospitalManagementSystem.Models
             );
 
             modelBuilder.Entity<Medicine>().HasData(
-                new Medicine { Id = 1, Name = "Napa 500mg", GenericName = "Paracetamol", UnitPrice = 2.50m, StockQuantity = 1000, CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
-                new Medicine { Id = 2, Name = "Ace 500mg", GenericName = "Paracetamol", UnitPrice = 2.00m, StockQuantity = 1500, CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
-                new Medicine { Id = 3, Name = "Zithromax 500mg", GenericName = "Azithromycin", UnitPrice = 35.00m, StockQuantity = 50, CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
-                new Medicine { Id = 4, Name = "Azithral 500mg", GenericName = "Azithromycin", UnitPrice = 25.00m, StockQuantity = 300, CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
-                new Medicine { Id = 5, Name = "Zmax 500mg", GenericName = "Azithromycin", UnitPrice = 30.00m, StockQuantity = 0, CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
-                new Medicine { Id = 6, Name = "Seclo 20mg", GenericName = "Omeprazole", UnitPrice = 5.00m, StockQuantity = 600, CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
-                new Medicine { Id = 7, Name = "Alatrol 10mg", GenericName = "Cetirizine", UnitPrice = 2.50m, StockQuantity = 1200, CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) }
+                new Medicine { Id = 1, Name = "Napa 500mg", GenericName = "Paracetamol", Strength = "500mg", TherapeuticClass = "Analgesic/Antipyretic", UnitPrice = 2.50m, StockQuantity = 1000, CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
+                new Medicine { Id = 2, Name = "Ace 500mg", GenericName = "Paracetamol", Strength = "500mg", TherapeuticClass = "Analgesic/Antipyretic", UnitPrice = 2.00m, StockQuantity = 1500, CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
+                new Medicine { Id = 3, Name = "Zithromax 500mg", GenericName = "Azithromycin", Strength = "500mg", TherapeuticClass = "Macrolide Antibiotic", UnitPrice = 35.00m, StockQuantity = 50, CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
+                new Medicine { Id = 4, Name = "Azithral 500mg", GenericName = "Azithromycin", Strength = "500mg", TherapeuticClass = "Macrolide Antibiotic", UnitPrice = 25.00m, StockQuantity = 300, CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
+                new Medicine { Id = 5, Name = "Zmax 500mg", GenericName = "Azithromycin", Strength = "500mg", TherapeuticClass = "Macrolide Antibiotic", UnitPrice = 30.00m, StockQuantity = 0, CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
+                new Medicine { Id = 6, Name = "Seclo 20mg", GenericName = "Omeprazole", Strength = "20mg", TherapeuticClass = "Proton Pump Inhibitor", UnitPrice = 5.00m, StockQuantity = 600, CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
+                new Medicine { Id = 7, Name = "Alatrol 10mg", GenericName = "Cetirizine", Strength = "10mg", TherapeuticClass = "Antihistamine", UnitPrice = 2.50m, StockQuantity = 1200, CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) }
             );
         }
     }

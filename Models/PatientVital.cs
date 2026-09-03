@@ -22,8 +22,16 @@ namespace HospitalManagementSystem.Models
         public int HeartRate { get; set; }
         public decimal Spo2 { get; set; }
         public decimal Temperature { get; set; }
+
+        [Obsolete("Superseded by RespiratoryRate + OnSupplementalOxygen. Retained for existing records; do not write new values.")]
         public bool RespiratoryDistress { get; set; }
+
         public decimal? BloodSugar { get; set; }
+
+        // NEWS2 scoring inputs.
+        public int RespiratoryRate { get; set; }
+        public bool OnSupplementalOxygen { get; set; }
+        public ConsciousnessLevel Consciousness { get; set; } = ConsciousnessLevel.Alert;
 
         public TriagePriority? TriagePriority { get; set; }
 

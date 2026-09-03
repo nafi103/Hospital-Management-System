@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -11,21 +9,10 @@ using HospitalManagementSystem.Models;
 
 namespace HospitalManagementSystem.Controllers
 {
-    public class JsonMedicalRecord
-    {
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-        public int PatientId { get; set; }
-        public string PatientName { get; set; }
-        public string PatientUhid { get; set; }
-        public int DoctorId { get; set; }
-        public string DoctorName { get; set; }
-        public string Diagnosis { get; set; }
-        public string Treatment { get; set; }
-        public DateTime Date { get; set; } = DateTime.UtcNow;
-    }
-
     public class MedicalRecordsController : Controller
     {
+        private const int PageSize = 20;
+
         private readonly ApplicationDbContext _context;
 
         public MedicalRecordsController(ApplicationDbContext context)
@@ -33,57 +20,28 @@ namespace HospitalManagementSystem.Controllers
             _context = context;
         }
 
-        private async Task<List<JsonMedicalRecord>> GetAllRecordsAsync()
-        {
-            var patients = await _context.Patients.ToListAsync();
-            var allRecords = new List<JsonMedicalRecord>();
-
-            foreach (var patient in patients)
-            {
-                if (!string.IsNullOrWhiteSpace(patient.MedicalHistoryJson))
-                {
-                    try
-                    {
-                        var records = JsonSerializer.Deserialize<List<JsonMedicalRecord>>(patient.MedicalHistoryJson);
-                        if (records != null)
-                        {
-                            allRecords.AddRange(records);
-                        }
-                    }
-                    catch
-                    {
-                        // Ignore parsing errors for individual patients to prevent complete failure
-                    }
-                }
-            }
-
-            return allRecords.OrderByDescending(r => r.Date).ToList();
-        }
-
-        private List<JsonMedicalRecord> GetPatientRecords(Patient patient)
-        {
-            if (string.IsNullOrWhiteSpace(patient.MedicalHistoryJson))
-                return new List<JsonMedicalRecord>();
-            
-            try
-            {
-                return JsonSerializer.Deserialize<List<JsonMedicalRecord>>(patient.MedicalHistoryJson) ?? new List<JsonMedicalRecord>();
-            }
-            catch
-            {
-                return new List<JsonMedicalRecord>();
-            }
-        }
-
-        private void SavePatientRecords(Patient patient, List<JsonMedicalRecord> records)
-        {
-            patient.MedicalHistoryJson = JsonSerializer.Serialize(records, new JsonSerializerOptions { WriteIndented = false });
-        }
-
         // GET: MedicalRecords
-        public async Task<IActionResult> Index()
+        public async Task<IActionResult> Index(int page = 1)
         {
-            var records = await GetAllRecordsAsync();
+            if (page < 1) page = 1;
+
+            var query = _context.MedicalRecords
+                .Include(r => r.Patient)
+                .Include(r => r.Doctor)
+                .OrderByDescending(r => r.RecordedAt);
+
+            var totalRecords = await query.CountAsync();
+            var totalPages = Math.Max(1, (int)Math.Ceiling(totalRecords / (double)PageSize));
+            page = Math.Min(page, totalPages);
+
+            var records = await query
+                .Skip((page - 1) * PageSize)
+                .Take(PageSize)
+                .ToListAsync();
+
+            ViewBag.CurrentPage = page;
+            ViewBag.TotalPages = totalPages;
+
             return View(records);
         }
 
@@ -124,53 +82,59 @@ namespace HospitalManagementSystem.Controllers
         // POST: MedicalRecords/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create(JsonMedicalRecord record)
+        public async Task<IActionResult> Create([Bind("PatientId,DoctorId,ChiefComplaint,Diagnosis,Treatment")] MedicalRecord record)
         {
-            var patient = await _context.Patients.FindAsync(record.PatientId);
-            var doctor = await _context.Users.FindAsync(record.DoctorId);
+            ModelState.Remove("Patient");
+            ModelState.Remove("Doctor");
+            ModelState.Remove("Appointment");
 
-            if (patient == null) ModelState.AddModelError("PatientId", "Patient is required.");
-            if (doctor == null) ModelState.AddModelError("DoctorId", "Doctor is required.");
+            var patientExists = await _context.Patients.AnyAsync(p => p.Id == record.PatientId);
+            var doctorExists = await _context.Users.AnyAsync(u => u.Id == record.DoctorId);
+
+            if (!patientExists) ModelState.AddModelError("PatientId", "Patient is required.");
+            if (!doctorExists) ModelState.AddModelError("DoctorId", "Doctor is required.");
             if (string.IsNullOrWhiteSpace(record.Diagnosis)) ModelState.AddModelError("Diagnosis", "Diagnosis is required.");
             if (string.IsNullOrWhiteSpace(record.Treatment)) ModelState.AddModelError("Treatment", "Treatment is required.");
 
             if (ModelState.IsValid)
             {
-                record.PatientName = patient.FullName;
-                record.PatientUhid = patient.Uhid;
-                record.DoctorName = doctor.FullName;
-                record.Date = DateTime.UtcNow;
+                record.RecordedAt = DateTime.UtcNow;
+                record.CreatedAt = DateTime.UtcNow;
+                record.UpdatedAt = DateTime.UtcNow;
 
-                var records = GetPatientRecords(patient);
-                records.Add(record);
-                SavePatientRecords(patient, records);
-                
-                _context.Update(patient);
+                _context.MedicalRecords.Add(record);
                 await _context.SaveChangesAsync();
 
                 TempData["SuccessMessage"] = "Medical record saved successfully.";
                 return RedirectToAction(nameof(Index));
             }
-            
+
             var doctors = _context.Users.Include(u => u.Role).Where(u => u.Role.RoleName == "Doctor").Select(u => new { u.Id, u.FullName }).ToList();
             ViewData["DoctorId"] = new SelectList(doctors, "Id", "FullName", record.DoctorId);
             return View(record);
         }
 
         // GET: MedicalRecords/Details/5
-        public async Task<IActionResult> Details(string id)
+        public async Task<IActionResult> Details(int id)
         {
-            var records = await GetAllRecordsAsync();
-            var record = records.FirstOrDefault(r => r.Id == id);
+            var record = await _context.MedicalRecords
+                .Include(r => r.Patient)
+                .Include(r => r.Doctor)
+                .FirstOrDefaultAsync(r => r.Id == id);
+
             if (record == null) return NotFound();
             return View(record);
         }
 
         // GET: MedicalRecords/Delete/5
-        public async Task<IActionResult> Delete(string id)
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Delete(int id)
         {
-            var records = await GetAllRecordsAsync();
-            var record = records.FirstOrDefault(r => r.Id == id);
+            var record = await _context.MedicalRecords
+                .Include(r => r.Patient)
+                .Include(r => r.Doctor)
+                .FirstOrDefaultAsync(r => r.Id == id);
+
             if (record == null) return NotFound();
             return View(record);
         }
@@ -178,26 +142,15 @@ namespace HospitalManagementSystem.Controllers
         // POST: MedicalRecords/Delete/5
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteConfirmed(string id)
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            var records = await GetAllRecordsAsync();
-            var record = records.FirstOrDefault(r => r.Id == id);
+            var record = await _context.MedicalRecords.FindAsync(id);
             if (record != null)
             {
-                var patient = await _context.Patients.FindAsync(record.PatientId);
-                if (patient != null)
-                {
-                    var patientRecords = GetPatientRecords(patient);
-                    var recordToRemove = patientRecords.FirstOrDefault(r => r.Id == id);
-                    if (recordToRemove != null)
-                    {
-                        patientRecords.Remove(recordToRemove);
-                        SavePatientRecords(patient, patientRecords);
-                        _context.Update(patient);
-                        await _context.SaveChangesAsync();
-                        TempData["SuccessMessage"] = "Medical record deleted successfully.";
-                    }
-                }
+                _context.MedicalRecords.Remove(record);
+                await _context.SaveChangesAsync();
+                TempData["SuccessMessage"] = "Medical record deleted successfully.";
             }
             return RedirectToAction(nameof(Index));
         }

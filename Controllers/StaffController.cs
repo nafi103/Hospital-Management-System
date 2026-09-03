@@ -49,6 +49,7 @@ namespace HospitalManagementSystem.Controllers
 
             if (ModelState.IsValid)
             {
+                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(user.Password);
                 user.CreatedAt = DateTime.UtcNow;
                 user.UpdatedAt = DateTime.UtcNow;
                 _context.Add(user);
@@ -90,6 +91,7 @@ namespace HospitalManagementSystem.Controllers
             {
                 try
                 {
+                    user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(user.Password);
                     // Npgsql requires UTC for timestamp with time zone
                     user.CreatedAt = DateTime.SpecifyKind(user.CreatedAt, DateTimeKind.Utc);
                     user.UpdatedAt = DateTime.UtcNow;

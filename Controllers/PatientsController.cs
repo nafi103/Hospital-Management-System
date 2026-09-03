@@ -72,6 +72,7 @@ namespace HospitalManagementSystem.Controllers
 
             var patient = await _context.Patients
                 .Include(p => p.RegisteredBy)
+                .Include(p => p.Allergies)
                 .FirstOrDefaultAsync(m => m.Id == id);
             
             if (patient == null)

@@ -52,4 +52,42 @@ namespace HospitalManagementSystem.Models
         Urgent,
         Emergency
     }
+
+    // ACVPU consciousness scale, used by NEWS2 triage scoring.
+    public enum ConsciousnessLevel
+    {
+        Alert,
+        Voice,
+        Pain,
+        Unresponsive
+    }
+
+    public enum AllergySeverity
+    {
+        Mild,
+        Moderate,
+        Severe,
+        LifeThreatening
+    }
+
+    public enum MedicationRoute
+    {
+        Oral,
+        Topical,
+        Injection,
+        Drops,
+        Inhaled,
+        Other
+    }
+
+    public enum DoseUnit
+    {
+        Tablet,
+        Capsule,
+        Ml,
+        Drops,
+        Puff,
+        Application,
+        Other
+    }
 }

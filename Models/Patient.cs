@@ -38,5 +38,6 @@ namespace HospitalManagementSystem.Models
         public User? RegisteredBy { get; set; }
 
         public List<Admission> Admissions { get; set; } = new List<Admission>();
+        public List<PatientAllergy> Allergies { get; set; } = new List<PatientAllergy>();
     }
 }

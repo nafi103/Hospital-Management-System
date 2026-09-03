@@ -93,7 +93,7 @@ namespace HospitalManagementSystem.Controllers
                 var assistant = new User
                 {
                     Username = username,
-                    Password = password, // Note: storing plaintext for demonstration purposes
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
                     FullName = fullName,
                     RoleId = role.Id,
                     AssignedDoctorId = docId,
@@ -150,7 +150,7 @@ namespace HospitalManagementSystem.Controllers
                     assistant.Username = username;
                     if (!string.IsNullOrEmpty(password))
                     {
-                        assistant.Password = password;
+                        assistant.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
                     }
                     assistant.UpdatedAt = DateTime.UtcNow;
 

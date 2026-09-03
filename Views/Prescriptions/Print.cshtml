@@ -206,7 +206,7 @@
                             <span class="medicine-generic ms-2">(@item.Medicine.GenericName)</span>
                         </div>
                         <div class="medicine-details ms-4">
-                            <strong>Dose:</strong> @item.Dosage &nbsp;|&nbsp; <strong>Duration:</strong> @item.Duration &nbsp;|&nbsp; <strong>Qty:</strong> @item.Quantity
+                            <strong>Dose:</strong> @item.DoseDisplay &nbsp;|&nbsp; <strong>Duration:</strong> @(item.DurationDays.HasValue ? $"{item.DurationDays} days" : "-") &nbsp;|&nbsp; <strong>Route:</strong> @item.Route &nbsp;|&nbsp; <strong>Qty:</strong> @item.Quantity
                         </div>
                         @if (!string.IsNullOrWhiteSpace(item.Instructions))
                         {

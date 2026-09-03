@@ -1,4 +1,6 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 
 namespace HospitalManagementSystem.Models
@@ -17,8 +19,18 @@ namespace HospitalManagementSystem.Models
         public int Quantity { get; set; }
         public decimal UnitPrice { get; set; }
 
-        public string Dosage { get; set; } = string.Empty;
-        public string Duration { get; set; } = string.Empty;
+        // Structured dose, replacing the old free-text "1 + 0 + 1" convention.
+        public decimal DoseMorning { get; set; }
+        public decimal DoseAfternoon { get; set; }
+        public decimal DoseEvening { get; set; }
+        public DoseUnit DoseUnit { get; set; } = DoseUnit.Tablet;
+        public int? DurationDays { get; set; }
+        public MedicationRoute Route { get; set; } = MedicationRoute.Oral;
+
         public string? Instructions { get; set; }
+
+        [NotMapped]
+        public string DoseDisplay =>
+            $"{DoseMorning.ToString("0.##", CultureInfo.InvariantCulture)}+{DoseAfternoon.ToString("0.##", CultureInfo.InvariantCulture)}+{DoseEvening.ToString("0.##", CultureInfo.InvariantCulture)} {DoseUnit}";
     }
 }

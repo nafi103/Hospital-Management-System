@@ -31,8 +31,8 @@ namespace HospitalManagementSystem.Controllers
         [HttpPost]
         public async Task<IActionResult> Login(string username, string password)
         {
-            var user = await _context.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Username == username && u.Password == password);
-            if (user == null)
+            var user = await _context.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Username == username);
+            if (user == null || string.IsNullOrEmpty(password) || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
             {
                 ViewBag.Error = "Invalid username or password";
                 return View();

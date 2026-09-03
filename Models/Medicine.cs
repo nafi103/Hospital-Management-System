@@ -18,6 +18,12 @@ namespace HospitalManagementSystem.Models
         [StringLength(100)]
         public string GenericName { get; set; } = string.Empty; // e.g. Azithromycin
 
+        [StringLength(30)]
+        public string Strength { get; set; } = string.Empty; // e.g. 500mg
+
+        [StringLength(100)]
+        public string TherapeuticClass { get; set; } = string.Empty; // e.g. Analgesic/Antipyretic
+
         public decimal UnitPrice { get; set; }
         public int StockQuantity { get; set; }
 

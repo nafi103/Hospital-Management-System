@@ -1,13 +1,15 @@
-@model IEnumerable<HospitalManagementSystem.Controllers.JsonMedicalRecord>
+@model IEnumerable<HospitalManagementSystem.Models.MedicalRecord>
 
 @{
     ViewData["Title"] = "Medical Records";
+    int currentPage = ViewBag.CurrentPage ?? 1;
+    int totalPages = ViewBag.TotalPages ?? 1;
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
     <div>
         <h2 class="mb-1">Medical Records</h2>
-        <p class="text-muted mb-0">Browse and manage patient clinical records (JSON Storage).</p>
+        <p class="text-muted mb-0">Browse and manage patient clinical records.</p>
     </div>
     <a asp-action="Create" class="btn btn-primary">
         <i class="bi bi-file-earmark-plus"></i> New Record
@@ -30,15 +32,15 @@
                 @foreach (var item in Model) {
                 <tr>
                     <td>
-                        <div class="fw-medium">@item.Date.ToLocalTime().ToString("MMM dd, yyyy")</div>
-                        <small class="text-muted">@item.Date.ToLocalTime().ToString("hh:mm tt")</small>
+                        <div class="fw-medium">@item.RecordedAt.ToLocalTime().ToString("MMM dd, yyyy")</div>
+                        <small class="text-muted">@item.RecordedAt.ToLocalTime().ToString("hh:mm tt")</small>
                     </td>
                     <td>
-                        <div class="fw-bold text-primary">@item.PatientName</div>
-                        <small class="text-muted">@item.PatientUhid</small>
+                        <div class="fw-bold text-primary">@item.Patient?.FullName</div>
+                        <small class="text-muted">@item.Patient?.Uhid</small>
                     </td>
                     <td>
-                        <div class="fw-medium">@item.DoctorName</div>
+                        <div class="fw-medium">@item.Doctor?.FullName</div>
                     </td>
                     <td>
                         <span class="text-truncate d-inline-block" style="max-width: 250px;" title="@item.Diagnosis">
@@ -49,13 +51,16 @@
                         <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-light text-primary me-1" title="View Details">
                             <i class="bi bi-eye"></i>
                         </a>
-                        <a asp-action="Delete" asp-route-id="@item.Id" class="btn btn-sm btn-light text-danger" title="Delete">
-                            <i class="bi bi-trash"></i>
-                        </a>
+                        @if (User.IsInRole("Admin"))
+                        {
+                            <a asp-action="Delete" asp-route-id="@item.Id" class="btn btn-sm btn-light text-danger" title="Delete">
+                                <i class="bi bi-trash"></i>
+                            </a>
+                        }
                     </td>
                 </tr>
                 }
-                
+
                 @if(!Model.Any()) {
                     <tr>
                         <td colspan="5" class="text-center py-4 text-muted">
@@ -68,3 +73,23 @@
         </table>
     </div>
 </div>
+
+@if (totalPages > 1)
+{
+    <nav class="mt-3" aria-label="Medical records pagination">
+        <ul class="pagination justify-content-center mb-0">
+            <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                <a class="page-link" asp-action="Index" asp-route-page="@(currentPage - 1)">Previous</a>
+            </li>
+            @for (int p = 1; p <= totalPages; p++)
+            {
+                <li class="page-item @(p == currentPage ? "active" : "")">
+                    <a class="page-link" asp-action="Index" asp-route-page="@p">@p</a>
+                </li>
+            }
+            <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                <a class="page-link" asp-action="Index" asp-route-page="@(currentPage + 1)">Next</a>
+            </li>
+        </ul>
+    </nav>
+}

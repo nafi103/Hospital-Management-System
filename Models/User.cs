@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace HospitalManagementSystem.Models
@@ -15,7 +16,13 @@ namespace HospitalManagementSystem.Models
         public Role Role { get; set; }
 
         public string Username { get; set; }
+
+        // Form-binding only; never persisted. Hashed into PasswordHash before save.
+        [NotMapped]
         public string Password { get; set; }
+
+        public string PasswordHash { get; set; } = string.Empty;
+
         public string FullName { get; set; }
         public string Category { get; set; }
 

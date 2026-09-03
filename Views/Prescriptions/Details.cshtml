@@ -119,8 +119,9 @@
                                 <td class="fw-medium">
                                     <div class="mb-1"><i class="bi bi-capsule text-primary me-2"></i>@item.Medicine?.Name</div>
                                     <div class="small text-secondary mb-1">
-                                        <span class="me-3"><i class="bi bi-prescription2"></i> <strong>Dose:</strong> @item.Dosage</span>
-                                        <span><i class="bi bi-clock"></i> <strong>Duration:</strong> @item.Duration</span>
+                                        <span class="me-3"><i class="bi bi-prescription2"></i> <strong>Dose:</strong> @item.DoseDisplay</span>
+                                        <span class="me-3"><i class="bi bi-clock"></i> <strong>Duration:</strong> @(item.DurationDays.HasValue ? $"{item.DurationDays} days" : "-")</span>
+                                        <span><i class="bi bi-signpost"></i> <strong>Route:</strong> @item.Route</span>
                                     </div>
                                     @if (!string.IsNullOrEmpty(item.Instructions))
                                     {
