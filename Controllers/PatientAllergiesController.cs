@@ -3,6 +3,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using HospitalManagementSystem.Models;
 
 namespace HospitalManagementSystem.Controllers
@@ -20,7 +22,7 @@ namespace HospitalManagementSystem.Controllers
         // POST: PatientAllergies/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create(int patientId, string substance, string? reactionType, AllergySeverity severity)
+        public async Task<IActionResult> Create(int patientId, string substance, string? reactionType, AllergySeverity severity, string? allergenGenericName)
         {
             var patient = await _context.Patients.FindAsync(patientId);
             if (patient == null) return NotFound();
@@ -41,6 +43,7 @@ namespace HospitalManagementSystem.Controllers
             {
                 PatientId = patientId,
                 Substance = substance.Trim(),
+                AllergenGenericName = string.IsNullOrWhiteSpace(allergenGenericName) ? null : allergenGenericName.Trim(),
                 ReactionType = string.IsNullOrWhiteSpace(reactionType) ? null : reactionType.Trim(),
                 Severity = severity,
                 RecordedById = recordedById,
@@ -48,7 +51,16 @@ namespace HospitalManagementSystem.Controllers
             };
 
             _context.PatientAllergies.Add(allergy);
-            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+            {
+                TempData["ErrorMessage"] = $"{allergy.Substance} is already recorded as an allergy for this patient.";
+                return RedirectToAction("Details", "Patients", new { id = patientId });
+            }
 
             TempData["SuccessMessage"] = $"Allergy to {allergy.Substance} recorded.";
             return RedirectToAction("Details", "Patients", new { id = patientId });

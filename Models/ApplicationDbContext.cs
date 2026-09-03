@@ -86,6 +86,21 @@ namespace HospitalManagementSystem.Models
                 .HasForeignKey(a => a.RecordedById)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // Server-computed, case/whitespace-normalized shadow copy of Substance, used
+            // only to key the uniqueness check below so "Penicillin" and "penicillin " land
+            // on the same row instead of silently duplicating.
+            modelBuilder.Entity<PatientAllergy>()
+                .Property<string>("SubstanceNormalized")
+                .HasComputedColumnSql("lower(btrim(\"Substance\"))", stored: true);
+
+            // One row per (patient, substance): prevents the same allergy being recorded
+            // twice, which would otherwise make the P4 safety check fire duplicate
+            // warnings. Composite and leading on PatientId, so it also serves plain
+            // "this patient's allergies" lookups — no separate PatientId index needed.
+            modelBuilder.Entity<PatientAllergy>()
+                .HasIndex("PatientId", "SubstanceNormalized")
+                .IsUnique();
+
             // Seed Data
             modelBuilder.Entity<Role>().HasData(
                 new Role { Id = 1, RoleName = "Admin", Permissions = "All", CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },

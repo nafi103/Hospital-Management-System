@@ -171,6 +171,20 @@
                         <input type="text" name="substance" class="form-control" placeholder="e.g. Penicillin, Azithromycin, Peanuts" required />
                     </div>
                     <div class="mb-3">
+                        <label class="form-label fw-medium">Drug Class (if applicable)</label>
+                        <select name="allergenGenericName" class="form-select">
+                            <option value="">-- Not a formulary drug / other allergen --</option>
+                            @if (ViewBag.KnownAllergens != null)
+                            {
+                                @foreach (var generic in (List<string>)ViewBag.KnownAllergens)
+                                {
+                                    <option value="@generic">@generic</option>
+                                }
+                            }
+                        </select>
+                        <small class="text-muted">Link to a formulary generic name so prescriptions are checked against it automatically.</small>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label fw-medium">Reaction</label>
                         <input type="text" name="reactionType" class="form-control" placeholder="e.g. Rash, Anaphylaxis, Vomiting" />
                     </div>

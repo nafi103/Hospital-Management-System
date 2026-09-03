@@ -1,11 +1,12 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using Microsoft.EntityFrameworkCore;
 
 namespace HospitalManagementSystem.Models
 {
-    [Index(nameof(PatientId))]
+    // No standalone PatientId index: the unique (PatientId, SubstanceNormalized) index
+    // configured in ApplicationDbContext.OnModelCreating covers patient-only lookups as
+    // a prefix, so a second single-column index would be pure duplication.
     public class PatientAllergy
     {
         [Key]
@@ -17,6 +18,13 @@ namespace HospitalManagementSystem.Models
         [Required]
         [StringLength(150)]
         public string Substance { get; set; } = string.Empty;
+
+        // Canonical generic name when this allergy is to a known formulary drug (matches
+        // Medicine.GenericName exactly), so the P4 prescription safety check can compare
+        // against it directly instead of fuzzy-matching free text. Null for non-drug
+        // allergies (peanuts, latex, ...) or when the substance wasn't in the formulary.
+        [StringLength(100)]
+        public string? AllergenGenericName { get; set; }
 
         public string? ReactionType { get; set; }
 

@@ -5,7 +5,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace HospitalManagementSystem.Models
 {
-    [Index(nameof(CreatedAt))]
+    // Composite, not (PatientId) + (CreatedAt) separately: every real query is
+    // "this patient's vitals, most recent first" (dashboard, NEWS2 trend), which a
+    // single (PatientId, CreatedAt DESC) index serves as a plain index scan. It also
+    // covers patient-only lookups as a prefix, so no separate PatientId index is needed.
+    [Index(nameof(PatientId), nameof(CreatedAt), IsDescending = new[] { false, true })]
     public class PatientVital
     {
         [Key]

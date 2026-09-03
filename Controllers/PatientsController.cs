@@ -80,6 +80,12 @@ namespace HospitalManagementSystem.Controllers
                 return NotFound();
             }
 
+            ViewBag.KnownAllergens = await _context.Medicines
+                .Select(m => m.GenericName)
+                .Distinct()
+                .OrderBy(g => g)
+                .ToListAsync();
+
             return View(patient);
         }
 
