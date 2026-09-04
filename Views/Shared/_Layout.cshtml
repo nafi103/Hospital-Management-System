@@ -108,7 +108,22 @@
                                 <a class="nav-link" asp-area="" asp-controller="Bills" asp-action="Index">Bills</a>
                             </li>
                         }
-                        else
+                        else if (User.IsInRole("Patient"))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Portal" asp-action="Index">My Appointments</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Portal" asp-action="Records">My Records</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Portal" asp-action="Prescriptions">My Prescriptions</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Portal" asp-action="Bills">My Bills</a>
+                            </li>
+                        }
+                        else if (User.IsInRole("Admin"))
                         {
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="Home" asp-action="Index">Dashboard</a>

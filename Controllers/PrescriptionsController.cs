@@ -10,7 +10,14 @@ using HospitalManagementSystem.Models;
 
 namespace HospitalManagementSystem.Controllers
 {
-    [Authorize(Roles = "Doctor,Pharmacist,Admin")]
+    // Multiple [Authorize(Roles=...)] attributes on the same request (class + method) are
+    // ANDed together, not overridden - a narrower class-level list can't be widened by a
+    // broader one on a single action. So the class level is the widest set anything here
+    // needs (staff + Patient, for Print), and every action that must stay staff-only
+    // narrows back down with its own [Authorize] - Create and Dispense already did this
+    // for their doctor/pharmacist-only rules; Index and Details need the same treatment
+    // now that Patient is in the class-level set.
+    [Authorize(Roles = "Doctor,Pharmacist,Admin,Patient")]
     public class PrescriptionsController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -21,6 +28,7 @@ namespace HospitalManagementSystem.Controllers
         }
 
         // GET: Prescriptions
+        [Authorize(Roles = "Doctor,Pharmacist,Admin")]
         public async Task<IActionResult> Index()
         {
             var prescriptions = await _context.Prescriptions
@@ -32,7 +40,8 @@ namespace HospitalManagementSystem.Controllers
             return View(prescriptions);
         }
 
-        // GET: Prescriptions/Print/5
+        // GET: Prescriptions/Print/5 - the only action here a Patient can reach, and only
+        // for their own prescription (inherits the class-level policy; no narrowing here).
         public async Task<IActionResult> Print(int? id)
         {
             if (id == null)
@@ -46,10 +55,21 @@ namespace HospitalManagementSystem.Controllers
                 .Include(p => p.PrescriptionItems)
                     .ThenInclude(i => i.Medicine)
                 .FirstOrDefaultAsync(m => m.Id == id);
-            
+
             if (prescription == null)
             {
                 return NotFound();
+            }
+
+            if (User.IsInRole("Patient"))
+            {
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                var isOwner = int.TryParse(userIdClaim, out int userId)
+                    && await _context.Patients.AnyAsync(p => p.Id == prescription.PatientId && p.UserId == userId);
+                if (!isOwner)
+                {
+                    return Forbid();
+                }
             }
 
             return View(prescription);
@@ -160,6 +180,7 @@ namespace HospitalManagementSystem.Controllers
         }
 
         // GET: Prescriptions/Details/5
+        [Authorize(Roles = "Doctor,Pharmacist,Admin")]
         public async Task<IActionResult> Details(int? id)
         {
             if (id == null) return NotFound();

@@ -113,6 +113,7 @@ namespace HospitalManagementSystem.Controllers
                 "Assistant" => RedirectToAction("Index", "Appointments"),
                 "Pharmacist" => RedirectToAction("Index", "Prescriptions"),
                 "Receptionist" => RedirectToAction("Index", "Reception"),
+                "Patient" => RedirectToAction("Index", "Portal"),
                 _ => RedirectToAction("Index", "Home")
             };
         }

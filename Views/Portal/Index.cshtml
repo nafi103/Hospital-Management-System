@@ -1,0 +1,94 @@
+@using HospitalManagementSystem.Models
+@{
+    ViewData["Title"] = "My Portal";
+    var patient = (Patient)ViewBag.Patient;
+    var upcoming = (List<Appointment>)ViewBag.Upcoming;
+    var past = (List<Appointment>)ViewBag.Past;
+    var next = upcoming.FirstOrDefault();
+}
+
+<div class="mb-5 border-bottom pb-4">
+    <h2 class="mb-1">Welcome, @(string.IsNullOrEmpty(patient.FullName) ? patient.Uhid : patient.FullName)</h2>
+    <p class="text-muted mb-0">UHID: <span class="fw-medium">@patient.Uhid</span></p>
+</div>
+
+@if (next != null)
+{
+    <div class="pro-card mb-5 border-start border-4 border-primary">
+        <h6 class="text-muted text-uppercase mb-2">Next Appointment</h6>
+        <h4 class="mb-1">Dr. @next.Doctor.FullName</h4>
+        <p class="text-muted mb-2">@next.AppointmentDatetime.ToLocalTime().ToString("dddd, MMM dd, yyyy - hh:mm tt")</p>
+        <p class="mb-0">@next.ReasonForVisit</p>
+    </div>
+}
+else
+{
+    <div class="alert alert-info border-0 bg-info bg-opacity-10 mb-5">
+        <i class="bi bi-info-circle me-2"></i> You have no upcoming appointments.
+    </div>
+}
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="pro-card h-100">
+            <h5 class="border-bottom pb-3 mb-3">Upcoming Appointments</h5>
+            @if (upcoming.Any())
+            {
+                <ul class="list-group list-group-flush">
+                    @foreach (var a in upcoming)
+                    {
+                        <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
+                            <div>
+                                <p class="fw-medium mb-0">Dr. @a.Doctor.FullName</p>
+                                <small class="text-muted">@a.AppointmentDatetime.ToLocalTime().ToString("MMM dd, yyyy - hh:mm tt")</small>
+                            </div>
+                            @if (a.Status == AppointmentStatus.InConsultation)
+                            {
+                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle">With Doctor</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning-subtle">Scheduled</span>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <p class="text-muted mb-0">Nothing scheduled.</p>
+            }
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="pro-card h-100">
+            <h5 class="border-bottom pb-3 mb-3">Past Appointments</h5>
+            @if (past.Any())
+            {
+                <ul class="list-group list-group-flush">
+                    @foreach (var a in past)
+                    {
+                        <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
+                            <div>
+                                <p class="fw-medium mb-0">Dr. @a.Doctor.FullName</p>
+                                <small class="text-muted">@a.AppointmentDatetime.ToLocalTime().ToString("MMM dd, yyyy")</small>
+                            </div>
+                            @if (a.Status == AppointmentStatus.Cancelled)
+                            {
+                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle">Cancelled</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Completed</span>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <p class="text-muted mb-0">No past visits yet.</p>
+            }
+        </div>
+    </div>
+</div>

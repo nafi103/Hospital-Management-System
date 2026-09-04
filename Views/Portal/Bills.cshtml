@@ -1,0 +1,77 @@
+@model IEnumerable<HospitalManagementSystem.Models.Bill>
+@using HospitalManagementSystem.Models
+@{
+    ViewData["Title"] = "My Bills";
+    var patient = (Patient)ViewBag.Patient;
+}
+
+<div class="mb-4 border-bottom pb-3">
+    <h2 class="mb-1">My Bills</h2>
+    <p class="text-muted mb-0">Billing history for UHID: <span class="fw-medium">@patient.Uhid</span></p>
+</div>
+
+@if (Model != null && Model.Any())
+{
+    <div class="row g-4">
+        @foreach (var bill in Model)
+        {
+            var outstanding = bill.NetTotal - bill.PaidAmount;
+            <div class="col-12">
+                <div class="pro-card">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h5 class="mb-1">Invoice #@bill.Id.ToString("D5")</h5>
+                            <small class="text-muted">@bill.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy")</small>
+                        </div>
+                        @if (bill.Status == BillStatus.Paid)
+                        {
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-1">Fully Paid</span>
+                        }
+                        else if (bill.Status == BillStatus.PartiallyPaid)
+                        {
+                            <span class="badge bg-warning bg-opacity-10 text-warning border border-warning-subtle px-2 py-1">Partial</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-1">Unpaid</span>
+                        }
+                    </div>
+                    <ul class="list-group list-group-flush mb-3">
+                        @foreach (var item in bill.BillItems)
+                        {
+                            <li class="list-group-item px-0 d-flex justify-content-between">
+                                <span>@item.Description <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle ms-1">@item.Department</span></span>
+                                <span>৳@item.Amount.ToString("0.00")</span>
+                            </li>
+                        }
+                    </ul>
+                    <div class="d-flex justify-content-end">
+                        <table class="table table-borderless table-sm mb-0" style="max-width: 320px;">
+                            <tbody>
+                                <tr>
+                                    <td class="text-end text-muted">Net Total:</td>
+                                    <td class="text-end fw-bold" width="120">৳@bill.NetTotal.ToString("0.00")</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end text-muted">Paid:</td>
+                                    <td class="text-end text-success">৳@bill.PaidAmount.ToString("0.00")</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-end fw-bold">Outstanding:</td>
+                                    <td class="text-end fw-bold @(outstanding > 0 ? "text-danger" : "text-success")">৳@outstanding.ToString("0.00")</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="pro-card text-center py-5">
+        <i class="bi bi-receipt fs-2 d-block mb-3 text-muted"></i>
+        <p class="text-muted mb-0">No bills yet.</p>
+    </div>
+}

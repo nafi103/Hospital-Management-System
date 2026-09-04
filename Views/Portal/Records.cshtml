@@ -1,0 +1,42 @@
+@model IEnumerable<HospitalManagementSystem.Models.MedicalRecord>
+@using HospitalManagementSystem.Models
+@{
+    ViewData["Title"] = "My Medical Records";
+    var patient = (Patient)ViewBag.Patient;
+}
+
+<div class="mb-4 border-bottom pb-3">
+    <h2 class="mb-1">My Medical Records</h2>
+    <p class="text-muted mb-0">Visit history for UHID: <span class="fw-medium">@patient.Uhid</span></p>
+</div>
+
+@if (Model != null && Model.Any())
+{
+    <div class="row g-4">
+        @foreach (var record in Model)
+        {
+            <div class="col-12">
+                <div class="pro-card">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h5 class="mb-1">@record.Diagnosis</h5>
+                            <small class="text-muted">@record.RecordedAt.ToLocalTime().ToString("MMM dd, yyyy") &middot; Dr. @record.Doctor?.FullName</small>
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(record.ChiefComplaint))
+                    {
+                        <p class="mb-2"><span class="text-muted">Chief Complaint:</span> @record.ChiefComplaint</p>
+                    }
+                    <p class="mb-0"><span class="text-muted">Treatment:</span> @record.Treatment</p>
+                </div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="pro-card text-center py-5">
+        <i class="bi bi-file-earmark-medical fs-2 d-block mb-3 text-muted"></i>
+        <p class="text-muted mb-0">No medical records yet.</p>
+    </div>
+}
