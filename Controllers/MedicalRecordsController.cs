@@ -9,6 +9,7 @@ using HospitalManagementSystem.Models;
 
 namespace HospitalManagementSystem.Controllers
 {
+    [Authorize(Roles = "Doctor,Admin")]
     public class MedicalRecordsController : Controller
     {
         private const int PageSize = 20;
@@ -106,6 +107,10 @@ namespace HospitalManagementSystem.Controllers
                 await _context.SaveChangesAsync();
 
                 TempData["SuccessMessage"] = "Medical record saved successfully.";
+                TempData["CrossLinkController"] = "Prescriptions";
+                TempData["CrossLinkLabel"] = "Write prescription for this visit";
+                TempData["CrossLinkPatientId"] = record.PatientId;
+                TempData["CrossLinkDoctorId"] = record.DoctorId;
                 return RedirectToAction(nameof(Index));
             }
 

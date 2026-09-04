@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using HospitalManagementSystem.Models;
@@ -12,13 +13,16 @@ namespace HospitalManagementSystem.Controllers
     public class AuthController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly IWebHostEnvironment _environment;
 
-        public AuthController(ApplicationDbContext context)
+        public AuthController(ApplicationDbContext context, IWebHostEnvironment environment)
         {
             _context = context;
+            _environment = environment;
         }
 
         [HttpGet]
+        [AllowAnonymous]
         public IActionResult Login()
         {
             if (User.Identity.IsAuthenticated)
@@ -29,6 +33,7 @@ namespace HospitalManagementSystem.Controllers
         }
 
         [HttpPost]
+        [AllowAnonymous]
         public async Task<IActionResult> Login(string username, string password)
         {
             var user = await _context.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Username == username);
@@ -38,90 +43,51 @@ namespace HospitalManagementSystem.Controllers
                 return View();
             }
 
-            var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.Name, user.FullName),
-                new Claim(ClaimTypes.Role, user.Role.RoleName),
-                new Claim("UserId", user.Id.ToString())
-            };
-
-            if (user.AssignedDoctorId.HasValue)
-            {
-                claims.Add(new Claim("AssignedDoctorId", user.AssignedDoctorId.Value.ToString()));
-            }
-
-            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-
-            await HttpContext.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                new ClaimsPrincipal(claimsIdentity),
-                new AuthenticationProperties { IsPersistent = true });
-
-            if (user.Role.RoleName == "Doctor")
-            {
-                return RedirectToAction("Index", "DoctorDashboard");
-            }
-            else if (user.Role.RoleName == "Assistant")
-            {
-                return RedirectToAction("Index", "Appointments");
-            }
-            else
-            {
-                return RedirectToAction("Index", "Home");
-            }
+            await SignInUserAsync(user);
+            return RedirectAfterLogin(user.Role.RoleName);
         }
 
+        // Demo-only shortcut so a presenter can switch roles without remembering
+        // passwords. Restricted to Development so it can never be reached once the
+        // app is actually deployed, and the role string is matched against an
+        // explicit whitelist - an unrecognized value used to fall through to the
+        // "admin" account, which would have made this an anonymous privilege
+        // escalation to Admin in production.
         [HttpPost]
+        [AllowAnonymous]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> MockLogin(string role)
         {
-            string username = role == "Doctor" ? "drmock" : 
-                              role == "Assistant" ? "receptionistmock" : 
-                              role == "Pharmacist" ? "pharmacistmock" : "admin";
-            
-            var user = _context.Users
+            if (!_environment.IsDevelopment())
+            {
+                return NotFound();
+            }
+
+            string? username = role switch
+            {
+                "Doctor" => "drmock",
+                "Assistant" => "mock-assistant",
+                "Pharmacist" => "pharmacistmock",
+                "Admin" => "admin",
+                _ => null
+            };
+
+            if (username == null)
+            {
+                return RedirectToAction("Login");
+            }
+
+            var user = await _context.Users
                 .Include(u => u.Role)
-                .FirstOrDefault(u => u.Username == username);
+                .FirstOrDefaultAsync(u => u.Username == username);
 
             if (user == null)
             {
                 return RedirectToAction("Login");
             }
 
-            var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.Name, user.FullName),
-                new Claim(ClaimTypes.Role, user.Role.RoleName),
-                new Claim("UserId", user.Id.ToString())
-            };
-
-            if (user.AssignedDoctorId.HasValue)
-            {
-                claims.Add(new Claim("AssignedDoctorId", user.AssignedDoctorId.Value.ToString()));
-            }
-
-            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-
-            await HttpContext.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                new ClaimsPrincipal(claimsIdentity),
-                new AuthenticationProperties { IsPersistent = true });
-
-            if (user.Role.RoleName == "Doctor")
-            {
-                return RedirectToAction("Index", "DoctorDashboard");
-            }
-            else if (user.Role.RoleName == "Assistant")
-            {
-                return RedirectToAction("Index", "Appointments");
-            }
-            else if (user.Role.RoleName == "Pharmacist")
-            {
-                return RedirectToAction("Index", "Prescriptions");
-            }
-            else
-            {
-                return RedirectToAction("Index", "Home");
-            }
+            await SignInUserAsync(user);
+            return RedirectAfterLogin(user.Role.RoleName);
         }
 
         [HttpPost]
@@ -132,9 +98,43 @@ namespace HospitalManagementSystem.Controllers
         }
 
         [HttpGet]
+        [AllowAnonymous]
         public IActionResult AccessDenied()
         {
             return View();
+        }
+
+        private IActionResult RedirectAfterLogin(string roleName)
+        {
+            return roleName switch
+            {
+                "Doctor" => RedirectToAction("Index", "DoctorDashboard"),
+                "Assistant" => RedirectToAction("Index", "Appointments"),
+                "Pharmacist" => RedirectToAction("Index", "Prescriptions"),
+                _ => RedirectToAction("Index", "Home")
+            };
+        }
+
+        private async Task SignInUserAsync(User user)
+        {
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.Name, user.FullName),
+                new Claim(ClaimTypes.Role, user.Role.RoleName),
+                new Claim("UserId", user.Id.ToString())
+            };
+
+            if (user.AssignedDoctorId.HasValue)
+            {
+                claims.Add(new Claim("AssignedDoctorId", user.AssignedDoctorId.Value.ToString()));
+            }
+
+            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+
+            await HttpContext.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme,
+                new ClaimsPrincipal(claimsIdentity),
+                new AuthenticationProperties { IsPersistent = true });
         }
     }
 }

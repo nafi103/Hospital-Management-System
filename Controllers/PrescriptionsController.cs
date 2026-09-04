@@ -10,7 +10,7 @@ using HospitalManagementSystem.Models;
 
 namespace HospitalManagementSystem.Controllers
 {
-    [Authorize]
+    [Authorize(Roles = "Doctor,Pharmacist,Admin")]
     public class PrescriptionsController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -129,6 +129,10 @@ namespace HospitalManagementSystem.Controllers
                 await _context.SaveChangesAsync();
                 
                 TempData["SuccessMessage"] = "Prescription created and sent to pharmacy.";
+                TempData["CrossLinkController"] = "MedicalRecords";
+                TempData["CrossLinkLabel"] = "Add medical record for this visit";
+                TempData["CrossLinkPatientId"] = prescription.PatientId;
+                TempData["CrossLinkDoctorId"] = prescription.DoctorId;
                 return RedirectToAction(nameof(Index));
             }
 

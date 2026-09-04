@@ -37,6 +37,11 @@ namespace HospitalManagementSystem.Models
         public int? RegisteredById { get; set; }
         public User? RegisteredBy { get; set; }
 
+        // Links this patient record to their portal login, if the front desk issued one.
+        // Nullable because most historical/registered-only patients never get a login.
+        public int? UserId { get; set; }
+        public User? User { get; set; }
+
         public List<Admission> Admissions { get; set; } = new List<Admission>();
         public List<PatientAllergy> Allergies { get; set; } = new List<PatientAllergy>();
     }

@@ -137,7 +137,7 @@ namespace HospitalManagementSystem.Controllers
 
             if (ModelState.IsValid)
             {
-                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var userIdClaim = User.FindFirst("UserId")?.Value;
                 if (int.TryParse(userIdClaim, out int userId))
                 {
                     patient.RegisteredById = userId;

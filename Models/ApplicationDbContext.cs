@@ -25,6 +25,7 @@ namespace HospitalManagementSystem.Models
         public DbSet<MedicalRecord> MedicalRecords { get; set; }
         public DbSet<PatientAllergy> PatientAllergies { get; set; }
         public DbSet<AiSuggestion> AiSuggestions { get; set; }
+        public DbSet<AiProviderSetting> AiProviderSettings { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -108,12 +109,26 @@ namespace HospitalManagementSystem.Models
                 .HasForeignKey(s => s.ReviewedById)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // A patient's portal login, if the front desk issued one. Unique so one login
+            // can't be attached to two patient records.
+            modelBuilder.Entity<Patient>()
+                .HasOne(p => p.User)
+                .WithMany()
+                .HasForeignKey(p => p.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Patient>()
+                .HasIndex(p => p.UserId)
+                .IsUnique();
+
             // Seed Data
             modelBuilder.Entity<Role>().HasData(
                 new Role { Id = 1, RoleName = "Admin", Permissions = "All", CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
                 new Role { Id = 2, RoleName = "Doctor", Permissions = "Read, Write_Patient", CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
                 new Role { Id = 3, RoleName = "Assistant", Permissions = "Read, Write_Admission", CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
-                new Role { Id = 4, RoleName = "Pharmacist", Permissions = "Read, Write_Inventory", CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) }
+                new Role { Id = 4, RoleName = "Pharmacist", Permissions = "Read, Write_Inventory", CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
+                new Role { Id = 5, RoleName = "Receptionist", Permissions = "Read, Write_Patient, Write_Admission, Write_Billing", CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },
+                new Role { Id = 6, RoleName = "Patient", Permissions = "Read_Own", CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) }
             );
 
             modelBuilder.Entity<User>().HasData(

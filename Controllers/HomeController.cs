@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Hospital_Management_System.Models;
 using HospitalManagementSystem.Models;
@@ -43,21 +44,16 @@ public class HomeController : Controller
         return View();
     }
 
+    [AllowAnonymous]
     public IActionResult Privacy()
     {
         return View();
     }
 
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+    [AllowAnonymous]
     public IActionResult Error()
     {
         return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
-    }
-
-    [HttpGet("/ClearAdmissions")]
-    public async Task<IActionResult> ClearAdmissions([FromServices] HospitalManagementSystem.Models.ApplicationDbContext context)
-    {
-        await Microsoft.EntityFrameworkCore.RelationalDatabaseFacadeExtensions.ExecuteSqlRawAsync(context.Database, "TRUNCATE TABLE \"BedTransfers\", \"Admissions\" CASCADE;");
-        return Content("Cleared.");
     }
 }

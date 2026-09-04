@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +9,7 @@ using HospitalManagementSystem.Models;
 
 namespace HospitalManagementSystem.Controllers
 {
+    [Authorize(Roles = "Admin")]
     public class StaffController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -91,7 +93,22 @@ namespace HospitalManagementSystem.Controllers
             {
                 try
                 {
-                    user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(user.Password);
+                    // A blank password field means "keep the current password" - the
+                    // previous version re-hashed unconditionally, so saving the edit form
+                    // with the password field left empty silently replaced every account's
+                    // password with the hash of an empty string.
+                    if (!string.IsNullOrWhiteSpace(user.Password))
+                    {
+                        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(user.Password);
+                    }
+                    else
+                    {
+                        var existingHash = await _context.Users
+                            .Where(u => u.Id == user.Id)
+                            .Select(u => u.PasswordHash)
+                            .FirstOrDefaultAsync();
+                        user.PasswordHash = existingHash ?? string.Empty;
+                    }
                     // Npgsql requires UTC for timestamp with time zone
                     user.CreatedAt = DateTime.SpecifyKind(user.CreatedAt, DateTimeKind.Utc);
                     user.UpdatedAt = DateTime.UtcNow;
