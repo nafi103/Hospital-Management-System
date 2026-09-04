@@ -72,6 +72,23 @@
                     <span class="text-muted"><i class="bi bi-droplet me-2 text-danger"></i>Blood Group</span>
                     <span class="fw-medium text-danger">@(string.IsNullOrEmpty(Model.BloodGroup) ? "Unknown" : Model.BloodGroup)</span>
                 </li>
+                <li class="list-group-item px-0 py-3 d-flex justify-content-between align-items-center">
+                    <span class="text-muted"><i class="bi bi-key me-2"></i>Portal Login</span>
+                    @if (Model.UserId.HasValue)
+                    {
+                        <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Active (@Model.Uhid)</span>
+                    }
+                    else if (Model.IsChild)
+                    {
+                        <span class="text-muted fst-italic small">Not applicable</span>
+                    }
+                    else
+                    {
+                        <form asp-action="IssueLogin" asp-route-id="@Model.Id" method="post">
+                            <button type="submit" class="btn btn-sm btn-outline-primary">Issue Login</button>
+                        </form>
+                    }
+                </li>
             </ul>
         </div>
     </div>

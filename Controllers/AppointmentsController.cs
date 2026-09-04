@@ -15,7 +15,7 @@ using HospitalManagementSystem.Services;
 
 namespace HospitalManagementSystem.Controllers
 {
-    [Authorize(Roles = "Assistant")]
+    [Authorize(Roles = "Assistant,Receptionist")]
     public class AppointmentsController : Controller
     {
         private readonly ApplicationDbContext _context;

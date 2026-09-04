@@ -69,6 +69,7 @@ namespace HospitalManagementSystem.Controllers
                 "Assistant" => "mock-assistant",
                 "Pharmacist" => "pharmacistmock",
                 "Admin" => "admin",
+                "Receptionist" => "reception1",
                 _ => null
             };
 
@@ -111,6 +112,7 @@ namespace HospitalManagementSystem.Controllers
                 "Doctor" => RedirectToAction("Index", "DoctorDashboard"),
                 "Assistant" => RedirectToAction("Index", "Appointments"),
                 "Pharmacist" => RedirectToAction("Index", "Prescriptions"),
+                "Receptionist" => RedirectToAction("Index", "Reception"),
                 _ => RedirectToAction("Index", "Home")
             };
         }

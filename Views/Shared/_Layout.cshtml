@@ -87,6 +87,27 @@
                                 <a class="nav-link" asp-area="" asp-controller="Medicines" asp-action="Index">Inventory</a>
                             </li>
                         }
+                        else if (User.IsInRole("Receptionist"))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Reception" asp-action="Index">Front Desk</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Patients" asp-action="Index">Patients</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Appointments" asp-action="Index">Consultations</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Admissions" asp-action="Index">Admissions</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Beds" asp-action="Index">Beds</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Bills" asp-action="Index">Bills</a>
+                            </li>
+                        }
                         else
                         {
                             <li class="nav-item">
@@ -100,6 +121,9 @@
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="Admissions" asp-action="Index">Admissions</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Bills" asp-action="Index">Bills</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="Staff" asp-action="Index">Staff</a>

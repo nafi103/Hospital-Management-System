@@ -114,6 +114,12 @@
                     </div>
                 </div>
 
+                <div class="mb-4 form-check form-switch fs-5 pb-3 border-bottom" id="portalLoginDiv">
+                    <input class="form-check-input" type="checkbox" role="switch" id="IssuePortalLoginToggle" name="issuePortalLogin" value="true">
+                    <label class="form-check-label fw-medium" for="IssuePortalLoginToggle">Create a portal login for this patient</label>
+                    <div class="small text-muted mt-1">Username will be the generated UHID. A one-time temporary password is shown after registration - not available for children.</div>
+                </div>
+
                 <div class="d-grid mt-4">
                     <button type="submit" class="btn btn-primary btn-lg">
                         <i class="bi bi-person-plus-fill me-1"></i> Register Patient
@@ -135,12 +141,15 @@
                     $('#contactInfoDiv').hide();
                     $('#lblEmergencyName').html('Guardian Name <span class="text-danger">*</span>');
                     $('#lblEmergencyPhone').html('Guardian Phone <span class="text-danger">*</span>');
+                    $('#IssuePortalLoginToggle').prop('checked', false);
+                    $('#portalLoginDiv').hide();
                 } else {
                     $('#lblFullName').html('Patient Name <span class="text-danger">*</span>');
                     $('#contactInfoDiv').show();
                     $('#lblContactInfo').html('Phone Number <span class="text-danger">*</span>');
                     $('#lblEmergencyName').html('Emergency Name <span class="text-danger">*</span>');
                     $('#lblEmergencyPhone').html('Emergency Phone <span class="text-danger">*</span>');
+                    $('#portalLoginDiv').show();
                 }
             }
             $('#IsChildToggle').change(toggleChildMode);

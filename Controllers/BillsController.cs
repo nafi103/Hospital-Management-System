@@ -10,7 +10,7 @@ using HospitalManagementSystem.Models;
 
 namespace HospitalManagementSystem.Controllers
 {
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Receptionist")]
     public class BillsController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -107,18 +107,21 @@ namespace HospitalManagementSystem.Controllers
                     bill.BillItems = BillItems;
                 }
 
-                // If discount > 0, we could require approval, but for now we'll auto-approve as Admin (Id=1)
                 if (bill.DiscountAmount > 0)
                 {
-                    bill.DiscountApprovedById = 1; // Super Admin mock
+                    var userIdClaim = User.FindFirst("UserId")?.Value;
+                    if (int.TryParse(userIdClaim, out int approverId))
+                    {
+                        bill.DiscountApprovedById = approverId;
+                    }
                 }
 
                 bill.RecalculateTotals();
                 
                 _context.Add(bill);
 
-                // Mark pulled prescriptions as billed
-                // Wait, we need to know which prescriptions were pulled. We can find them again.
+                // Re-query rather than trust the posted BillItems - marks exactly the
+                // prescriptions this bill actually drew pharmacy charges from as billed.
                 if (bill.AdmissionId.HasValue)
                 {
                     var unbilledPrescriptions = await _context.Prescriptions

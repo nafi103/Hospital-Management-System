@@ -8,7 +8,7 @@ using HospitalManagementSystem.Models;
 
 namespace HospitalManagementSystem.Controllers
 {
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Receptionist")]
     public class BedsController : Controller
     {
         private readonly ApplicationDbContext _context;

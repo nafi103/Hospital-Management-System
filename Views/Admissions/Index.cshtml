@@ -88,6 +88,9 @@
                                             <i class="bi bi-door-open"></i>
                                         </a>
                                     }
+                                    <a asp-controller="Bills" asp-action="Create" asp-route-admissionId="@item.Id" class="btn btn-sm btn-outline-primary" title="Generate Bill">
+                                        <i class="bi bi-receipt"></i>
+                                    </a>
                                     <a asp-action="Delete" asp-route-id="@item.Id" class="btn btn-sm btn-outline-danger" title="Delete">
                                         <i class="bi bi-trash"></i>
                                     </a>
