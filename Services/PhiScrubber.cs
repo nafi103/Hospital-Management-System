@@ -24,19 +24,28 @@ namespace HospitalManagementSystem.Services
             {
                 var pseudonym = $"Patient-{patient.Uhid}";
                 map[pseudonym] = patient.FullName;
-                scrubbed = scrubbed.Replace(patient.FullName, pseudonym, StringComparison.OrdinalIgnoreCase);
+                scrubbed = ReplaceWholeWord(scrubbed, patient.FullName, pseudonym);
             }
 
             if (!string.IsNullOrWhiteSpace(patient.EmergencyContactName))
             {
                 var pseudonym = $"Contact-{patient.Uhid}";
                 map[pseudonym] = patient.EmergencyContactName;
-                scrubbed = scrubbed.Replace(patient.EmergencyContactName, pseudonym, StringComparison.OrdinalIgnoreCase);
+                scrubbed = ReplaceWholeWord(scrubbed, patient.EmergencyContactName, pseudonym);
             }
 
             scrubbed = PhonePattern.Replace(scrubbed, "[phone-redacted]");
 
             return new ScrubResult(scrubbed, map);
+        }
+
+        // A plain string.Replace matches inside longer words - a patient named "Ali"
+        // would corrupt the unrelated word "Alia" elsewhere in the same note. Word
+        // boundaries confine the match to the whole name, not a substring of it.
+        private static string ReplaceWholeWord(string text, string word, string replacement)
+        {
+            var pattern = $@"\b{Regex.Escape(word)}\b";
+            return Regex.Replace(text, pattern, replacement, RegexOptions.IgnoreCase);
         }
 
         public string Rehydrate(string text, IReadOnlyDictionary<string, string> map)
