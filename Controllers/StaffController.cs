@@ -88,6 +88,14 @@ namespace HospitalManagementSystem.Controllers
                 user.Category = "";
                 ModelState.Remove("Category");
             }
+            // Password is a non-nullable string, so ASP.NET Core's implicit-required
+            // validation rejects the submission outright when this field is left blank -
+            // the "blank means keep the current password" handling further down never
+            // even runs unless this is removed from ModelState first.
+            if (string.IsNullOrWhiteSpace(user.Password))
+            {
+                ModelState.Remove("Password");
+            }
 
             if (ModelState.IsValid)
             {

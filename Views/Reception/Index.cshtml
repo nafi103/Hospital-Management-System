@@ -7,13 +7,7 @@
     <p class="text-muted mb-0">Today's queue, bed occupancy, and outstanding bills at a glance.</p>
 </div>
 
-@if (TempData["SuccessMessage"] != null)
-{
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
-        <i class="bi bi-check-circle-fill me-2"></i> @TempData["SuccessMessage"]
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-}
+<partial name="_ActionSuccessBanner" />
 
 <div class="row g-4 mb-5">
     <div class="col-md-3">

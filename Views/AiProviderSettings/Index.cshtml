@@ -10,13 +10,7 @@
     <p class="text-muted mb-0">Add, reorder, and remove the API keys AI features use. The first enabled, configured provider (lowest priority number) is tried first; if it fails, the next one takes over automatically.</p>
 </div>
 
-@if (TempData["SuccessMessage"] != null)
-{
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
-        <i class="bi bi-check-circle-fill me-2"></i> @TempData["SuccessMessage"]
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-}
+<partial name="_ActionSuccessBanner" />
 @if (TempData["ErrorMessage"] != null)
 {
     <div class="alert alert-danger alert-dismissible fade show" role="alert">
