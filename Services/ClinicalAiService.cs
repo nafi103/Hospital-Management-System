@@ -2,39 +2,51 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
+using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using Google.GenAI;
-using Google.GenAI.Types;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Caching.Memory;
+using HospitalManagementSystem.Hubs;
 using HospitalManagementSystem.Models;
 using HospitalManagementSystem.Services.Contracts;
+using HospitalManagementSystem.Services.Providers;
 
 namespace HospitalManagementSystem.Services
 {
     public class ClinicalAiService : IClinicalAiService
     {
-        private readonly ApplicationDbContext _context;
-        private readonly Client _client;
-        private readonly GeminiOptions _options;
-        private readonly PhiScrubber _scrubber;
-        private readonly ILogger<ClinicalAiService> _logger;
+        private static readonly Regex CitationPattern = new(@"\[\[rec:(\d+)\]\]", RegexOptions.Compiled);
 
-        public ClinicalAiService(ApplicationDbContext context, Client client, Microsoft.Extensions.Options.IOptions<GeminiOptions> options, PhiScrubber scrubber, ILogger<ClinicalAiService> logger)
+        private readonly ApplicationDbContext _context;
+        private readonly PhiScrubber _scrubber;
+        private readonly IMemoryCache _cache;
+        private readonly IHubContext<AiStreamHub> _streamHub;
+        private readonly AiProviderResolver _resolver;
+
+        public ClinicalAiService(
+            ApplicationDbContext context,
+            PhiScrubber scrubber,
+            IMemoryCache cache,
+            IHubContext<AiStreamHub> streamHub,
+            AiProviderResolver resolver)
         {
             _context = context;
-            _client = client;
-            _options = options.Value;
-            _logger = logger;
             _scrubber = scrubber;
+            _cache = cache;
+            _streamHub = streamHub;
+            _resolver = resolver;
         }
 
-        public async Task<AiSuggestion> GenerateCaseNoteDraftAsync(int patientId, int requestedByUserId, CancellationToken ct = default)
+        // Fetches the patient's recent records and scrubs them for the model, caching the
+        // scrubbed text so a doctor running several AI actions on the same patient in one
+        // sitting doesn't re-fetch and re-scrub identical data each time. The cache key
+        // bakes in the record count and max id, so a new/edited record simply misses
+        // instead of needing explicit invalidation.
+        private async Task<(Patient Patient, List<MedicalRecord> Records, ScrubResult Scrubbed)> BuildScrubbedPatientContextAsync(int patientId, CancellationToken ct)
         {
             var patient = await _context.Patients.FindAsync(new object?[] { patientId }, ct)
                 ?? throw new ClinicalAiException(AiFailureReason.InvalidResponse, $"Patient {patientId} not found.");
@@ -50,116 +62,206 @@ namespace HospitalManagementSystem.Services
                 throw new ClinicalAiException(AiFailureReason.InvalidResponse, "This patient has no medical records to summarize yet.");
             }
 
-            var contextText = string.Join("\n\n", records.Select(r =>
-                $"Record #{r.Id} ({r.RecordedAt:yyyy-MM-dd}):\n" +
-                $"Chief complaint: {r.ChiefComplaint}\n" +
-                $"Diagnosis: {r.Diagnosis}\n" +
-                $"Treatment: {r.Treatment}"));
+            var cacheKey = $"ai-ctx-{patientId}-{records.Count}-{records.Max(r => r.Id)}";
+            if (!_cache.TryGetValue(cacheKey, out ScrubResult? scrubbed) || scrubbed is null)
+            {
+                var contextText = string.Join("\n\n", records.Select(r =>
+                    $"Record #{r.Id} ({r.RecordedAt:yyyy-MM-dd}):\n" +
+                    $"Chief complaint: {r.ChiefComplaint}\n" +
+                    $"Diagnosis: {r.Diagnosis}\n" +
+                    $"Treatment: {r.Treatment}"));
 
-            var scrubbed = _scrubber.Scrub(contextText, patient);
+                scrubbed = _scrubber.Scrub(contextText, patient);
+                _cache.Set(cacheKey, scrubbed, TimeSpan.FromMinutes(10));
+            }
+
+            return (patient, records, scrubbed);
+        }
+
+        // A pseudonym occurrence can straddle a chunk boundary, from any provider.
+        // Rehydration must always run over the FULL raw buffer (never a truncated prefix
+        // - Replace() needs every character of a match to even recognize it, so
+        // truncating the input can silently skip a match that's actually complete).
+        // What's withheld instead is a margin of trailing OUTPUT characters sized to the
+        // longest pseudonym: an unresolved partial match can occupy at most that many
+        // characters at the tail, so holding them back guarantees everything already
+        // sent is final and can never be reshaped by a later chunk completing a match.
+        private async Task<string> ConsumeAndStreamAsync(
+            IAsyncEnumerable<AiStreamChunk> chunks,
+            ScrubResult scrubbed,
+            int maxPseudonymLength,
+            Func<string, CancellationToken, Task> sendDelta,
+            Action<AiStreamChunk> onMeta,
+            CancellationToken ct)
+        {
+            var rawBuffer = new StringBuilder();
+            var sentLength = 0;
+
+            await foreach (var chunk in chunks.WithCancellation(ct))
+            {
+                onMeta(chunk);
+                if (string.IsNullOrEmpty(chunk.Text))
+                {
+                    continue;
+                }
+                rawBuffer.Append(chunk.Text);
+
+                var fullyRehydrated = _scrubber.Rehydrate(rawBuffer.ToString(), scrubbed.Map);
+                var safeLength = Math.Min(fullyRehydrated.Length, Math.Max(sentLength, fullyRehydrated.Length - maxPseudonymLength));
+                if (safeLength > sentLength)
+                {
+                    var delta = fullyRehydrated[sentLength..safeLength];
+                    sentLength = safeLength;
+                    await sendDelta(delta, ct);
+                }
+            }
+
+            var finalText = _scrubber.Rehydrate(rawBuffer.ToString(), scrubbed.Map);
+            // Flush whatever the withhold margin kept back at the very end of the stream -
+            // otherwise the live view visibly falls short of the final saved text.
+            if (finalText.Length > sentLength)
+            {
+                await sendDelta(finalText[sentLength..], CancellationToken.None);
+            }
+            return finalText;
+        }
+
+        public async Task<AiSuggestion> GenerateCaseSummaryAsync(int patientId, int requestedByUserId, string streamId, CancellationToken ct = default)
+        {
+            var groupName = $"AiStream_{streamId}";
+            var group = _streamHub.Clients.Group(groupName);
+            Task SendChunk(string text, CancellationToken token) => group.SendAsync("ReceiveChunk", text, token);
+
+            var (patient, records, scrubbed) = await BuildScrubbedPatientContextAsync(patientId, ct);
+            var validRecordIds = records.Select(r => r.Id).ToHashSet();
+            var maxPseudonymLength = scrubbed.Map.Count > 0 ? scrubbed.Map.Keys.Max(k => k.Length) : 0;
 
             const string systemInstruction =
                 "You are a clinical documentation assistant inside a hospital management system. " +
-                "You will be given a patient's recent medical record entries. Produce a concise draft " +
-                "case note: a 2-4 sentence summary and 3-6 key points a doctor should notice at a glance. " +
-                "Only use information present in the records - never invent findings, medications, or dates. " +
-                "Refer to the patient only by the pseudonymous identifier given, never assume a real name.";
+                "You will be given a patient's recent medical record entries, each labeled 'Record #<id>'. " +
+                "Produce a scannable pre-visit summary a doctor can read in a few seconds, in this exact " +
+                "format and nothing else: first, one headline sentence synthesizing why the patient is " +
+                "being seen, wrapped in double asterisks like **this**, on its own line, with no citation " +
+                "marker on it. Then, on their own lines, 3 to 6 bullet points, each starting with '- ', " +
+                "each stating one self-contained clinical fact (a diagnosis, a treatment, or a current " +
+                "status) - ordered chronologically, with the most recent/current status last. Immediately " +
+                "after any bullet that draws on a specific record, insert a citation marker in the exact " +
+                "form [[rec:<id>]] using that record's real id - never invent an id and never cite a " +
+                "record you weren't given. Only use information present in the records - never invent " +
+                "findings, medications, or dates. Refer to the patient only by the pseudonymous identifier " +
+                "given, never assume a real name. Use no markdown beyond the headline's ** and the bullets' '- '.";
 
             var userContent = $"Patient identifier: Patient-{patient.Uhid}\n\nMedical record history:\n{scrubbed.ScrubbedText}";
 
-            var (draft, response, latencyMs) = await CallStructuredAsync<CaseNoteDraft>(
-                systemInstruction, userContent, _options.ReasoningModel, ct);
+            var providers = await _resolver.GetOrderedProvidersAsync(ct);
+            if (providers.Count == 0)
+            {
+                throw new ClinicalAiException(AiFailureReason.Unauthorized, "No AI provider is configured. Ask an admin to add an API key.");
+            }
 
-            draft.Summary = _scrubber.Rehydrate(draft.Summary, scrubbed.Map);
-            draft.KeyPoints = draft.KeyPoints.Select(p => _scrubber.Rehydrate(p, scrubbed.Map)).ToList();
+            var stopwatch = Stopwatch.StartNew();
+            string? finalText = null;
+            string? resolvedModelId = null;
+            int inputTokens = 0, outputTokens = 0, cachedTokens = 0;
+            ClinicalAiException? lastFailure = null;
+
+            for (var i = 0; i < providers.Count && finalText == null; i++)
+            {
+                var rp = providers[i];
+                // One quick retry on the primary provider absorbs a short transient blip;
+                // every other provider in the chain gets a single try before moving on.
+                var maxAttempts = i == 0 ? 2 : 1;
+
+                for (var attempt = 1; attempt <= maxAttempts && finalText == null; attempt++)
+                {
+                    if (i > 0 && attempt == 1)
+                    {
+                        await group.SendAsync("StreamRestarted", $"Switching to backup AI provider ({rp.Provider.Type})...", CancellationToken.None);
+                    }
+                    else if (attempt > 1)
+                    {
+                        await group.SendAsync("StreamRestarted", "Retrying...", CancellationToken.None);
+                        await Task.Delay(TimeSpan.FromSeconds(3), ct);
+                    }
+
+                    try
+                    {
+                        resolvedModelId = rp.ModelId;
+                        finalText = await ConsumeAndStreamAsync(
+                            rp.Provider.StreamAsync(rp.ApiKey, rp.ModelId, systemInstruction, userContent, ct),
+                            scrubbed, maxPseudonymLength, SendChunk,
+                            chunk =>
+                            {
+                                if (chunk.ModelId != null) resolvedModelId = chunk.ModelId;
+                                if (chunk.InputTokens.HasValue) inputTokens = chunk.InputTokens.Value;
+                                if (chunk.OutputTokens.HasValue) outputTokens = chunk.OutputTokens.Value;
+                                if (chunk.CachedTokens.HasValue) cachedTokens = chunk.CachedTokens.Value;
+                            },
+                            ct);
+                    }
+                    catch (ClinicalAiException ex)
+                    {
+                        lastFailure = ex;
+                        if (ex.Reason != AiFailureReason.RateLimited)
+                        {
+                            break; // this provider is out - move to the next one, not just retry
+                        }
+                    }
+                }
+            }
+
+            if (finalText == null)
+            {
+                await group.SendAsync("StreamError", "All configured AI providers are unavailable right now.", CancellationToken.None);
+                throw lastFailure ?? new ClinicalAiException(AiFailureReason.Unknown, "All configured AI providers are unavailable right now.");
+            }
+            stopwatch.Stop();
+
+            if (string.IsNullOrWhiteSpace(finalText))
+            {
+                await group.SendAsync("StreamError", "The AI service returned an empty response.", CancellationToken.None);
+                throw new ClinicalAiException(AiFailureReason.InvalidResponse, "The AI service returned an empty response.");
+            }
+
+            var citedIds = new List<int>();
+            var cleanedText = CitationPattern.Replace(finalText, match =>
+            {
+                var id = int.Parse(match.Groups[1].Value);
+                if (!validRecordIds.Contains(id))
+                {
+                    return string.Empty; // hallucinated id - drop the marker, keep the sentence
+                }
+                if (!citedIds.Contains(id))
+                {
+                    citedIds.Add(id);
+                }
+                return match.Value;
+            });
+
+            var draft = new CaseSummaryDraft { NarrativeText = cleanedText.Trim(), CitedRecordIds = citedIds };
 
             var suggestion = new AiSuggestion
             {
-                SuggestionType = AiSuggestionType.CaseNoteDraft,
+                SuggestionType = AiSuggestionType.CaseSummary,
                 PatientId = patientId,
                 PayloadJson = JsonSerializer.Serialize(draft),
                 SourceRecordIds = JsonSerializer.Serialize(records.Select(r => r.Id)),
-                ModelId = response.ModelVersion ?? _options.ReasoningModel,
-                PromptVersion = "case-note-draft-v1",
+                ModelId = resolvedModelId ?? "unknown",
+                PromptVersion = "case-summary-v1",
                 Verdict = AiSuggestionVerdict.Pending,
-                InputTokens = response.UsageMetadata?.PromptTokenCount ?? 0,
-                OutputTokens = response.UsageMetadata?.CandidatesTokenCount ?? 0,
-                CachedTokens = response.UsageMetadata?.CachedContentTokenCount ?? 0,
-                LatencyMs = (int)latencyMs,
+                InputTokens = inputTokens,
+                OutputTokens = outputTokens,
+                CachedTokens = cachedTokens,
+                LatencyMs = (int)stopwatch.ElapsedMilliseconds,
                 CreatedAt = DateTime.UtcNow
             };
 
             _context.AiSuggestions.Add(suggestion);
             await _context.SaveChangesAsync(ct);
 
+            await group.SendAsync("StreamComplete", suggestion.Id, CancellationToken.None);
+
             return suggestion;
-        }
-
-        private async Task<(T Result, GenerateContentResponse Response, long LatencyMs)> CallStructuredAsync<T>(
-            string systemInstruction, string userContent, string modelId, CancellationToken ct)
-            where T : IStructuredAiResponse
-        {
-            var config = new GenerateContentConfig
-            {
-                SystemInstruction = new Content
-                {
-                    Parts = new List<Part> { new Part { Text = systemInstruction } }
-                },
-                ResponseMimeType = "application/json",
-                ResponseJsonSchema = JsonNode.Parse(T.JsonSchema)
-            };
-
-            var stopwatch = Stopwatch.StartNew();
-            GenerateContentResponse response;
-            try
-            {
-                response = await _client.Models.GenerateContentAsync(
-                    model: modelId, contents: userContent, config: config, cancellationToken: ct);
-            }
-            catch (HttpRequestException ex)
-            {
-                // Gemini's SDK doesn't always populate StatusCode (e.g. a 503 "high demand"
-                // response surfaces with StatusCode null) - Unknown is the honest fallback,
-                // and it still produces the right "try again" message for the user.
-                var reason = ex.StatusCode switch
-                {
-                    HttpStatusCode.TooManyRequests => AiFailureReason.RateLimited,
-                    HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => AiFailureReason.Unauthorized,
-                    _ => AiFailureReason.Unknown
-                };
-                _logger.LogError(ex, "Gemini request failed for model {Model} (status {StatusCode}): {Message}", modelId, ex.StatusCode, ex.Message);
-                throw new ClinicalAiException(reason, "The AI service request failed.", ex);
-            }
-            catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
-            {
-                _logger.LogError(ex, "Gemini request timed out for model {Model}", modelId);
-                throw new ClinicalAiException(AiFailureReason.Timeout, "The AI service did not respond in time.", ex);
-            }
-            catch (Exception ex) when (ex is not ClinicalAiException)
-            {
-                _logger.LogError(ex, "Unexpected failure calling Gemini model {Model}", modelId);
-                throw new ClinicalAiException(AiFailureReason.Unknown, "Unexpected AI service failure.", ex);
-            }
-            stopwatch.Stop();
-
-            var text = response.Text;
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                throw new ClinicalAiException(AiFailureReason.InvalidResponse, "The AI service returned an empty response.");
-            }
-
-            T result;
-            try
-            {
-                result = JsonSerializer.Deserialize<T>(text)
-                    ?? throw new ClinicalAiException(AiFailureReason.InvalidResponse, "The AI service returned an unparseable response.");
-            }
-            catch (JsonException ex)
-            {
-                throw new ClinicalAiException(AiFailureReason.InvalidResponse, "The AI service returned a response that didn't match the expected format.", ex);
-            }
-
-            return (result, response, stopwatch.ElapsedMilliseconds);
         }
     }
 }

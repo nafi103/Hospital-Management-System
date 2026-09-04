@@ -8,7 +8,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using HospitalManagementSystem.Models;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using HospitalManagementSystem.Hubs;
+using HospitalManagementSystem.Services;
 
 namespace HospitalManagementSystem.Controllers
 {
@@ -17,11 +20,19 @@ namespace HospitalManagementSystem.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly IServiceScopeFactory _scopeFactory;
+        private readonly ILogger<AppointmentsController> _logger;
 
-        public AppointmentsController(ApplicationDbContext context, IHubContext<NotificationHub> hubContext)
+        public AppointmentsController(
+            ApplicationDbContext context,
+            IHubContext<NotificationHub> hubContext,
+            IServiceScopeFactory scopeFactory,
+            ILogger<AppointmentsController> logger)
         {
             _context = context;
             _hubContext = hubContext;
+            _scopeFactory = scopeFactory;
+            _logger = logger;
         }
 
         // GET: Appointments
@@ -288,8 +299,41 @@ namespace HospitalManagementSystem.Controllers
                 };
                 
                 await _hubContext.Clients.All.SendAsync("PatientSentIn", payload);
+
+                // Fire-and-forget so the assistant isn't stuck waiting several seconds
+                // on an AI call just to send a patient in. Runs in its own DI scope
+                // because this request's scoped DbContext is disposed as soon as the
+                // response returns - reusing _context here would throw once that happens.
+                _ = GenerateArrivalSummaryAsync(appointment.PatientId, appointment.DoctorId);
             }
             return RedirectToAction(nameof(Index));
+        }
+
+        private async Task GenerateArrivalSummaryAsync(int patientId, int doctorId)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var aiService = scope.ServiceProvider.GetRequiredService<IClinicalAiService>();
+            try
+            {
+                var suggestion = await aiService.GenerateCaseSummaryAsync(patientId, doctorId, Guid.NewGuid().ToString());
+
+                // Lets an already-open doctor dashboard swap the "generating..." spinner
+                // on that patient's card for the real draft without a page reload.
+                await _hubContext.Clients.All.SendAsync("ArrivalAiReady", new { patientId, suggestionId = suggestion.Id });
+            }
+            catch (ClinicalAiException ex)
+            {
+                // No medical history yet, or the AI service is down - the doctor just
+                // won't have a pre-generated summary waiting; they can still generate
+                // one manually from the patient page.
+                _logger.LogInformation("Arrival AI summary skipped for patient {PatientId}: {Reason}", patientId, ex.Reason);
+                await _hubContext.Clients.All.SendAsync("ArrivalAiFailed", new { patientId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected failure generating arrival AI summary for patient {PatientId}", patientId);
+                await _hubContext.Clients.All.SendAsync("ArrivalAiFailed", new { patientId });
+            }
         }
     }
 }

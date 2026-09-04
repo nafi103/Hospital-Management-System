@@ -1,7 +1,10 @@
 @model IEnumerable<HospitalManagementSystem.Models.Appointment>
+@using HospitalManagementSystem.Models
 
 @{
     ViewData["Title"] = "Doctor's Desk";
+    var latestAiByPatient = ViewBag.LatestAiSuggestionByPatient as Dictionary<int, AiSuggestion>;
+    var dashboardUrl = Url.Action("Index", "DoctorDashboard");
 }
 
 <div class="mb-4 border-bottom pb-3">
@@ -16,26 +19,37 @@
 </div>
 
 <div class="row g-4" id="active-consultations-container">
-        @foreach (var item in Model)
-        {
-            <div class="col-md-6">
-                <div class="card border-primary border-2 h-100 shadow-sm">
-                    <div class="card-header bg-primary bg-opacity-10 border-bottom-0 pt-3 pb-2">
-                        <div class="d-flex justify-content-between align-items-center">
+    @foreach (var item in Model)
+    {
+        AiSuggestion? latest = null;
+        latestAiByPatient?.TryGetValue(item.PatientId, out latest);
+
+        // The arrival-triggered AI generation isn't tracked as an explicit "in
+        // progress" flag - only its eventual result (an AiSuggestion row, whatever its
+        // verdict) is. So on a fresh page load we infer "probably still generating"
+        // from how recently the patient was sent in, comfortably covering the
+        // retry+fallback chain's worst case; anyone with the dashboard already open
+        // gets the real answer live over SignalR regardless of this guess.
+        var stillLikelyGenerating = latest == null && (DateTime.UtcNow - item.UpdatedAt) < TimeSpan.FromSeconds(30);
+
+        <div class="col-12" id="consultation-card-@item.Id" data-patient-id="@item.PatientId">
+            <div class="pro-card h-100 border-start border-4 border-primary">
+                <div class="row g-0">
+                    <div class="col-md-7 pe-md-4 mb-4 mb-md-0">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
                             <span class="badge bg-primary">In Consultation</span>
                             <small class="text-muted"><i class="bi bi-clock"></i> Sent in @item.UpdatedAt.ToLocalTime().ToString("hh:mm tt")</small>
                         </div>
-                    </div>
-                    <div class="card-body">
+
                         <h4 class="fw-bold text-primary mb-1">@item.Patient?.FullName</h4>
                         <p class="text-muted mb-3"><i class="bi bi-person-badge"></i> UHID: @item.Patient?.Uhid</p>
-                        
+
                         <div class="bg-light p-3 rounded mb-4">
                             <h6 class="fw-bold mb-2 text-muted">Reason for Visit:</h6>
                             <p class="mb-0">@(string.IsNullOrEmpty(item.ReasonForVisit) ? "No reason specified." : item.ReasonForVisit)</p>
                         </div>
 
-                        <div class="d-grid gap-2">
+                        <div class="d-grid gap-2 mb-3">
                             <a asp-controller="MedicalRecords" asp-action="Create" asp-route-patientId="@item.PatientId" asp-route-doctorId="@item.DoctorId" class="btn btn-outline-primary text-start">
                                 <i class="bi bi-file-medical me-2"></i> Add Medical Record
                             </a>
@@ -43,15 +57,38 @@
                                 <i class="bi bi-capsule me-2"></i> Write Prescription
                             </a>
                         </div>
+
+                        <div class="d-flex justify-content-start pt-3 border-top">
+                            <form asp-action="MarkCompleted" asp-route-id="@item.Id" method="post" style="display:inline;">
+                                <button type="submit" class="btn btn-success px-4" title="Finish Consultation">
+                                    <i class="bi bi-check2-circle me-1"></i> Mark Completed
+                                </button>
+                            </form>
+                        </div>
                     </div>
-                    <div class="card-footer bg-white border-top-0 pb-3 text-end">
-                        <form asp-action="MarkCompleted" asp-route-id="@item.Id" method="post" style="display:inline;">
-                            <button type="submit" class="btn btn-success px-4" title="Finish Consultation">
-                                <i class="bi bi-check2-circle me-1"></i> Mark Completed
-                            </button>
-                        </form>
+
+                    <div class="col-md-5 ps-md-4 border-start-md ai-review-panel">
+                        <h6 class="text-muted text-uppercase small fw-bold mb-3"><i class="bi bi-robot me-1"></i> AI Review</h6>
+
+                        <div class="ai-review-loading text-center text-muted py-4 @(stillLikelyGenerating ? "" : "d-none")">
+                            <div class="spinner-border spinner-border-sm mb-2"></div>
+                            <p class="small mb-0">Generating summary&hellip;</p>
+                        </div>
+
+                        <div class="ai-review-empty text-center text-muted py-4 small @(latest == null && !stillLikelyGenerating ? "" : "d-none")">
+                            No AI draft available for this visit.
+                        </div>
+
+                        <div class="ai-review-content @(latest == null ? "d-none" : "")">
+                            @if (latest != null)
+                            {
+                                var vd = new ViewDataDictionary(ViewData) { ["ReturnUrl"] = dashboardUrl };
+                                <partial name="_SuggestionCardBody" model="latest" view-data="vd" />
+                            }
+                        </div>
                     </div>
                 </div>
             </div>
-        }
-    </div>
+        </div>
+    }
+</div>

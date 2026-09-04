@@ -1,17 +1,95 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* ==========================================================================
+   Design tokens
+   All surface/text/accent/geometry values live here as CSS custom properties.
+   The dark palette only redeclares the tokens below under [data-bs-theme="dark"]
+   - every rule further down reads a token, never a literal, so both themes
+   fall out of this one block for free. Aliasing onto Bootstrap's own --bs-*
+   variables (instead of overriding its component CSS directly) means every
+   Bootstrap component - cards, modals, dropdowns, alerts, form controls -
+   re-themes itself with zero extra rules.
+   ========================================================================== */
 
 :root {
-    --primary-color: #0056b3; /* Professional Corporate Blue */
-    --secondary-color: #f8f9fa;
-    --text-main: #333333;
-    --text-muted: #6c757d;
-    --border-color: #e9ecef;
+    /* Surfaces: page canvas -> raised card/modal/dropdown surface -> sunken
+       (table headers, hover states, disabled fields, subtle panels) */
+    --surface-page: #f7f8fa;
+    --surface-card: #ffffff;
+    --surface-sunken: #f1f3f5;
+
+    --border-subtle: #e8eaed;
+
+    --text-strong: #1a2027;
+    --text-body: #3c4653;
+    --text-muted: #6b7684;
+
+    --accent: #0056b3;
+    --accent-rgb: 0, 86, 179;
+    --accent-hover: #00458f;
+    --accent-soft: rgba(0, 86, 179, .08);
+
+    --radius: 10px;
+    --radius-sm: 6px;
+    --card-pad: 1.75rem;
+    --shadow-card: 0 1px 2px rgba(15, 23, 42, .04), 0 1px 1px rgba(15, 23, 42, .03);
+
+    color-scheme: light;
+
+    /* --- Bootstrap variable aliasing (light) --- */
+    --bs-body-bg: var(--surface-page);
+    --bs-body-color: var(--text-body);
+    --bs-border-color: var(--border-subtle);
+    --bs-border-color-translucent: var(--border-subtle);
+    --bs-emphasis-color: var(--text-strong);
+    --bs-secondary-color: var(--text-muted);
+    --bs-tertiary-bg: var(--surface-sunken);
+    --bs-secondary-bg: var(--surface-sunken);
+    --bs-primary: var(--accent);
+    --bs-primary-rgb: var(--accent-rgb);
+    --bs-link-color: var(--accent);
+    --bs-link-color-rgb: var(--accent-rgb);
+    --bs-link-hover-color: var(--accent-hover);
+    /* Components with their own bg var that would otherwise default back to
+       --bs-body-bg (the page canvas) instead of the raised card surface. */
+    --bs-card-bg: var(--surface-card);
+    --bs-modal-bg: var(--surface-card);
+    --bs-modal-color: var(--text-body);
+    --bs-dropdown-bg: var(--surface-card);
+    --bs-dropdown-link-active-bg: var(--accent);
+    --bs-list-group-bg: var(--surface-card);
 }
 
+[data-bs-theme="dark"] {
+    /* Slate/charcoal, never pure black. */
+    --surface-page: #12161c;
+    --surface-card: #1a1f27;
+    --surface-sunken: #222831;
+
+    --border-subtle: #2b323c;
+
+    --text-strong: #e8ebef;
+    --text-body: #c3cad3;
+    --text-muted: #8b95a3;
+
+    --accent: #5a9cf8;
+    --accent-rgb: 90, 156, 248;
+    --accent-hover: #7bb0fa;
+    --accent-soft: rgba(90, 156, 248, .14);
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, .28), 0 1px 1px rgba(0, 0, 0, .24);
+
+    color-scheme: dark;
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
 body {
-    background-color: #f4f6f9;
-    color: var(--text-main);
+    background-color: var(--surface-page);
+    color: var(--text-body);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 0.9375rem;
+    line-height: 1.6;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -20,108 +98,320 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
     font-weight: 600;
-    color: #2c3e50;
+    color: var(--text-strong);
+    letter-spacing: -0.01em;
 }
 
-/* Clean Professional Navbar */
+h2 { font-size: 1.375rem; }
+
+small, .text-muted { color: var(--text-muted) !important; }
+
+a { color: var(--accent); }
+a:hover { color: var(--accent-hover); }
+
+/* ==========================================================================
+   Navbar
+   ========================================================================== */
+
 .navbar {
-    background-color: #ffffff;
-    border-bottom: 1px solid var(--border-color);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    background-color: var(--surface-card);
+    border-bottom: 1px solid var(--border-subtle);
     padding: 0.75rem 0;
 }
 
 .navbar-brand {
     font-weight: 700;
-    color: var(--primary-color) !important;
+    color: var(--accent) !important;
     font-size: 1.25rem;
     letter-spacing: -0.2px;
 }
 
 .nav-link {
-    color: #495057 !important;
+    color: var(--text-muted) !important;
     font-weight: 500;
     padding: 0.5rem 1rem !important;
-    border-radius: 4px;
-    transition: background-color 0.2s, color 0.2s;
+    border-radius: var(--radius-sm);
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .nav-link:hover, .nav-link.active {
-    color: var(--primary-color) !important;
-    background-color: #f1f3f5;
+    color: var(--accent) !important;
+    background-color: var(--accent-soft);
 }
 
-/* Professional Cards */
-.pro-card {
-    background: #ffffff;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 2rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.pro-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-}
-
-.icon-box {
-    width: 50px;
-    height: 50px;
-    border-radius: 10px;
+/* Theme toggle button in the navbar */
+.theme-toggle {
+    border: 1px solid var(--border-subtle);
+    background: transparent;
+    color: var(--text-muted);
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: var(--radius-sm);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background-color: rgba(0, 86, 179, 0.1);
-    color: var(--primary-color);
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.theme-toggle:hover {
+    color: var(--accent);
+    background-color: var(--accent-soft);
+}
+
+/* ==========================================================================
+   Cards - the keystone surface used across ~40 views (`.pro-card`)
+   Flat by design: a hairline border and a near-invisible shadow instead of
+   the previous heavier shadow + hover lift.
+   ========================================================================== */
+
+.pro-card {
+    background: var(--surface-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: var(--card-pad);
+    box-shadow: var(--shadow-card);
+}
+
+/* Shape only - colour comes from a Bootstrap `bg-*-subtle text-*` pair on the
+   element itself, so each usage can pick its own semantic colour while still
+   staying theme-aware (those utilities already have their own dark values). */
+.icon-box {
+    width: 50px;
+    height: 50px;
+    border-radius: var(--radius-sm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--accent-soft);
+    color: var(--accent);
     font-size: 1.5rem;
     margin-bottom: 1.25rem;
 }
 
-/* Buttons */
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+
 .btn-primary {
-    background-color: var(--primary-color);
-    border-color: var(--primary-color);
+    background-color: var(--accent);
+    border-color: var(--accent);
     font-weight: 500;
     padding: 0.5rem 1.25rem;
-    border-radius: 6px;
-    transition: all 0.2s;
+    border-radius: var(--radius-sm);
+    transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.btn-primary:hover {
-    background-color: #004494;
-    border-color: #004494;
+.btn-primary:hover, .btn-primary:focus {
+    background-color: var(--accent-hover);
+    border-color: var(--accent-hover);
 }
 
-/* Layout structural fixes */
+.btn-outline-primary {
+    --bs-btn-color: var(--accent);
+    --bs-btn-border-color: var(--accent);
+    --bs-btn-hover-bg: var(--accent);
+    --bs-btn-hover-border-color: var(--accent);
+    --bs-btn-active-bg: var(--accent);
+    --bs-btn-active-border-color: var(--accent);
+}
+
+.btn, .form-control, .form-select, .input-group-text {
+    border-radius: var(--radius-sm);
+}
+
+/* ==========================================================================
+   Layout structure
+   ========================================================================== */
+
 main {
     flex: 1;
-    padding-top: 2rem;
-    padding-bottom: 3rem;
+    padding-top: 2.25rem;
+    padding-bottom: 3.5rem;
 }
 
 footer {
-    background-color: #ffffff;
-    border-top: 1px solid var(--border-color);
+    background-color: var(--surface-card);
+    border-top: 1px solid var(--border-subtle);
     color: var(--text-muted);
     padding: 1.5rem 0;
     margin-top: auto;
 }
 
-footer a {
-    color: var(--primary-color);
-    text-decoration: none;
+footer a { color: var(--accent); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+
+/* Page headers - the `mb-4 border-bottom pb-3` block repeated on ~43 views */
+.border-bottom { border-color: var(--border-subtle) !important; }
+.border-top { border-color: var(--border-subtle) !important; }
+
+/* ==========================================================================
+   Visual quieting - global utility neutralisation
+   Overriding these once here means the ~35 views nobody hand-edits still
+   lose their heavy shadows/borders/panels and stay theme-aware.
+   ========================================================================== */
+
+.shadow, .shadow-sm, .shadow-lg {
+    box-shadow: var(--shadow-card) !important;
 }
 
-footer a:hover {
-    text-decoration: underline;
+.border-2, .border-4 {
+    border-width: 1px !important;
 }
 
-/* Custom Search Autocomplete Active State */
+.bg-light {
+    background-color: var(--surface-sunken) !important;
+    color: var(--text-body) !important;
+}
+
+.bg-white {
+    background-color: var(--surface-card) !important;
+    color: var(--text-body) !important;
+}
+
+.table > :not(caption) > * > .table-light,
+thead.table-light {
+    --bs-table-bg: var(--surface-sunken);
+    --bs-table-color: var(--text-body);
+    background-color: var(--surface-sunken) !important;
+    color: var(--text-body) !important;
+    border-color: var(--border-subtle) !important;
+}
+
+/* `border-dashed` is used across empty states but was never defined -
+   without this it silently renders as a solid border. */
+.border-dashed {
+    border-style: dashed !important;
+}
+
+/* Status badge tint (`bg-{color} bg-opacity-10`, ~25 uses) is nearly
+   invisible on a dark surface at 10% opacity - bump it in dark mode only. */
+[data-bs-theme="dark"] .bg-opacity-10 {
+    --bs-bg-opacity: 0.18;
+}
+
+/* ==========================================================================
+   Third-party widgets that don't follow [data-bs-theme] on their own.
+   ========================================================================== */
+
+/* flatpickr */
+[data-bs-theme="dark"] .flatpickr-calendar {
+    background: var(--surface-card);
+    color: var(--text-body);
+    box-shadow: var(--shadow-card);
+    border-color: var(--border-subtle);
+}
+[data-bs-theme="dark"] .flatpickr-months .flatpickr-month,
+[data-bs-theme="dark"] .flatpickr-current-month .flatpickr-monthDropdown-months,
+[data-bs-theme="dark"] .flatpickr-weekdays {
+    background: var(--surface-card);
+    color: var(--text-strong);
+    fill: var(--text-strong);
+}
+[data-bs-theme="dark"] .flatpickr-current-month .numInputWrapper,
+[data-bs-theme="dark"] .flatpickr-current-month input.cur-year {
+    color: var(--text-strong);
+    background: transparent;
+}
+[data-bs-theme="dark"] .flatpickr-day { color: var(--text-body); }
+[data-bs-theme="dark"] .flatpickr-day.flatpickr-disabled,
+[data-bs-theme="dark"] .flatpickr-day.flatpickr-disabled:hover,
+[data-bs-theme="dark"] .flatpickr-day.prevMonthDay,
+[data-bs-theme="dark"] .flatpickr-day.nextMonthDay {
+    color: var(--text-muted);
+}
+[data-bs-theme="dark"] .flatpickr-day:hover { background: var(--surface-sunken); }
+[data-bs-theme="dark"] .flatpickr-day.today { border-color: var(--accent); }
+[data-bs-theme="dark"] .flatpickr-day.selected,
+[data-bs-theme="dark"] .flatpickr-day.selected:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+[data-bs-theme="dark"] .flatpickr-input,
+[data-bs-theme="dark"] input.flatpickr-input,
+[data-bs-theme="dark"] .flatpickr-alt-input {
+    background: var(--surface-card);
+    color: var(--text-body);
+    border-color: var(--border-subtle);
+}
+
+/* select2 */
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-selection {
+    background-color: var(--surface-card);
+    border-color: var(--border-subtle);
+    color: var(--text-body);
+}
+[data-bs-theme="dark"] .select2-container--bootstrap-5 .select2-selection__rendered {
+    color: var(--text-body);
+}
+[data-bs-theme="dark"] .select2-dropdown {
+    background-color: var(--surface-card);
+    border-color: var(--border-subtle);
+    color: var(--text-body);
+}
+[data-bs-theme="dark"] .select2-search--dropdown .select2-search__field {
+    background-color: var(--surface-sunken);
+    color: var(--text-body);
+    border-color: var(--border-subtle);
+}
+[data-bs-theme="dark"] .select2-results__option {
+    color: var(--text-body);
+}
+[data-bs-theme="dark"] .select2-results__option--highlighted[aria-selected] {
+    background-color: var(--accent) !important;
+    color: #fff !important;
+}
+
+/* sweetalert2 */
+[data-bs-theme="dark"] .swal2-popup {
+    background: var(--surface-card);
+    color: var(--text-body);
+}
+[data-bs-theme="dark"] .swal2-title { color: var(--text-strong); }
+[data-bs-theme="dark"] .swal2-html-container { color: var(--text-body); }
+
+/* ==========================================================================
+   Custom search autocomplete active state
+   ========================================================================== */
+
 .search-item-active {
-    background-color: #f1f4f8 !important; /* solid light blue-gray */
-    border-color: #0d6efd !important;
-    outline: 1px solid #0d6efd;
+    background-color: var(--accent-soft) !important;
+    border-color: var(--accent) !important;
+    outline: 1px solid var(--accent);
     z-index: 2;
+}
+
+/* Vertical divider between a split card's two halves (e.g. the doctor dashboard's
+   consultation + AI review panel) - only once they sit side by side; below that
+   breakpoint the columns stack and a left border would just look stray. Bootstrap
+   has no "add a border starting at a breakpoint" utility, only ones that remove it. */
+@media (min-width: 768px) {
+    .border-start-md {
+        border-left: 1px solid var(--border-subtle);
+    }
+}
+
+/* The live "typing" preview while an AI case summary streams in is plain text (the
+   headline+bullets markdown only gets parsed into real <ul>/<li> HTML once the stream
+   finishes and the finished card renders) - pre-line keeps its line breaks visible
+   instead of the browser collapsing them the way it would in an ordinary <p>. */
+#caseSummaryStreamFeed {
+    white-space: pre-line;
+}
+
+/* ==========================================================================
+   Print - always light, regardless of the active theme.
+   ========================================================================== */
+
+@media print {
+    :root, [data-bs-theme="dark"] {
+        color-scheme: light;
+        --surface-page: #ffffff;
+        --surface-card: #ffffff;
+        --surface-sunken: #f8f9fa;
+        --border-subtle: #dee2e6;
+        --text-strong: #000000;
+        --text-body: #212529;
+        --text-muted: #6c757d;
+    }
 }

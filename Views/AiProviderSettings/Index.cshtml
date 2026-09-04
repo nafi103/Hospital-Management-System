@@ -1,0 +1,107 @@
+@model List<HospitalManagementSystem.Controllers.AiProviderRow>
+
+@{
+    ViewData["Title"] = "AI Provider Settings";
+    var configuredCount = Model.Count(r => r.IsConfigured);
+}
+
+<div class="mb-4 border-bottom pb-3">
+    <h2 class="mb-1">AI Provider Settings</h2>
+    <p class="text-muted mb-0">Add, reorder, and remove the API keys AI features use. The first enabled, configured provider (lowest priority number) is tried first; if it fails, the next one takes over automatically.</p>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@for (var i = 0; i < Model.Count; i++)
+{
+    var row = Model[i];
+    var configuredRows = Model.Where(r => r.IsConfigured).OrderBy(r => r.Priority).ToList();
+    var configuredIndex = configuredRows.FindIndex(r => r.Provider == row.Provider);
+
+    <div class="pro-card mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="d-flex align-items-center gap-2">
+                <h5 class="mb-0">@row.Provider</h5>
+                @if (row.IsConfigured)
+                {
+                    <span class="badge @(row.IsEnabled ? "bg-success" : "bg-secondary")">
+                        @(row.IsEnabled ? "Configured & Enabled" : "Configured & Disabled")
+                    </span>
+                    <span class="badge bg-light border">Priority @row.Priority</span>
+                }
+                else
+                {
+                    <span class="badge bg-light border">Not configured</span>
+                }
+            </div>
+
+            @if (row.IsConfigured && configuredRows.Count > 1)
+            {
+                <div class="d-flex gap-1">
+                    <form asp-action="MoveUp" asp-route-id="@row.Id" method="post">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary" title="Move up (higher priority)" @(configuredIndex == 0 ? "disabled" : "")>
+                            <i class="bi bi-arrow-up"></i>
+                        </button>
+                    </form>
+                    <form asp-action="MoveDown" asp-route-id="@row.Id" method="post">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary" title="Move down (lower priority)" @(configuredIndex == configuredRows.Count - 1 ? "disabled" : "")>
+                            <i class="bi bi-arrow-down"></i>
+                        </button>
+                    </form>
+                </div>
+            }
+        </div>
+
+        <form asp-action="Save" method="post" class="row g-3 align-items-end">
+            <input type="hidden" name="provider" value="@row.Provider" />
+            <div class="col-md-4">
+                <label class="form-label fw-medium">API Key</label>
+                <input type="password" name="apiKey" class="form-control" autocomplete="off"
+                       placeholder="@(row.IsConfigured ? "Leave blank to keep existing key" : "Paste API key")" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-medium">Model</label>
+                <input type="text" name="modelId" class="form-control" value="@row.ModelId" required />
+            </div>
+            <div class="col-md-2">
+                <div class="form-check mt-4">
+                    <input type="checkbox" name="isEnabled" value="true" class="form-check-input" id="enabled-@row.Provider" checked="@row.IsEnabled" />
+                    <label class="form-check-label" for="enabled-@row.Provider">Enabled</label>
+                </div>
+            </div>
+            <div class="col-md-3 d-flex gap-2 justify-content-end">
+                <button type="submit" class="btn btn-primary">
+                    @(row.IsConfigured ? "Update" : "Add")
+                </button>
+                @if (row.IsConfigured)
+                {
+                    <button type="submit" formaction="@Url.Action("Remove", new { id = row.Id })"
+                            class="btn btn-outline-danger" onclick="return confirm('Remove the @row.Provider API key?');">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                }
+            </div>
+        </form>
+    </div>
+}
+
+@if (configuredCount == 0)
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        No AI provider is configured yet. AI features (case summaries, etc.) won't work until at least one is added above.
+    </div>
+}

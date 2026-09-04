@@ -7,7 +7,8 @@ namespace HospitalManagementSystem.Models
 {
     public enum AiSuggestionType
     {
-        CaseNoteDraft
+        CaseNoteDraft,
+        CaseSummary
     }
 
     public enum AiSuggestionVerdict

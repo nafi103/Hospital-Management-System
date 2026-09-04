@@ -33,6 +33,24 @@ namespace HospitalManagementSystem.Controllers
                 .OrderBy(a => a.UpdatedAt) // Oldest sent in first
                 .ToListAsync();
 
+            // The latest AI draft per patient (whatever its verdict), so each consultation
+            // card can show its own AI review panel inline instead of a separate list
+            // elsewhere on the page - still-Pending drafts get Accept/Edit/Reject, already
+            // -reviewed ones show who reviewed it and when, and only a patient with no
+            // suggestion at all falls back to the empty/loading states. Grouped in memory
+            // (not translated to SQL) - the active-consultation list is always small, so
+            // this is cheap and avoids EF's spotty support for "top 1 per group" queries.
+            var patientIds = activeConsultations.Select(a => a.PatientId).ToList();
+            var latestSuggestionByPatient = (await _context.AiSuggestions
+                    .Include(s => s.ReviewedBy)
+                    .Where(s => patientIds.Contains(s.PatientId))
+                    .OrderByDescending(s => s.CreatedAt)
+                    .ToListAsync())
+                .GroupBy(s => s.PatientId)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            ViewBag.LatestAiSuggestionByPatient = latestSuggestionByPatient;
+
             return View(activeConsultations);
         }
 
