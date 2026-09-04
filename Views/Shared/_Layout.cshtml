@@ -68,6 +68,12 @@
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="Prescriptions" asp-action="Index">Prescriptions</a>
                             </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Patients" asp-action="Index">Patients</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="MedicalRecords" asp-action="Index">Medical Records</a>
+                            </li>
                         }
                         else if (User.IsInRole("Assistant"))
                         {
@@ -139,6 +145,9 @@
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="Bills" asp-action="Index">Bills</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Medicines" asp-action="Index">Inventory</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="Staff" asp-action="Index">Staff</a>

@@ -1,0 +1,85 @@
+@model HospitalManagementSystem.Models.PatientVital
+@using HospitalManagementSystem.Models
+@{
+    ViewData["Title"] = "Record Vitals";
+    var appointment = (Appointment)ViewBag.Appointment;
+}
+
+<div class="mb-4 border-bottom pb-3">
+    <a asp-controller="Appointments" asp-action="Index" class="text-decoration-none text-muted mb-2 d-inline-block">
+        <i class="bi bi-arrow-left"></i> Back to Queue
+    </a>
+    <h2 class="mb-1">Record Vitals</h2>
+    <p class="text-muted mb-0">
+        For <span class="fw-medium">@(string.IsNullOrEmpty(appointment.Patient?.FullName) ? "Baby of " + appointment.Patient?.EmergencyContactName : appointment.Patient?.FullName)</span>
+        &middot; UHID: @appointment.Patient?.Uhid
+    </p>
+</div>
+
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="pro-card">
+            <form asp-action="Create">
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+                <input type="hidden" asp-for="AppointmentId" />
+                <input type="hidden" asp-for="PatientId" />
+
+                <h5 class="card-title text-primary mb-4 border-bottom pb-2">Vital Signs</h5>
+                <div class="row g-4 mb-4">
+                    <div class="col-md-4">
+                        <label asp-for="SystolicBp" class="form-label fw-medium">Systolic BP (mmHg) <span class="text-danger">*</span></label>
+                        <input asp-for="SystolicBp" type="number" class="form-control" placeholder="e.g. 120" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="DiastolicBp" class="form-label fw-medium">Diastolic BP (mmHg) <span class="text-danger">*</span></label>
+                        <input asp-for="DiastolicBp" type="number" class="form-control" placeholder="e.g. 80" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="HeartRate" class="form-label fw-medium">Heart Rate (bpm) <span class="text-danger">*</span></label>
+                        <input asp-for="HeartRate" type="number" class="form-control" placeholder="e.g. 78" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="RespiratoryRate" class="form-label fw-medium">Respiratory Rate (breaths/min) <span class="text-danger">*</span></label>
+                        <input asp-for="RespiratoryRate" type="number" class="form-control" placeholder="e.g. 16" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="Spo2" class="form-label fw-medium">SpO2 (%) <span class="text-danger">*</span></label>
+                        <input asp-for="Spo2" type="number" step="0.1" class="form-control" placeholder="e.g. 98" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="Temperature" class="form-label fw-medium">Temperature (&deg;C) <span class="text-danger">*</span></label>
+                        <input asp-for="Temperature" type="number" step="0.1" class="form-control" placeholder="e.g. 37.0" required />
+                    </div>
+                </div>
+
+                <div class="row g-4 mb-4">
+                    <div class="col-md-6">
+                        <label asp-for="Consciousness" class="form-label fw-medium">Consciousness (ACVPU) <span class="text-danger">*</span></label>
+                        <select asp-for="Consciousness" class="form-select" asp-items="Html.GetEnumSelectList<ConsciousnessLevel>()"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="BloodSugar" class="form-label fw-medium">Blood Sugar (mmol/L)</label>
+                        <input asp-for="BloodSugar" type="number" step="0.1" class="form-control" placeholder="Optional" />
+                    </div>
+                    <div class="col-md-12">
+                        <div class="form-check form-switch fs-5">
+                            <input class="form-check-input" type="checkbox" role="switch" asp-for="OnSupplementalOxygen" />
+                            <label class="form-check-label fw-medium" asp-for="OnSupplementalOxygen">Patient is on supplemental oxygen</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert alert-info border-0 bg-info bg-opacity-10 mb-4 d-flex align-items-center">
+                    <i class="bi bi-info-circle fs-4 text-info me-3"></i>
+                    <small class="text-muted">Triage priority is calculated automatically from these readings using the NEWS2 scoring method.</small>
+                </div>
+
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="bi bi-clipboard2-pulse me-1"></i> Save Vitals
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

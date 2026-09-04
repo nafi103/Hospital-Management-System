@@ -41,6 +41,30 @@ public class HomeController : Controller
                 ViewBag.DoctorName = doctor?.FullName ?? "Unknown";
             }
         }
+        else if (User.IsInRole("Admin"))
+        {
+            var today = DateTime.UtcNow.Date;
+
+            ViewBag.TotalPatients = await _context.Patients.CountAsync();
+            ViewBag.ActiveAdmissions = await _context.Admissions.CountAsync(a => a.DischargeDate == null);
+
+            var totalBeds = await _context.Beds.CountAsync();
+            var occupiedBeds = await _context.BedTransfers
+                .Where(bt => bt.EndDate == null)
+                .Select(bt => bt.BedId)
+                .Distinct()
+                .CountAsync();
+            ViewBag.FreeBeds = totalBeds - occupiedBeds;
+
+            var unpaidBills = await _context.Bills
+                .Where(b => b.Status != BillStatus.Paid)
+                .ToListAsync();
+            ViewBag.UnpaidBillCount = unpaidBills.Count;
+            ViewBag.OutstandingAmount = unpaidBills.Sum(b => b.NetTotal - b.PaidAmount);
+
+            ViewBag.TodaysAppointments = await _context.Appointments
+                .CountAsync(a => a.AppointmentDatetime >= today && a.AppointmentDatetime < today.AddDays(1));
+        }
         return View();
     }
 

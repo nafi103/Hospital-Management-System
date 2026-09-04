@@ -59,28 +59,18 @@ namespace HospitalManagementSystem.Controllers
                 .OrderBy(a => a.Status == AppointmentStatus.Completed ? 1 : 0) // Completed at the bottom
                 .ThenBy(a => a.AppointmentDatetime) // Oldest waiting first
                 .ToListAsync();
-                
+
+            // Grouped in memory rather than ToDictionaryAsync - a re-recorded vitals
+            // entry would otherwise throw on a duplicate AppointmentId key. Latest wins.
+            var appointmentIds = appointments.Select(a => a.Id).ToList();
+            ViewBag.TriageByAppointment = (await _context.PatientVitals
+                    .Where(v => v.AppointmentId.HasValue && appointmentIds.Contains(v.AppointmentId.Value))
+                    .OrderByDescending(v => v.CreatedAt)
+                    .ToListAsync())
+                .GroupBy(v => v.AppointmentId!.Value)
+                .ToDictionary(g => g.Key, g => g.First().TriagePriority);
+
             return View(appointments);
-        }
-
-        // GET: Appointments/Details/5
-        public async Task<IActionResult> Details(int? id)
-        {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
-            var appointment = await _context.Appointments
-                .Include(a => a.Patient)
-                .Include(a => a.Doctor)
-                .FirstOrDefaultAsync(m => m.Id == id);
-            if (appointment == null)
-            {
-                return NotFound();
-            }
-
-            return View(appointment);
         }
 
         // GET: Appointments/Create
@@ -288,6 +278,11 @@ namespace HospitalManagementSystem.Controllers
                 _context.Update(appointment);
                 await _context.SaveChangesAsync();
 
+                var latestVital = await _context.PatientVitals
+                    .Where(v => v.AppointmentId == appointment.Id)
+                    .OrderByDescending(v => v.CreatedAt)
+                    .FirstOrDefaultAsync();
+
                 var payload = new {
                     id = appointment.Id,
                     patientName = appointment.Patient?.FullName ?? "Unknown",
@@ -295,10 +290,16 @@ namespace HospitalManagementSystem.Controllers
                     reason = string.IsNullOrEmpty(appointment.ReasonForVisit) ? "No reason specified." : appointment.ReasonForVisit,
                     patientId = appointment.PatientId,
                     doctorId = appointment.DoctorId,
-                    time = appointment.UpdatedAt.ToLocalTime().ToString("hh:mm tt")
+                    time = appointment.UpdatedAt.ToLocalTime().ToString("hh:mm tt"),
+                    triage = latestVital?.TriagePriority?.ToString(),
+                    vitalsSummary = latestVital == null ? null :
+                        $"BP {latestVital.SystolicBp}/{latestVital.DiastolicBp} · HR {latestVital.HeartRate} · SpO2 {latestVital.Spo2}% · Temp {latestVital.Temperature}°C · RR {latestVital.RespiratoryRate}"
                 };
                 
-                await _hubContext.Clients.All.SendAsync("PatientSentIn", payload);
+                // Scoped to this doctor's group (which their assistant also joins) -
+                // Clients.All used to push every arrival to every connected doctor,
+                // regardless of whose patient it was.
+                await _hubContext.Clients.Group($"Doctor_{appointment.DoctorId}").SendAsync("PatientSentIn", payload);
 
                 // Fire-and-forget so the assistant isn't stuck waiting several seconds
                 // on an AI call just to send a patient in. Runs in its own DI scope
@@ -319,7 +320,7 @@ namespace HospitalManagementSystem.Controllers
 
                 // Lets an already-open doctor dashboard swap the "generating..." spinner
                 // on that patient's card for the real draft without a page reload.
-                await _hubContext.Clients.All.SendAsync("ArrivalAiReady", new { patientId, suggestionId = suggestion.Id });
+                await _hubContext.Clients.Group($"Doctor_{doctorId}").SendAsync("ArrivalAiReady", new { patientId, suggestionId = suggestion.Id });
             }
             catch (ClinicalAiException ex)
             {
@@ -327,12 +328,12 @@ namespace HospitalManagementSystem.Controllers
                 // won't have a pre-generated summary waiting; they can still generate
                 // one manually from the patient page.
                 _logger.LogInformation("Arrival AI summary skipped for patient {PatientId}: {Reason}", patientId, ex.Reason);
-                await _hubContext.Clients.All.SendAsync("ArrivalAiFailed", new { patientId });
+                await _hubContext.Clients.Group($"Doctor_{doctorId}").SendAsync("ArrivalAiFailed", new { patientId });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected failure generating arrival AI summary for patient {PatientId}", patientId);
-                await _hubContext.Clients.All.SendAsync("ArrivalAiFailed", new { patientId });
+                await _hubContext.Clients.Group($"Doctor_{doctorId}").SendAsync("ArrivalAiFailed", new { patientId });
             }
         }
     }

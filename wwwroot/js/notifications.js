@@ -48,6 +48,21 @@ $(document).ready(function () {
                     const tokenElement = document.querySelector('input[name="__RequestVerificationToken"]');
                     const tokenValue = tokenElement ? tokenElement.value : '';
 
+                    // Mirrors the triage badge DoctorDashboard/Index.cshtml renders server-side
+                    // for vitals recorded before this patient was sent in - kept here too so a
+                    // dashboard that's already open shows it without needing a reload.
+                    let triageHtml = '';
+                    if (payload.triage) {
+                        const triageClass = payload.triage === 'Emergency' ? 'danger' : (payload.triage === 'Urgent' ? 'warning' : 'success');
+                        triageHtml = `
+                            <div class="mb-3">
+                                <span class="badge bg-${triageClass} bg-opacity-10 text-${triageClass} border border-${triageClass}-subtle mb-2">
+                                    <i class="bi bi-clipboard2-pulse me-1"></i> Triage: ${payload.triage}
+                                </span>
+                                <div class="small text-muted">${payload.vitalsSummary || ''}</div>
+                            </div>`;
+                    }
+
                     // The AI review panel starts in its loading state - GenerateArrivalSummary
                     // runs in the background on the server and reports back over this same
                     // connection (ArrivalAiReady / ArrivalAiFailed) once it's done.
@@ -61,7 +76,8 @@ $(document).ready(function () {
                                     </div>
 
                                     <h4 class="fw-bold text-primary mb-1">${payload.patientName}</h4>
-                                    <p class="text-muted mb-3"><i class="bi bi-person-badge"></i> UHID: ${payload.uhid}</p>
+                                    <p class="text-muted mb-2"><i class="bi bi-person-badge"></i> UHID: ${payload.uhid}</p>
+                                    ${triageHtml}
 
                                     <div class="bg-light p-3 rounded mb-4">
                                         <h6 class="fw-bold mb-2 text-muted">Reason for Visit:</h6>

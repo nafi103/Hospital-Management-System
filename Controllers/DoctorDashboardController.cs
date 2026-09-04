@@ -25,11 +25,15 @@ namespace HospitalManagementSystem.Controllers
         // GET: DoctorDashboard
         public async Task<IActionResult> Index()
         {
-            // Fetch appointments that are currently InConsultation
+            var userIdClaim = User.FindFirst("UserId")?.Value;
+            int.TryParse(userIdClaim, out int doctorId);
+
+            // Fetch appointments that are currently InConsultation, scoped to this doctor -
+            // without this filter every doctor sees every other doctor's active patients.
             var activeConsultations = await _context.Appointments
                 .Include(a => a.Patient)
                 .Include(a => a.Doctor)
-                .Where(a => a.Status == AppointmentStatus.InConsultation)
+                .Where(a => a.Status == AppointmentStatus.InConsultation && a.DoctorId == doctorId)
                 .OrderBy(a => a.UpdatedAt) // Oldest sent in first
                 .ToListAsync();
 
@@ -50,6 +54,17 @@ namespace HospitalManagementSystem.Controllers
                 .ToDictionary(g => g.Key, g => g.First());
 
             ViewBag.LatestAiSuggestionByPatient = latestSuggestionByPatient;
+
+            // The vitals tied to this specific visit (by AppointmentId), not just any
+            // past reading for the patient - a stale triage badge from a prior visit
+            // would be actively misleading on today's card.
+            var appointmentIds = activeConsultations.Select(a => a.Id).ToList();
+            ViewBag.VitalsByAppointment = (await _context.PatientVitals
+                    .Where(v => v.AppointmentId.HasValue && appointmentIds.Contains(v.AppointmentId.Value))
+                    .OrderByDescending(v => v.CreatedAt)
+                    .ToListAsync())
+                .GroupBy(v => v.AppointmentId!.Value)
+                .ToDictionary(g => g.Key, g => g.First());
 
             return View(activeConsultations);
         }

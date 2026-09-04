@@ -1,7 +1,9 @@
 @model IEnumerable<HospitalManagementSystem.Models.Appointment>
+@using HospitalManagementSystem.Models
 
 @{
     ViewData["Title"] = "Consultations";
+    var triageByAppointment = ViewBag.TriageByAppointment as Dictionary<int, TriagePriority?>;
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
@@ -53,6 +55,19 @@
                     <td>
                         <div class="fw-bold text-primary">@item.Patient?.FullName</div>
                         <small class="text-muted">@item.Patient?.Uhid</small>
+                        @{
+                            TriagePriority? triage = null;
+                            triageByAppointment?.TryGetValue(item.Id, out triage);
+                        }
+                        @if (triage.HasValue)
+                        {
+                            var triageClass = triage == TriagePriority.Emergency ? "danger" : triage == TriagePriority.Urgent ? "warning" : "success";
+                            <div class="mt-1">
+                                <span class="badge bg-@triageClass bg-opacity-10 text-@triageClass border border-@(triageClass)-subtle">
+                                    <i class="bi bi-clipboard2-pulse me-1"></i> @triage
+                                </span>
+                            </div>
+                        }
                     </td>
                     <td>
                         <div class="fw-medium">@item.Doctor?.FullName</div>
@@ -78,6 +93,9 @@
                         <div class="d-flex justify-content-end gap-1">
                             @if(item.Status == HospitalManagementSystem.Models.AppointmentStatus.Scheduled)
                             {
+                                <a asp-controller="Vitals" asp-action="Create" asp-route-appointmentId="@item.Id" class="btn btn-sm btn-outline-secondary" title="Record Vitals">
+                                    <i class="bi bi-clipboard2-pulse"></i>
+                                </a>
                                 <form asp-action="SendIn" asp-route-id="@item.Id" method="post" style="display:inline;">
                                     <button type="submit" class="btn btn-sm btn-primary" title="Send In to Doctor">
                                         Send In <i class="bi bi-box-arrow-in-right ms-1"></i>

@@ -64,11 +64,42 @@
         </div>
     </div>
 }
-else
+else if (User.IsInRole("Admin"))
 {
     <div class="mb-5 border-bottom pb-4">
         <h2 class="mb-1">Hospital Dashboard</h2>
         <p class="text-muted mb-0">Overview of facility operations and quick access modules.</p>
+    </div>
+
+    <div class="row g-4 mb-5">
+        <div class="col-md-3">
+            <div class="pro-card h-100 text-center border-start border-4 border-primary">
+                <h6 class="text-muted text-uppercase mb-2">Total Patients</h6>
+                <h2 class="fw-bold text-primary mb-0">@ViewBag.TotalPatients</h2>
+                <small class="text-muted">Registered</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="pro-card h-100 text-center border-start border-4 border-warning">
+                <h6 class="text-muted text-uppercase mb-2">Active Admissions</h6>
+                <h2 class="fw-bold text-warning mb-0">@ViewBag.ActiveAdmissions</h2>
+                <small class="text-muted">Currently Admitted</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="pro-card h-100 text-center border-start border-4 border-info">
+                <h6 class="text-muted text-uppercase mb-2">Free Beds</h6>
+                <h2 class="fw-bold text-info mb-0">@ViewBag.FreeBeds</h2>
+                <small class="text-muted">Available Now</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="pro-card h-100 text-center border-start border-4 border-danger">
+                <h6 class="text-muted text-uppercase mb-2">Unpaid Bills</h6>
+                <h2 class="fw-bold text-danger mb-0">@ViewBag.UnpaidBillCount</h2>
+                <small class="text-muted">৳@(((decimal)ViewBag.OutstandingAmount).ToString("N2")) outstanding</small>
+            </div>
+        </div>
     </div>
 
     <div class="row g-4">
@@ -90,7 +121,7 @@ else
                 </div>
                 <h4 class="mb-2">Bed Availability</h4>
                 <p class="text-muted mb-4 small">Monitor real-time occupancy status for ICUs, General Wards, and private Cabins.</p>
-                <button class="btn btn-outline-secondary w-100" disabled>View Beds (Pending)</button>
+                <a asp-controller="Beds" asp-action="Index" class="btn btn-outline-success w-100">View Beds</a>
             </div>
         </div>
 
@@ -100,9 +131,16 @@ else
                     <i class="bi bi-calendar2-check-fill"></i>
                 </div>
                 <h4 class="mb-2">Appointments</h4>
-                <p class="text-muted mb-4 small">Schedule Outpatient Department (OPD) visits and track surgical operation schedules.</p>
-                <button class="btn btn-outline-secondary w-100" disabled>Schedule (Pending)</button>
+                <p class="text-muted mb-4 small">@ViewBag.TodaysAppointments appointment(s) scheduled today across all doctors.</p>
+                <a asp-controller="Admissions" asp-action="Index" class="btn btn-outline-warning w-100">View Admissions</a>
             </div>
         </div>
+    </div>
+}
+else
+{
+    <div class="mb-5 border-bottom pb-4">
+        <h2 class="mb-1">Welcome</h2>
+        <p class="text-muted mb-0">Use the navigation above to get to your workspace.</p>
     </div>
 }

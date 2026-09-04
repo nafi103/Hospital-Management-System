@@ -4,6 +4,7 @@
 @{
     ViewData["Title"] = "Doctor's Desk";
     var latestAiByPatient = ViewBag.LatestAiSuggestionByPatient as Dictionary<int, AiSuggestion>;
+    var vitalsByAppointment = ViewBag.VitalsByAppointment as Dictionary<int, PatientVital>;
     var dashboardUrl = Url.Action("Index", "DoctorDashboard");
 }
 
@@ -24,6 +25,9 @@
         AiSuggestion? latest = null;
         latestAiByPatient?.TryGetValue(item.PatientId, out latest);
 
+        PatientVital? vitals = null;
+        vitalsByAppointment?.TryGetValue(item.Id, out vitals);
+
         // The arrival-triggered AI generation isn't tracked as an explicit "in
         // progress" flag - only its eventual result (an AiSuggestion row, whatever its
         // verdict) is. So on a fresh page load we infer "probably still generating"
@@ -42,7 +46,24 @@
                         </div>
 
                         <h4 class="fw-bold text-primary mb-1">@item.Patient?.FullName</h4>
-                        <p class="text-muted mb-3"><i class="bi bi-person-badge"></i> UHID: @item.Patient?.Uhid</p>
+                        <p class="text-muted mb-2"><i class="bi bi-person-badge"></i> UHID: @item.Patient?.Uhid</p>
+
+                        @if (vitals != null)
+                        {
+                            var triageClass = vitals.TriagePriority == TriagePriority.Emergency ? "danger" : vitals.TriagePriority == TriagePriority.Urgent ? "warning" : "success";
+                            <div class="mb-3">
+                                <span class="badge bg-@triageClass bg-opacity-10 text-@triageClass border border-@(triageClass)-subtle mb-2">
+                                    <i class="bi bi-clipboard2-pulse me-1"></i> Triage: @vitals.TriagePriority
+                                </span>
+                                <div class="small text-muted">
+                                    BP @vitals.SystolicBp/@vitals.DiastolicBp &middot; HR @vitals.HeartRate &middot; SpO2 @vitals.Spo2% &middot; Temp @vitals.Temperature&deg;C &middot; RR @vitals.RespiratoryRate
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="mb-3"></p>
+                        }
 
                         <div class="bg-light p-3 rounded mb-4">
                             <h6 class="fw-bold mb-2 text-muted">Reason for Visit:</h6>

@@ -17,7 +17,7 @@ namespace HospitalManagementSystem.Controllers
         }
 
         // GET: Patients
-        [Authorize(Roles = "Admin,Receptionist")]
+        [Authorize(Roles = "Admin,Receptionist,Doctor")]
         public async Task<IActionResult> Index(string searchString)
         {
             var patients = from p in _context.Patients
