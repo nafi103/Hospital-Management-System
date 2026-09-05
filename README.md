@@ -26,12 +26,16 @@ Receptionist, and Patient.**
 - **Assistant** — a single doctor's chamber queue, vitals recording with automatic NEWS2 triage
   scoring, sending patients in to the consultation room.
 - **Doctor** — a scoped consultation queue (own patients only), an AI-generated pre-visit case
-  summary with Accept/Edit/Reject review, medical records, and prescriptions.
+  summary with Accept/Edit/Reject review, medical records, and prescriptions — with a deterministic
+  safety net on every prescription (duplicate therapy, allergy conflict, stock substitution,
+  pediatric dose) and an AI-generated Bangla patient instruction sheet, gated behind the same
+  Accept-before-print review.
 - **Pharmacist** — the prescription queue and inventory, dispensing against stock.
 - **Patient** — a self-service portal: own appointments, records, prescriptions, and bills. Never
   another patient's.
 - **Admin** — staff and role management, AI provider configuration, and a reporting dashboard
-  (revenue, occupancy, appointment volume, triage mix, AI governance, top medicines).
+  (revenue, occupancy, appointment volume, triage mix, AI governance, prescription safety net,
+  top medicines).
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the AI review pipeline and the
 authorization model actually work, and [docs/DEFENSE-NOTES.md](docs/DEFENSE-NOTES.md) for a
@@ -121,9 +125,9 @@ month-dependent) — look it up in the Patients directory after seeding, or re-r
 dotnet test
 ```
 
-65 xUnit tests cover the NEWS2 triage algorithm (boundary values on all seven parameters plus the
-clinical escalation rules), the PHI-scrubbing/rehydration round trip, and bill total/status
-calculations — the three pieces of pure business logic in the codebase with no database
+80 xUnit tests cover the NEWS2 triage algorithm (boundary values on all seven parameters plus the
+clinical escalation rules), the PHI-scrubbing/rehydration round trip, bill total/status
+calculations, and the prescription safety net's four checks — pure business logic with no database
 dependency. See [docs/DEFENSE-NOTES.md](docs/DEFENSE-NOTES.md) for what each suite is actually
 proving and why.
 

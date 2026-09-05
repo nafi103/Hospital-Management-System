@@ -100,6 +100,15 @@ Two details worth being able to explain unprompted:
   the service gives up and reports "all providers unavailable." Adding a new vendor is
   `IAiTextProvider` + a DI registration — no branching on provider type anywhere else.
 
+This whole sequence — scrub, resolve providers, stream, rehydrate, persist as a Pending
+`AiSuggestion` — is factored into one shared private method (`RunProviderStreamAsync`) that both
+`GenerateCaseSummaryAsync` and `GeneratePatientInstructionsAsync` call. The two callers differ only
+in what context they build beforehand (a patient's medical records vs. one prescription's
+medicines) and what they do with the finished text afterward (citation validation and a
+`MedicalRecord`-scoped payload vs. a plain narrative with no citations, targeting a `Prescription`
+via `AiSuggestion.TargetEntityId`). Adding a third AI feature means writing a third caller, not
+reimplementing the streaming/fallback logic again.
+
 ## 3. Authorization model
 
 ```mermaid
