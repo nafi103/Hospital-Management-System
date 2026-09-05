@@ -299,6 +299,40 @@ namespace HospitalManagementSystem.Controllers
 
             if (prescription == null) return NotFound();
 
+            ViewBag.PatientInstructionSuggestions = await _context.AiSuggestions
+                .Include(s => s.ReviewedBy)
+                .Where(s => s.SuggestionType == AiSuggestionType.PatientInstructions && s.TargetEntityId == prescription.Id)
+                .OrderByDescending(s => s.CreatedAt)
+                .ToListAsync();
+
+            return View(prescription);
+        }
+
+        // GET: Prescriptions/PrintPatientInstructions/5 (AiSuggestion id, not PrescriptionId)
+        // Printable only once a doctor has Accepted or Edited the draft - Pending/Rejected
+        // sheets never reach a patient's hands. Inherits the class-level [Authorize] policy.
+        public async Task<IActionResult> PrintPatientInstructions(int suggestionId)
+        {
+            var suggestion = await _context.AiSuggestions.FirstOrDefaultAsync(s => s.Id == suggestionId);
+            if (suggestion == null || suggestion.SuggestionType != AiSuggestionType.PatientInstructions)
+            {
+                return NotFound();
+            }
+
+            if (suggestion.Verdict == AiSuggestionVerdict.Pending || suggestion.Verdict == AiSuggestionVerdict.Rejected)
+            {
+                TempData["ErrorMessage"] = "This instruction sheet must be reviewed and accepted before it can be printed.";
+                return RedirectToAction(nameof(Details), new { id = suggestion.TargetEntityId });
+            }
+
+            var prescription = await _context.Prescriptions
+                .Include(p => p.Patient)
+                .Include(p => p.Doctor)
+                .FirstOrDefaultAsync(p => p.Id == suggestion.TargetEntityId);
+
+            if (prescription == null) return NotFound();
+
+            ViewBag.Suggestion = suggestion;
             return View(prescription);
         }
 

@@ -21,7 +21,12 @@ namespace HospitalManagementSystem.Services
         // this format existed (their prose renders as a single bold paragraph).
         public static IHtmlContent? RenderCitedNarrative(AiSuggestion suggestion)
         {
-            if (suggestion.SuggestionType != AiSuggestionType.CaseSummary)
+            // PatientInstructions shares CaseSummaryDraft's exact shape (NarrativeText +
+            // an always-empty CitedRecordIds, since a patient instruction sheet has nothing
+            // to cite) rather than a second near-identical DTO - the markdown-lite format
+            // (headline + bullets) and rendering are identical either way.
+            if (suggestion.SuggestionType != AiSuggestionType.CaseSummary
+                && suggestion.SuggestionType != AiSuggestionType.PatientInstructions)
             {
                 return null;
             }

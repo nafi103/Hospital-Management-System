@@ -92,6 +92,9 @@ namespace HospitalManagementSystem.Services
             Console.WriteLine("Seeding a canned AI suggestion (offline fallback for the demo)...");
             await SeedCannedAiSuggestionAsync(patients, records);
 
+            Console.WriteLine("Seeding a canned Bangla patient instruction sheet (offline fallback)...");
+            await SeedCannedPatientInstructionsAsync(patients, drOne.Id);
+
             Console.WriteLine("Seeding additional AI suggestions (for reporting)...");
             await SeedAdditionalAiSuggestionsAsync(patients, records, drOne.Id, drTwo.Id);
 
@@ -769,6 +772,52 @@ namespace HospitalManagementSystem.Services
             await _context.SaveChangesAsync();
         }
 
+        // A pre-generated, pre-accepted Bangla instruction sheet for Rahim's dispensed
+        // Napa 500mg prescription - offline fallback for the demo, exactly like the canned
+        // case summary above. Pre-accepted (not Pending) so "Print Instruction Sheet" is
+        // already available right after a reseed, with no live AI call required.
+        private async Task SeedCannedPatientInstructionsAsync(Dictionary<string, Patient> patients, int reviewedById)
+        {
+            var patient = patients["rahim"];
+            var prescription = await _context.Prescriptions
+                .FirstOrDefaultAsync(p => p.PatientId == patient.Id && p.Status == PrescriptionStatus.Dispensed);
+            if (prescription == null)
+            {
+                return;
+            }
+
+            var narrative =
+                "**জ্বর ও শরীর ব্যথার চিকিৎসার জন্য ন্যাপা ৫০০ মিলিগ্রাম সেবনের নির্দেশনা**\n\n" +
+                "- ন্যাপা ৫০০ মিলিগ্রাম (প্যারাসিটামল): জ্বর কমাতে এবং ব্যথা উপশমের জন্য এই ওষুধ দেওয়া হয়েছে।\n" +
+                "- প্রতিদিন সকালে, দুপুরে ও রাতে খাবারের পর একটি করে ট্যাবলেট, টানা ৪ দিন সেবন করুন।\n" +
+                "- জ্বর ১০২ ডিগ্রি ফারেনহাইটের বেশি হলে, শরীরে র‍্যাশ দেখা দিলে, অথবা তীব্র দুর্বলতা অনুভব করলে দ্রুত হাসপাতালে যোগাযোগ করুন।\n" +
+                "- সম্পূর্ণ কোর্স শেষ না করে ওষুধ বন্ধ করবেন না, এমনকি সুস্থ বোধ করলেও।";
+
+            var draft = new CaseSummaryDraft { NarrativeText = narrative, CitedRecordIds = new List<int>() };
+            var now = DateTime.UtcNow;
+
+            _context.AiSuggestions.Add(new AiSuggestion
+            {
+                SuggestionType = AiSuggestionType.PatientInstructions,
+                PatientId = patient.Id,
+                TargetEntityId = prescription.Id,
+                PayloadJson = JsonSerializer.Serialize(draft),
+                SourceRecordIds = JsonSerializer.Serialize(new[] { prescription.Id }),
+                ModelId = "seed-demo-fallback",
+                PromptVersion = "patient-instructions-v1",
+                Verdict = AiSuggestionVerdict.Accepted,
+                ReviewedById = reviewedById,
+                ReviewedAt = now.AddMinutes(2),
+                InputTokens = 0,
+                OutputTokens = 0,
+                CachedTokens = 0,
+                LatencyMs = 0,
+                CreatedAt = now
+            });
+
+            await _context.SaveChangesAsync();
+        }
+
         private sealed record AdditionalAiSuggestionSpec(string PatientKey, AiSuggestionVerdict Verdict, int DoctorSlot, int InputTokens, int OutputTokens, int CachedTokens, int LatencyMs, int DaysAgo);
 
         // Past AI activity across all four verdicts, so the admin Reports "AI
@@ -869,8 +918,9 @@ namespace HospitalManagementSystem.Services
             Console.WriteLine("12 patients, 20 beds (11 occupied / 9 free), 14 admissions (11 active, 3 discharged),");
             Console.WriteLine("12 prescriptions, 6 bills (2 paid, 1 partially paid, 3 unpaid), 8 appointments today");
             Console.WriteLine("plus 25 historical appointments across the last 14 days (for the admin Reports chart),");
-            Console.WriteLine("10 vitals/triage readings (7 Normal, 2 Urgent, 1 Emergency), and 8 AI suggestions");
-            Console.WriteLine("across all four verdicts (Rahim Uddin's is the one still Pending review).");
+            Console.WriteLine("10 vitals/triage readings (7 Normal, 2 Urgent, 1 Emergency), and 9 AI suggestions");
+            Console.WriteLine("across all four verdicts (Rahim Uddin's case summary is the one still Pending review;");
+            Console.WriteLine("his Napa 500mg prescription has a pre-accepted Bangla instruction sheet ready to print).");
         }
     }
 }

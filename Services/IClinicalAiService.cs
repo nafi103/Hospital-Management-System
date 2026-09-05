@@ -15,5 +15,10 @@ namespace HospitalManagementSystem.Services
         // as an AiSuggestion and returns it. The caller signals stream end/failure to
         // the same group ("StreamComplete" / "StreamError") - see ClinicalAiService.
         Task<AiSuggestion> GenerateCaseSummaryAsync(int patientId, int requestedByUserId, string streamId, CancellationToken ct = default);
+
+        // Same streaming/persistence contract as above, but for a Bangla-language patient
+        // instruction sheet generated from one specific prescription rather than a
+        // patient's whole record history.
+        Task<AiSuggestion> GeneratePatientInstructionsAsync(int prescriptionId, int requestedByUserId, string streamId, CancellationToken ct = default);
     }
 }

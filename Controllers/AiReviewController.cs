@@ -62,6 +62,41 @@ namespace HospitalManagementSystem.Controllers
             }
         }
 
+        // POST: AiReview/GeneratePatientInstructions
+        // Same fetch()-driven streaming pattern as GenerateCaseSummary, but keyed on a
+        // prescription rather than a patient's record history - see
+        // ClinicalAiService.GeneratePatientInstructionsAsync.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> GeneratePatientInstructions(int prescriptionId, string streamId)
+        {
+            var userId = CurrentUserId();
+            if (userId == null) return Forbid();
+
+            if (string.IsNullOrWhiteSpace(streamId))
+            {
+                return BadRequest(new { error = "Missing stream id." });
+            }
+
+            try
+            {
+                var suggestion = await _aiService.GeneratePatientInstructionsAsync(prescriptionId, userId.Value, streamId);
+                return Json(new { suggestionId = suggestion.Id });
+            }
+            catch (ClinicalAiException ex)
+            {
+                var message = ex.Reason switch
+                {
+                    AiFailureReason.RateLimited => "The AI service is busy right now. Try again in a moment.",
+                    AiFailureReason.Unauthorized => "The AI service rejected the request - check the configured API key.",
+                    AiFailureReason.Timeout => "The AI service took too long to respond. Try again.",
+                    AiFailureReason.InvalidResponse => ex.Message,
+                    _ => "The AI service is unavailable right now. Nothing was changed."
+                };
+                return StatusCode(502, new { error = message });
+            }
+        }
+
         // GET: AiReview/RenderSuggestion/5
         // Returns the rendered suggestion card so the browser can swap a live
         // placeholder for it. `compact=true` (used by the doctor dashboard's inline AI
@@ -76,12 +111,17 @@ namespace HospitalManagementSystem.Controllers
                 .FirstOrDefaultAsync(s => s.Id == id);
             if (suggestion == null) return NotFound();
 
+            // Honored regardless of compact/full rendering - without it, Accept/Edit/Reject
+            // on a suggestion rendered anywhere other than the patient page (e.g. the
+            // prescription page's patient-instructions card) would redirect back to
+            // Patients/Details by default, which is the wrong page for that flow.
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                ViewData["ReturnUrl"] = returnUrl;
+            }
+
             if (compact)
             {
-                if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
-                {
-                    ViewData["ReturnUrl"] = returnUrl;
-                }
                 return PartialView("_SuggestionCardBody", suggestion);
             }
             return PartialView("_SuggestionCard", suggestion);

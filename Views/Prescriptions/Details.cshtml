@@ -185,9 +185,61 @@
             }
         </div>
     </div>
+
+    @if (User.IsInRole("Doctor") || User.IsInRole("Admin"))
+    {
+        <div class="col-12">
+            <div class="pro-card">
+                <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
+                    <h5 class="card-title text-primary mb-0"><i class="bi bi-file-earmark-medical me-1"></i> Patient Instructions (Bangla)</h5>
+                    @if (User.IsInRole("Doctor"))
+                    {
+                        <button type="button" id="generatePatientInstructionsBtn" class="btn btn-sm btn-outline-info" data-prescription-id="@Model.Id">
+                            <i class="bi bi-translate me-1"></i> Generate Instructions
+                        </button>
+                    }
+                </div>
+
+                <div id="patientInstructionsStreamError" class="alert alert-danger d-none mb-3" role="alert"></div>
+                <div id="patientInstructionsStreamPlaceholder" class="text-muted small mb-3 d-none">
+                    <span class="spinner-border spinner-border-sm me-1"></span> Waiting for the model&hellip;
+                </div>
+                <p id="patientInstructionsStreamFeed" class="pro-card border-start border-4 border-info mb-3 d-none" style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;"></p>
+
+                @{
+                    var instructionSuggestions = ViewBag.PatientInstructionSuggestions as List<AiSuggestion>;
+                }
+                <div id="patientInstructionsList">
+                    @if (instructionSuggestions != null && instructionSuggestions.Any())
+                    {
+                        foreach (var suggestion in instructionSuggestions)
+                        {
+                            <div style="font-family: 'Noto Sans Bengali', 'Inter', sans-serif;">
+                                <partial name="_SuggestionCard" model="suggestion" />
+                            </div>
+                            @if (suggestion.Verdict == AiSuggestionVerdict.Accepted || suggestion.Verdict == AiSuggestionVerdict.Edited)
+                            {
+                                <a asp-action="PrintPatientInstructions" asp-route-suggestionId="@suggestion.Id" target="_blank" class="btn btn-sm btn-outline-secondary mb-3">
+                                    <i class="bi bi-printer me-1"></i> Print Instruction Sheet
+                                </a>
+                            }
+                        }
+                    }
+                    else
+                    {
+                        <div id="noPatientInstructionsEmptyState" class="text-center py-4 text-muted bg-light rounded border border-dashed">
+                            <i class="bi bi-translate fs-2 d-block mb-2"></i>
+                            <p class="mb-0">No patient instruction sheet generated yet.</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
 </div>
 
 @section Scripts {
+    <script src="~/js/patient-instructions-stream.js" asp-append-version="true"></script>
     <script>
         function confirmDispense() {
             Swal.fire({

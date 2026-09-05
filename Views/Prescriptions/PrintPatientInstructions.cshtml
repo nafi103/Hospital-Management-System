@@ -1,0 +1,178 @@
+@model HospitalManagementSystem.Models.Prescription
+@using HospitalManagementSystem.Models
+@using HospitalManagementSystem.Services
+
+@{
+    Layout = null; // No layout, pure print view
+    var suggestion = ViewBag.Suggestion as AiSuggestion;
+    var narrative = suggestion != null ? AiNarrativeRenderer.RenderCitedNarrative(suggestion) : null;
+}
+
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Patient Instructions - @Model.Patient.FullName - AGY Hospital</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <style>
+        @@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', 'Noto Sans Bengali', sans-serif;
+            background-color: #f8f9fa;
+            color: #212529;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        .a4-page {
+            width: 21cm;
+            min-height: 29.7cm;
+            padding: 2cm;
+            margin: 1cm auto;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            background: white;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+
+        .header-brand {
+            font-size: 24px;
+            font-weight: 700;
+            color: #0d6efd;
+            letter-spacing: -0.5px;
+        }
+
+        .bangla-content {
+            font-family: 'Noto Sans Bengali', 'Inter', sans-serif;
+            font-size: 1.05rem;
+            line-height: 1.9;
+        }
+
+        .bangla-content p {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+        }
+
+        .bangla-content ul {
+            padding-left: 1.5rem;
+        }
+
+        .bangla-content li {
+            margin-bottom: 0.85rem;
+        }
+
+        .footer-signature {
+            position: absolute;
+            bottom: 2cm;
+            right: 2cm;
+            text-align: center;
+            width: 200px;
+        }
+
+        .signature-line {
+            border-top: 1px solid #000;
+            margin-bottom: 0.5rem;
+            padding-top: 0.5rem;
+            font-weight: 600;
+        }
+
+        .print-btn-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        @@media print {
+            body {
+                background: white;
+                margin: 0;
+                padding: 0;
+            }
+            .a4-page {
+                margin: 0;
+                border: none;
+                border-radius: 0;
+                box-shadow: none;
+                width: 100%;
+                height: 100%;
+                padding: 1cm;
+            }
+            .print-btn-container {
+                display: none !important;
+            }
+            .footer-signature {
+                bottom: 1cm;
+                right: 1cm;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="print-btn-container d-print-none">
+        <button onclick="window.print()" class="btn btn-primary btn-lg shadow rounded-pill px-4">
+            <i class="bi bi-printer me-2"></i> Print
+        </button>
+        <button onclick="window.close()" class="btn btn-light btn-lg shadow rounded-pill px-4 ms-2 border">
+            Close
+        </button>
+    </div>
+
+    <div class="a4-page">
+        <header class="d-flex justify-content-between align-items-end border-bottom pb-4 mb-4">
+            <div>
+                <div class="header-brand mb-2">
+                    <i class="bi bi-hospital text-primary me-2"></i>AGY Hospital
+                </div>
+                <div class="text-muted small">
+                    123 Health Avenue, Medical District<br />
+                    Cityville, ST 12345<br />
+                    Phone: (555) 123-4567 | Web: www.agyhospital.com
+                </div>
+            </div>
+            <div class="text-end">
+                <h5 class="fw-bold mb-1">Dr. @Model.Doctor.FullName</h5>
+                <div class="text-muted small">Patient Instruction Sheet</div>
+            </div>
+        </header>
+
+        <div class="row mb-4 bg-light p-3 rounded mx-0">
+            <div class="col-md-6 px-0">
+                <div class="fw-bold fs-5 mb-1">@Model.Patient.FullName</div>
+                <div class="text-muted small">
+                    UHID: @Model.Patient.Uhid<br />
+                    Prescription: RX-@Model.Id.ToString("D6")
+                </div>
+            </div>
+            <div class="col-md-6 text-end px-0">
+                <div class="mb-1"><strong>Date:</strong> @DateTime.UtcNow.ToLocalTime().ToString("MMM dd, yyyy")</div>
+            </div>
+        </div>
+
+        <div class="bangla-content">
+            @if (narrative != null)
+            {
+                @narrative
+            }
+            else
+            {
+                <p class="text-muted fst-italic">No instruction text available.</p>
+            }
+        </div>
+
+        <div class="footer-signature">
+            <div class="signature-line">
+                Dr. @Model.Doctor.FullName
+            </div>
+            <div class="small text-muted">Signature & Seal</div>
+        </div>
+    </div>
+
+</body>
+</html>

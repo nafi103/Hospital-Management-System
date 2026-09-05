@@ -126,32 +126,20 @@ namespace HospitalManagementSystem.Services
             return finalText;
         }
 
-        public async Task<AiSuggestion> GenerateCaseSummaryAsync(int patientId, int requestedByUserId, string streamId, CancellationToken ct = default)
+        private sealed record ProviderStreamResult(string FinalText, string ModelId, int InputTokens, int OutputTokens, int CachedTokens, int LatencyMs);
+
+        // The provider-fallback loop shared by every AI feature: walk the admin-configured
+        // providers in priority order, stream and rehydrate each chunk to the group as it
+        // arrives, retry once on the primary before moving on, and surface a typed failure
+        // if every provider is exhausted. Callers own everything before this (building and
+        // scrubbing their own context) and everything after (turning FinalText into their
+        // own payload shape and persisting the AiSuggestion) - this only knows how to talk
+        // to the provider chain, not what the result means.
+        private async Task<ProviderStreamResult> RunProviderStreamAsync(
+            IClientProxy group, string systemInstruction, string userContent, ScrubResult scrubbed, CancellationToken ct)
         {
-            var groupName = $"AiStream_{streamId}";
-            var group = _streamHub.Clients.Group(groupName);
             Task SendChunk(string text, CancellationToken token) => group.SendAsync("ReceiveChunk", text, token);
-
-            var (patient, records, scrubbed) = await BuildScrubbedPatientContextAsync(patientId, ct);
-            var validRecordIds = records.Select(r => r.Id).ToHashSet();
             var maxPseudonymLength = scrubbed.Map.Count > 0 ? scrubbed.Map.Keys.Max(k => k.Length) : 0;
-
-            const string systemInstruction =
-                "You are a clinical documentation assistant inside a hospital management system. " +
-                "You will be given a patient's recent medical record entries, each labeled 'Record #<id>'. " +
-                "Produce a scannable pre-visit summary a doctor can read in a few seconds, in this exact " +
-                "format and nothing else: first, one headline sentence synthesizing why the patient is " +
-                "being seen, wrapped in double asterisks like **this**, on its own line, with no citation " +
-                "marker on it. Then, on their own lines, 3 to 6 bullet points, each starting with '- ', " +
-                "each stating one self-contained clinical fact (a diagnosis, a treatment, or a current " +
-                "status) - ordered chronologically, with the most recent/current status last. Immediately " +
-                "after any bullet that draws on a specific record, insert a citation marker in the exact " +
-                "form [[rec:<id>]] using that record's real id - never invent an id and never cite a " +
-                "record you weren't given. Only use information present in the records - never invent " +
-                "findings, medications, or dates. Refer to the patient only by the pseudonymous identifier " +
-                "given, never assume a real name. Use no markdown beyond the headline's ** and the bullets' '- '.";
-
-            var userContent = $"Patient identifier: Patient-{patient.Uhid}\n\nMedical record history:\n{scrubbed.ScrubbedText}";
 
             var providers = await _resolver.GetOrderedProvidersAsync(ct);
             if (providers.Count == 0)
@@ -223,8 +211,37 @@ namespace HospitalManagementSystem.Services
                 throw new ClinicalAiException(AiFailureReason.InvalidResponse, "The AI service returned an empty response.");
             }
 
+            return new ProviderStreamResult(finalText, resolvedModelId ?? "unknown", inputTokens, outputTokens, cachedTokens, (int)stopwatch.ElapsedMilliseconds);
+        }
+
+        public async Task<AiSuggestion> GenerateCaseSummaryAsync(int patientId, int requestedByUserId, string streamId, CancellationToken ct = default)
+        {
+            var group = _streamHub.Clients.Group($"AiStream_{streamId}");
+
+            var (patient, records, scrubbed) = await BuildScrubbedPatientContextAsync(patientId, ct);
+            var validRecordIds = records.Select(r => r.Id).ToHashSet();
+
+            const string systemInstruction =
+                "You are a clinical documentation assistant inside a hospital management system. " +
+                "You will be given a patient's recent medical record entries, each labeled 'Record #<id>'. " +
+                "Produce a scannable pre-visit summary a doctor can read in a few seconds, in this exact " +
+                "format and nothing else: first, one headline sentence synthesizing why the patient is " +
+                "being seen, wrapped in double asterisks like **this**, on its own line, with no citation " +
+                "marker on it. Then, on their own lines, 3 to 6 bullet points, each starting with '- ', " +
+                "each stating one self-contained clinical fact (a diagnosis, a treatment, or a current " +
+                "status) - ordered chronologically, with the most recent/current status last. Immediately " +
+                "after any bullet that draws on a specific record, insert a citation marker in the exact " +
+                "form [[rec:<id>]] using that record's real id - never invent an id and never cite a " +
+                "record you weren't given. Only use information present in the records - never invent " +
+                "findings, medications, or dates. Refer to the patient only by the pseudonymous identifier " +
+                "given, never assume a real name. Use no markdown beyond the headline's ** and the bullets' '- '.";
+
+            var userContent = $"Patient identifier: Patient-{patient.Uhid}\n\nMedical record history:\n{scrubbed.ScrubbedText}";
+
+            var result = await RunProviderStreamAsync(group, systemInstruction, userContent, scrubbed, ct);
+
             var citedIds = new List<int>();
-            var cleanedText = CitationPattern.Replace(finalText, match =>
+            var cleanedText = CitationPattern.Replace(result.FinalText, match =>
             {
                 var id = int.Parse(match.Groups[1].Value);
                 if (!validRecordIds.Contains(id))
@@ -246,13 +263,88 @@ namespace HospitalManagementSystem.Services
                 PatientId = patientId,
                 PayloadJson = JsonSerializer.Serialize(draft),
                 SourceRecordIds = JsonSerializer.Serialize(records.Select(r => r.Id)),
-                ModelId = resolvedModelId ?? "unknown",
+                ModelId = result.ModelId,
                 PromptVersion = "case-summary-v1",
                 Verdict = AiSuggestionVerdict.Pending,
-                InputTokens = inputTokens,
-                OutputTokens = outputTokens,
-                CachedTokens = cachedTokens,
-                LatencyMs = (int)stopwatch.ElapsedMilliseconds,
+                InputTokens = result.InputTokens,
+                OutputTokens = result.OutputTokens,
+                CachedTokens = result.CachedTokens,
+                LatencyMs = result.LatencyMs,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.AiSuggestions.Add(suggestion);
+            await _context.SaveChangesAsync(ct);
+
+            await group.SendAsync("StreamComplete", suggestion.Id, CancellationToken.None);
+
+            return suggestion;
+        }
+
+        public async Task<AiSuggestion> GeneratePatientInstructionsAsync(int prescriptionId, int requestedByUserId, string streamId, CancellationToken ct = default)
+        {
+            var group = _streamHub.Clients.Group($"AiStream_{streamId}");
+
+            var prescription = await _context.Prescriptions
+                .Include(p => p.Patient)
+                .Include(p => p.PrescriptionItems)
+                    .ThenInclude(i => i.Medicine)
+                .FirstOrDefaultAsync(p => p.Id == prescriptionId, ct)
+                ?? throw new ClinicalAiException(AiFailureReason.InvalidResponse, $"Prescription {prescriptionId} not found.");
+
+            if (prescription.Patient == null)
+            {
+                throw new ClinicalAiException(AiFailureReason.InvalidResponse, "This prescription has no associated patient.");
+            }
+            if (prescription.PrescriptionItems.Count == 0)
+            {
+                throw new ClinicalAiException(AiFailureReason.InvalidResponse, "This prescription has no medicines to explain.");
+            }
+
+            var contextText =
+                $"Diagnosis: {prescription.Diagnosis}\nChief complaints: {prescription.ChiefComplaints}\n\n" +
+                "Prescribed medicines:\n" +
+                string.Join("\n", prescription.PrescriptionItems.Select(i =>
+                    $"- {i.Medicine!.Name} ({i.Medicine.GenericName}, {i.Medicine.Strength}): {i.DoseDisplay}, " +
+                    $"{(i.DurationDays.HasValue ? $"{i.DurationDays} days" : "duration not specified")}, route {i.Route}." +
+                    (string.IsNullOrWhiteSpace(i.Instructions) ? "" : $" Instructions: {i.Instructions}")));
+
+            var scrubbed = _scrubber.Scrub(contextText, prescription.Patient);
+
+            const string systemInstruction =
+                "You are writing a plain-language patient instruction sheet in Bangla (Bengali script) for " +
+                "a patient leaving a Bangladeshi hospital pharmacy. You will be given the diagnosis and the " +
+                "exact medicines prescribed. Write entirely in Bangla, at a reading level a family member " +
+                "with no medical training can follow. Produce exactly this format and nothing else: first, " +
+                "one headline sentence in Bangla naming the overall purpose of the treatment, wrapped in " +
+                "double asterisks like **this**, on its own line. Then, on their own lines, one bullet per " +
+                "medicine starting with '- ', explaining in plain Bangla what it is for and how and when to " +
+                "take it, referring to the medicine by the exact name given - never invent a medicine, dose, " +
+                "or name not present in the input. After the medicine bullets, add 2 to 3 more bullets: " +
+                "warning signs that mean the patient should return to the hospital, and the importance of " +
+                "completing the full course. Refer to the patient only by the pseudonymous identifier given, " +
+                "never assume a real name. Use no markdown beyond the headline's ** and the bullets' '- '.";
+
+            var userContent = $"Patient identifier: Patient-{prescription.Patient.Uhid}\n\n{scrubbed.ScrubbedText}";
+
+            var result = await RunProviderStreamAsync(group, systemInstruction, userContent, scrubbed, ct);
+
+            var draft = new CaseSummaryDraft { NarrativeText = result.FinalText.Trim(), CitedRecordIds = new List<int>() };
+
+            var suggestion = new AiSuggestion
+            {
+                SuggestionType = AiSuggestionType.PatientInstructions,
+                PatientId = prescription.PatientId,
+                TargetEntityId = prescription.Id,
+                PayloadJson = JsonSerializer.Serialize(draft),
+                SourceRecordIds = JsonSerializer.Serialize(new[] { prescription.Id }),
+                ModelId = result.ModelId,
+                PromptVersion = "patient-instructions-v1",
+                Verdict = AiSuggestionVerdict.Pending,
+                InputTokens = result.InputTokens,
+                OutputTokens = result.OutputTokens,
+                CachedTokens = result.CachedTokens,
+                LatencyMs = result.LatencyMs,
                 CreatedAt = DateTime.UtcNow
             };
 

@@ -8,7 +8,11 @@ namespace HospitalManagementSystem.Models
     public enum AiSuggestionType
     {
         CaseNoteDraft,
-        CaseSummary
+        CaseSummary,
+        // A Bangla-language, plain-explanation instruction sheet for the patient, generated
+        // from a specific prescription. TargetEntityId holds the PrescriptionId (the target
+        // type varies by SuggestionType, same convention as the field's own comment below).
+        PatientInstructions
     }
 
     public enum AiSuggestionVerdict
