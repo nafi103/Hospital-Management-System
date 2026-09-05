@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -154,7 +156,54 @@ namespace HospitalManagementSystem.Controllers
                 .Select(x => new TopMedicine(x.Name, x.TotalQuantity))
                 .ToList();
 
+            PopulateSafetyMetrics(model, await _context.Prescriptions.Select(p => p.SafetyWarningsJson).ToListAsync());
+
             return model;
+        }
+
+        // Every prescription is checked by PrescriptionSafetyChecker on save; a null
+        // SafetyWarningsJson means the check found nothing to flag, not that the check
+        // didn't run. Deserializing the exact JSON stored at save time (rather than
+        // re-running the checker now) reports what the doctor actually saw and overrode,
+        // which is what an audit needs - re-running it against current stock/allergy data
+        // would silently rewrite history if either changed since.
+        private static void PopulateSafetyMetrics(ReportsViewModel model, List<string?> safetyWarningsJsonPerPrescription)
+        {
+            model.TotalPrescriptions = safetyWarningsJsonPerPrescription.Count;
+
+            var categoryCounts = new Dictionary<string, int>();
+            var overriddenCount = 0;
+
+            foreach (var json in safetyWarningsJsonPerPrescription)
+            {
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    continue;
+                }
+                overriddenCount++;
+
+                List<Dictionary<string, string>>? warnings;
+                try
+                {
+                    warnings = JsonSerializer.Deserialize<List<Dictionary<string, string>>>(json);
+                }
+                catch (JsonException)
+                {
+                    continue;
+                }
+
+                foreach (var warning in warnings ?? new List<Dictionary<string, string>>())
+                {
+                    var category = warning.GetValueOrDefault("Category") ?? "Unknown";
+                    categoryCounts[category] = categoryCounts.GetValueOrDefault(category) + 1;
+                }
+            }
+
+            model.PrescriptionsWithSafetyOverride = overriddenCount;
+            model.SafetyWarningsByCategory = categoryCounts
+                .Select(kv => new SafetyWarningCategoryCount(kv.Key, kv.Value))
+                .OrderByDescending(x => x.Count)
+                .ToList();
         }
     }
 }

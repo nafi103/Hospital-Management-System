@@ -21,6 +21,9 @@
 
     var aiLabels = Model.AiVerdicts.Select(a => a.Verdict.ToString()).ToList();
     var aiCounts = Model.AiVerdicts.Select(a => a.Count).ToList();
+
+    var safetyLabels = Model.SafetyWarningsByCategory.Select(s => s.Category).ToList();
+    var safetyCounts = Model.SafetyWarningsByCategory.Select(s => s.Count).ToList();
 }
 
 <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4 border-bottom pb-3">
@@ -193,6 +196,47 @@
     </div>
 </div>
 
+<div class="row g-4 mt-0">
+    <div class="col-12">
+        <div class="pro-card h-100">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 border-bottom pb-3 mb-3">
+                <h5 class="mb-0">Prescription Safety Net</h5>
+                <span class="badge bg-success-subtle text-success border border-success-subtle">
+                    <i class="bi bi-shield-check me-1"></i> All 4 checks deterministic &mdash; 0 AI calls
+                </span>
+            </div>
+            <div class="row g-4 mb-4">
+                <div class="col-md-4">
+                    <div class="text-center border-end">
+                        <h6 class="text-muted text-uppercase small mb-2">Prescriptions Checked</h6>
+                        <h2 class="fw-bold text-primary mb-0">@Model.TotalPrescriptions.ToString("N0")</h2>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-center border-end">
+                        <h6 class="text-muted text-uppercase small mb-2">Warnings Overridden</h6>
+                        <h2 class="fw-bold text-warning mb-0">@Model.PrescriptionsWithSafetyOverride.ToString("N0")</h2>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-center">
+                        <h6 class="text-muted text-uppercase small mb-2">Warning-Free</h6>
+                        <h2 class="fw-bold text-success mb-0">@((Model.TotalPrescriptions - Model.PrescriptionsWithSafetyOverride).ToString("N0"))</h2>
+                    </div>
+                </div>
+            </div>
+            @if (Model.SafetyWarningsByCategory.Any())
+            {
+                <canvas id="safetyChart" height="90"></canvas>
+            }
+            else
+            {
+                <p class="text-muted mb-0">No safety warnings have been raised yet.</p>
+            }
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script>
@@ -281,6 +325,25 @@
                         datasets: [{ data: aiCounts, backgroundColor: aiLabels.map(l => verdictColors[l] || '#858796') }]
                     },
                     options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+                });
+            }
+
+            const safetyLabels = @Html.Raw(JsonSerializer.Serialize(safetyLabels, jsonOptions));
+            const safetyCounts = @Html.Raw(JsonSerializer.Serialize(safetyCounts, jsonOptions));
+            if (safetyLabels.length) {
+                const safetyColors = { 'Allergy Conflict': '#e74a3b', 'Duplicate Therapy': '#f6c23e', 'Insufficient Stock': '#36b9cc', 'Pediatric Dose': '#4e73df' };
+                new Chart(document.getElementById('safetyChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: safetyLabels,
+                        datasets: [{ data: safetyCounts, backgroundColor: safetyLabels.map(l => safetyColors[l] || '#858796') }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
+                    }
                 });
             }
         })();

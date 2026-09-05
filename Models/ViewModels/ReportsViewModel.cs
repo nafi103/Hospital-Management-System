@@ -18,6 +18,8 @@ namespace HospitalManagementSystem.Models.ViewModels
 
     public record TopMedicine(string Name, int TotalQuantity);
 
+    public record SafetyWarningCategoryCount(string Category, int Count);
+
     // The reporting payload for the admin analytics screen. A typed view model rather
     // than ViewBag entries because the shape here - six panels, each its own query
     // result - is too large to track reliably through loosely-typed dictionary keys.
@@ -46,5 +48,11 @@ namespace HospitalManagementSystem.Models.ViewModels
         public double AiAverageLatencyMs { get; set; }
 
         public List<TopMedicine> TopMedicines { get; set; } = new();
+
+        // Prescription safety net (PrescriptionSafetyChecker) - all-time snapshot, all
+        // four checks deterministic, no AI call involved anywhere in this panel's data.
+        public int TotalPrescriptions { get; set; }
+        public int PrescriptionsWithSafetyOverride { get; set; }
+        public List<SafetyWarningCategoryCount> SafetyWarningsByCategory { get; set; } = new();
     }
 }
