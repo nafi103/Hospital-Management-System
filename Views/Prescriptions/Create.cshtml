@@ -26,6 +26,7 @@
 
 <form asp-action="Create" id="prescriptionForm">
     <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+    <input type="hidden" asp-for="SafetyOverrideReason" id="SafetyOverrideReasonInput" />
     
     <div class="row g-4">
         <!-- Left Column: Patient & Doctor -->
@@ -401,7 +402,10 @@
                         container.hide();
                         
                         $stockInfo.html('<i class="bi bi-box-seam me-1"></i>Stock: ' + m.stock).fadeIn(200);
-                        $qtyInput.attr('max', m.stock);
+                        // Deliberately no max="m.stock" here - a doctor prescribing more
+                        // than what's in stock is exactly the case the safety check on
+                        // submit needs to see and warn about, not something the input
+                        // should silently block from ever being entered.
                     });
                 container.append($item);
             }
@@ -464,14 +468,65 @@
                 }
             });
 
-            // Form submission validation
+            // Form submission validation, plus a safety-check round trip before the real
+            // submit. skipSafetyCheck is set true for exactly one submit - the one
+            // triggered programmatically right after the doctor acknowledges warnings in
+            // the modal below - so that resubmission doesn't loop back into the same check.
+            var skipSafetyCheck = false;
+
+            function collectItemsForSafetyCheck() {
+                var items = [];
+                $('#medicinesBody .medicine-row').each(function() {
+                    var medicineId = $(this).find('.medicine-id-hidden').val();
+                    var quantity = $(this).find('.qty-input').val();
+                    var doseUnit = $(this).find('select[name$=".DoseUnit"]').val();
+                    if (medicineId && quantity) {
+                        items.push({ medicineId: parseInt(medicineId, 10), quantity: parseInt(quantity, 10), doseUnit: doseUnit });
+                    }
+                });
+                return items;
+            }
+
+            function showSafetyWarnings(warnings) {
+                var severityIcon = { Critical: '🛑', Warning: '⚠️' };
+                var listHtml = '<div style="text-align:left;">' + warnings.map(function(w) {
+                    return '<div style="margin-bottom:10px;"><strong>' + (severityIcon[w.severity] || '⚠️') + ' ' + w.category + '</strong>' +
+                        '<div style="font-size:0.9em;color:#555;">' + w.message + '</div></div>';
+                }).join('') + '</div>';
+
+                Swal.fire({
+                    icon: 'warning',
+                    title: warnings.length + ' safety warning(s) found',
+                    html: listHtml,
+                    input: 'textarea',
+                    inputLabel: 'Reason for proceeding anyway (required)',
+                    inputPlaceholder: 'e.g. Discussed with patient; benefit outweighs the risk here...',
+                    inputValidator: function(value) {
+                        if (!value || !value.trim()) {
+                            return 'An override reason is required to prescribe despite these warnings.';
+                        }
+                    },
+                    showCancelButton: true,
+                    confirmButtonText: 'Prescribe anyway',
+                    confirmButtonColor: '#dc3545',
+                    cancelButtonText: 'Go back and edit',
+                    width: 560
+                }).then(function(result) {
+                    if (result.isConfirmed) {
+                        $('#SafetyOverrideReasonInput').val(result.value.trim());
+                        skipSafetyCheck = true;
+                        $('#prescriptionForm').trigger('submit');
+                    }
+                });
+            }
+
             $('#prescriptionForm').submit(function(e) {
                 if ($('#medicinesBody .medicine-row').length === 0) {
                     e.preventDefault();
                     alert("Please add at least one medicine to the prescription.");
                     return false;
                 }
-                
+
                 var valid = true;
                 $('.medicine-id-hidden').each(function() {
                     if (!$(this).val()) {
@@ -479,12 +534,47 @@
                         $(this).siblings('.input-group').find('.medicine-search-input').addClass('is-invalid');
                     }
                 });
-                
+
                 if (!valid) {
                     e.preventDefault();
                     alert("Please select a valid medicine from the search results for all items.");
                     return false;
                 }
+
+                if (skipSafetyCheck) {
+                    skipSafetyCheck = false;
+                    return true;
+                }
+
+                e.preventDefault();
+                var patientId = $('#PatientIdHidden').val();
+                var token = $('#prescriptionForm input[name="__RequestVerificationToken"]').val();
+
+                $.ajax({
+                    url: '@Url.Action("CheckSafety", "Prescriptions")',
+                    method: 'POST',
+                    data: {
+                        patientId: patientId,
+                        itemsJson: JSON.stringify(collectItemsForSafetyCheck()),
+                        __RequestVerificationToken: token
+                    },
+                    success: function(data) {
+                        if (data.warnings && data.warnings.length > 0) {
+                            showSafetyWarnings(data.warnings);
+                        } else {
+                            skipSafetyCheck = true;
+                            $('#prescriptionForm').trigger('submit');
+                        }
+                    },
+                    error: function() {
+                        // If the safety check itself fails (network blip, etc.), don't
+                        // silently block a doctor from prescribing - the server re-runs
+                        // the same check on the real POST regardless.
+                        skipSafetyCheck = true;
+                        $('#prescriptionForm').trigger('submit');
+                    }
+                });
+                return false;
             });
 
             // Initialize UI state

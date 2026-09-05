@@ -385,16 +385,21 @@ namespace HospitalManagementSystem.Services
             await _context.SaveChangesAsync();
         }
 
-        private sealed record AllergySpec(string PatientKey, string Substance, string? Reaction, AllergySeverity Severity);
+        private sealed record AllergySpec(string PatientKey, string Substance, string? Reaction, AllergySeverity Severity, string? AllergenGenericName = null);
 
         private async Task SeedAllergiesAsync(Dictionary<string, Patient> patients, int recordedById)
         {
+            // AllergenGenericName is set only when the substance matches a generic actually
+            // carried in the seeded formulary (Paracetamol, Azithromycin) - that's what lets
+            // PrescriptionSafetyChecker's allergy-conflict check match against it. Penicillin,
+            // sulfa drugs, and aspirin are real allergies but aren't in the formulary, so they
+            // deliberately stay unmatched - the check has nothing to compare them against.
             var specs = new List<AllergySpec>
             {
                 new("karim",   "Penicillin",   "Skin rash",        AllergySeverity.Moderate),
-                new("nasrin",  "Azithromycin", "Nausea and hives", AllergySeverity.Moderate),
+                new("nasrin",  "Azithromycin", "Nausea and hives", AllergySeverity.Moderate, "Azithromycin"),
                 new("abdul",   "Sulfa drugs",  "Severe skin reaction", AllergySeverity.Severe),
-                new("mizan",   "Paracetamol",  "Mild rash",        AllergySeverity.Mild),
+                new("mizan",   "Paracetamol",  "Mild rash",        AllergySeverity.Mild, "Paracetamol"),
                 new("taslima", "Aspirin",      "Stomach upset",    AllergySeverity.Mild),
             };
 
@@ -407,6 +412,7 @@ namespace HospitalManagementSystem.Services
                     Substance = spec.Substance,
                     ReactionType = spec.Reaction,
                     Severity = spec.Severity,
+                    AllergenGenericName = spec.AllergenGenericName,
                     RecordedById = recordedById,
                     CreatedAt = now
                 });

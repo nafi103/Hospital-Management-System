@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using HospitalManagementSystem.Models;
+using HospitalManagementSystem.Services;
 
 namespace HospitalManagementSystem.Controllers
 {
@@ -91,17 +93,20 @@ namespace HospitalManagementSystem.Controllers
                 }
             }
             
-            // Available medicines for dropdown
+            // Every medicine is searchable here, including zero-stock ones - the search UI
+            // already renders a red "Stock: 0" badge for those (see appendMedicineItem in
+            // Create.cshtml). Hiding them entirely would make PrescriptionSafetyChecker's
+            // stock/substitution warning unreachable: a doctor can never be warned about
+            // prescribing something they were never allowed to select in the first place.
             var medicines = _context.Medicines
-                .Where(m => m.StockQuantity > 0)
-                .Select(m => new { 
-                    m.Id, 
+                .Select(m => new {
+                    m.Id,
                     DisplayName = m.Name + " (৳" + m.UnitPrice.ToString("0.00") + ")",
                     m.UnitPrice,
                     m.StockQuantity,
                     m.GenericName
                 }).ToList();
-                
+
             ViewBag.MedicinesList = medicines;
 
             if (patientId.HasValue)
@@ -118,11 +123,90 @@ namespace HospitalManagementSystem.Controllers
             return View();
         }
 
+        // POST: Prescriptions/CheckSafety - called via fetch() before the real submit, so
+        // the doctor sees duplicate-therapy/allergy/stock/pediatric-dose warnings and can
+        // acknowledge or go back and edit, without losing the in-progress form. This is a
+        // convenience for the doctor, not the enforcement boundary - Create (below) re-runs
+        // the same check server-side against whatever was actually submitted, because a
+        // client-side-only check can be bypassed or simply skipped.
+        public class SafetyCheckItemDto
+        {
+            public int MedicineId { get; set; }
+            public int Quantity { get; set; }
+            public string DoseUnit { get; set; } = "Tablet";
+        }
+
+        // Bound from a regular form-encoded POST (not [FromBody] JSON) so the standard
+        // antiforgery field validation applies the same way it does everywhere else in
+        // this app - see wwwroot/js/ai-stream.js for the same convention. The item list
+        // travels as one JSON-encoded form field rather than indexed form keys, since it's
+        // only ever read here, never model-bound as a page's real submission.
+        private static readonly JsonSerializerOptions CamelCaseJsonOptions = new() { PropertyNameCaseInsensitive = true };
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Doctor")]
+        public async Task<IActionResult> CheckSafety(int patientId, string? itemsJson)
+        {
+            List<SafetyCheckItemDto>? dtos;
+            try
+            {
+                // The browser sends camelCase (medicineId, quantity, doseUnit); Deserialize
+                // is case-sensitive by default and would otherwise silently bind every
+                // property to its default value instead of throwing - PropertyNameCaseInsensitive
+                // is required here, not optional polish.
+                dtos = string.IsNullOrWhiteSpace(itemsJson)
+                    ? null
+                    : JsonSerializer.Deserialize<List<SafetyCheckItemDto>>(itemsJson, CamelCaseJsonOptions);
+            }
+            catch (JsonException)
+            {
+                dtos = null;
+            }
+
+            if (patientId == 0 || dtos == null || dtos.Count == 0)
+            {
+                return Json(new { warnings = Array.Empty<object>() });
+            }
+
+            var items = dtos
+                .Select(i => new SafetyCheckItem(i.MedicineId, i.Quantity, ParseDoseUnit(i.DoseUnit)))
+                .ToList();
+            var warnings = await ComputeSafetyWarningsAsync(patientId, items);
+
+            return Json(new
+            {
+                warnings = warnings.Select(w => new { category = w.Category, severity = w.Severity.ToString(), message = w.Message })
+            });
+        }
+
+        private static DoseUnit ParseDoseUnit(string value) => Enum.TryParse<DoseUnit>(value, out var unit) ? unit : DoseUnit.Tablet;
+
+        private async Task<List<SafetyWarning>> ComputeSafetyWarningsAsync(int patientId, List<SafetyCheckItem> items)
+        {
+            var patient = await _context.Patients.FindAsync(patientId);
+            if (patient == null || items.Count == 0)
+            {
+                return new List<SafetyWarning>();
+            }
+
+            var allergies = await _context.PatientAllergies
+                .Where(a => a.PatientId == patientId)
+                .Select(a => new SafetyCheckAllergy(a.Substance, a.AllergenGenericName, a.Severity))
+                .ToListAsync();
+
+            var allMedicines = await _context.Medicines
+                .Select(m => new MedicineInfo(m.Id, m.Name, m.GenericName, m.Strength, m.StockQuantity))
+                .ToListAsync();
+
+            return PrescriptionSafetyChecker.Check(patient.IsChild, allergies, items, allMedicines);
+        }
+
         // POST: Prescriptions/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
         [Authorize(Roles = "Doctor")]
-        public async Task<IActionResult> Create([Bind("PatientId,DoctorId,Notes,ChiefComplaints,Diagnosis")] Prescription prescription, List<PrescriptionItem> PrescriptionItems)
+        public async Task<IActionResult> Create([Bind("PatientId,DoctorId,Notes,ChiefComplaints,Diagnosis,SafetyOverrideReason")] Prescription prescription, List<PrescriptionItem> PrescriptionItems)
         {
             ModelState.Remove("Patient");
             ModelState.Remove("Doctor");
@@ -130,30 +214,51 @@ namespace HospitalManagementSystem.Controllers
 
             if (ModelState.IsValid && PrescriptionItems != null && PrescriptionItems.Count > 0)
             {
-                prescription.Status = PrescriptionStatus.PendingPharmacy;
-                prescription.CreatedAt = DateTime.UtcNow;
-                prescription.UpdatedAt = DateTime.UtcNow;
+                // Re-run the safety check server-side against what was actually submitted -
+                // never trust a client-computed warning list for the audit trail, and never
+                // trust that the client-side check even ran.
+                var safetyItems = PrescriptionItems.Select(i => new SafetyCheckItem(i.MedicineId, i.Quantity, i.DoseUnit)).ToList();
+                var warnings = await ComputeSafetyWarningsAsync(prescription.PatientId, safetyItems);
 
-                // Validate and add items
-                foreach(var item in PrescriptionItems)
+                if (warnings.Count > 0 && string.IsNullOrWhiteSpace(prescription.SafetyOverrideReason))
                 {
-                    var medicine = await _context.Medicines.FindAsync(item.MedicineId);
-                    if(medicine != null)
-                    {
-                        item.UnitPrice = medicine.UnitPrice; // Lock in the price at time of prescribing
-                        prescription.PrescriptionItems.Add(item);
-                    }
+                    ModelState.AddModelError("", "Safety warnings were raised for this prescription. Review and acknowledge them before saving.");
                 }
+                else
+                {
+                    prescription.Status = PrescriptionStatus.PendingPharmacy;
+                    prescription.CreatedAt = DateTime.UtcNow;
+                    prescription.UpdatedAt = DateTime.UtcNow;
+                    prescription.SafetyWarningsJson = warnings.Count > 0
+                        ? JsonSerializer.Serialize(warnings.Select(w => new { w.Category, Severity = w.Severity.ToString(), w.Message }))
+                        : null;
+                    if (warnings.Count == 0)
+                    {
+                        prescription.SafetyOverrideReason = null;
+                    }
 
-                _context.Add(prescription);
-                await _context.SaveChangesAsync();
-                
-                TempData["SuccessMessage"] = "Prescription created and sent to pharmacy.";
-                TempData["CrossLinkController"] = "MedicalRecords";
-                TempData["CrossLinkLabel"] = "Add medical record for this visit";
-                TempData["CrossLinkPatientId"] = prescription.PatientId;
-                TempData["CrossLinkDoctorId"] = prescription.DoctorId;
-                return RedirectToAction(nameof(Index));
+                    foreach (var item in PrescriptionItems)
+                    {
+                        var medicine = await _context.Medicines.FindAsync(item.MedicineId);
+                        if (medicine != null)
+                        {
+                            item.UnitPrice = medicine.UnitPrice; // Lock in the price at time of prescribing
+                            prescription.PrescriptionItems.Add(item);
+                        }
+                    }
+
+                    _context.Add(prescription);
+                    await _context.SaveChangesAsync();
+
+                    TempData["SuccessMessage"] = warnings.Count > 0
+                        ? $"Prescription created and sent to pharmacy ({warnings.Count} safety warning(s) reviewed and overridden)."
+                        : "Prescription created and sent to pharmacy.";
+                    TempData["CrossLinkController"] = "MedicalRecords";
+                    TempData["CrossLinkLabel"] = "Add medical record for this visit";
+                    TempData["CrossLinkPatientId"] = prescription.PatientId;
+                    TempData["CrossLinkDoctorId"] = prescription.DoctorId;
+                    return RedirectToAction(nameof(Index));
+                }
             }
 
             if (PrescriptionItems == null || PrescriptionItems.Count == 0)
@@ -172,8 +277,8 @@ namespace HospitalManagementSystem.Controllers
                     ViewBag.PreselectedDoctorName = doctor.FullName;
                 }
             }
-            
-            var medicines = _context.Medicines.Where(m => m.StockQuantity > 0).Select(m => new { m.Id, DisplayName = m.Name + " (৳" + m.UnitPrice.ToString("0.00") + ")", m.UnitPrice, m.StockQuantity, m.GenericName }).ToList();
+
+            var medicines = _context.Medicines.Select(m => new { m.Id, DisplayName = m.Name + " (৳" + m.UnitPrice.ToString("0.00") + ")", m.UnitPrice, m.StockQuantity, m.GenericName }).ToList();
             ViewBag.MedicinesList = medicines;
 
             return View(prescription);
