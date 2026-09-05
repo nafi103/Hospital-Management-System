@@ -1,0 +1,288 @@
+@model HospitalManagementSystem.Models.ViewModels.ReportsViewModel
+@using System.Text.Json
+
+@{
+    ViewData["Title"] = "Reports";
+
+    var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    var departmentLabels = Model.RevenueByDepartment.Select(d => d.Department.ToString()).ToList();
+    var departmentAmounts = Model.RevenueByDepartment.Select(d => d.Amount).ToList();
+
+    var occupancyLabels = Model.BedOccupancy.Select(o => o.Category.ToString()).ToList();
+    var occupancyFree = Model.BedOccupancy.Select(o => o.Total - o.Occupied).ToList();
+    var occupancyOccupied = Model.BedOccupancy.Select(o => o.Occupied).ToList();
+
+    var appointmentLabels = Model.AppointmentVolume.Select(p => p.Date.ToString("MMM dd")).ToList();
+    var appointmentTotals = Model.AppointmentVolume.Select(p => p.Total).ToList();
+
+    var triageLabels = Model.TriageMix.Select(t => t.Priority.ToString()).ToList();
+    var triageCounts = Model.TriageMix.Select(t => t.Count).ToList();
+
+    var aiLabels = Model.AiVerdicts.Select(a => a.Verdict.ToString()).ToList();
+    var aiCounts = Model.AiVerdicts.Select(a => a.Count).ToList();
+}
+
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4 border-bottom pb-3">
+    <div>
+        <h2 class="mb-1">Reports</h2>
+        <p class="text-muted mb-0">Revenue, occupancy, appointment volume, triage mix, and AI governance.</p>
+    </div>
+    <form method="get" class="d-flex align-items-end gap-2">
+        <div>
+            <label class="form-label small text-muted mb-1">From</label>
+            <input type="date" name="from" class="form-control form-control-sm" value="@Model.FromDate.ToString("yyyy-MM-dd")" />
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1">To</label>
+            <input type="date" name="to" class="form-control form-control-sm" value="@Model.ToDate.ToString("yyyy-MM-dd")" />
+        </div>
+        <button type="submit" class="btn btn-sm btn-primary">Apply</button>
+        <a asp-action="ExportAppointmentsCsv" asp-route-from="@Model.FromDate.ToString("yyyy-MM-dd")" asp-route-to="@Model.ToDate.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-download me-1"></i> Export CSV
+        </a>
+    </form>
+</div>
+
+<p class="text-muted small mb-4">
+    Revenue and appointment volume reflect <strong>@Model.FromDate.ToString("MMM dd, yyyy")</strong> to
+    <strong>@Model.ToDate.ToString("MMM dd, yyyy")</strong>. Occupancy, triage, AI governance, and top
+    medicines are current-state snapshots across all data.
+</p>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="pro-card h-100 text-center border-start border-4 border-primary">
+            <h6 class="text-muted text-uppercase mb-2">Total Billed</h6>
+            <h2 class="fw-bold text-primary mb-0">৳@Model.TotalBilled.ToString("N2")</h2>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="pro-card h-100 text-center border-start border-4 border-success">
+            <h6 class="text-muted text-uppercase mb-2">Total Collected</h6>
+            <h2 class="fw-bold text-success mb-0">৳@Model.TotalCollected.ToString("N2")</h2>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="pro-card h-100 text-center border-start border-4 border-danger">
+            <h6 class="text-muted text-uppercase mb-2">Outstanding</h6>
+            <h2 class="fw-bold text-danger mb-0">৳@Model.TotalOutstanding.ToString("N2")</h2>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <div class="pro-card h-100">
+            <h5 class="border-bottom pb-3 mb-3">Revenue by Department</h5>
+            @if (Model.RevenueByDepartment.Any())
+            {
+                <canvas id="departmentChart" height="220"></canvas>
+            }
+            else
+            {
+                <p class="text-muted mb-0">No billed items in this date range.</p>
+            }
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="pro-card h-100">
+            <h5 class="border-bottom pb-3 mb-3">Bed Occupancy by Category</h5>
+            @if (Model.BedOccupancy.Any())
+            {
+                <canvas id="occupancyChart" height="220"></canvas>
+            }
+            else
+            {
+                <p class="text-muted mb-0">No beds configured.</p>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="pro-card h-100">
+            <h5 class="border-bottom pb-3 mb-3">Appointment Volume</h5>
+            @if (Model.AppointmentVolume.Any(p => p.Total > 0))
+            {
+                <canvas id="appointmentChart" height="90"></canvas>
+            }
+            else
+            {
+                <p class="text-muted mb-0">No appointments in this date range.</p>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <div class="pro-card h-100">
+            <h5 class="border-bottom pb-3 mb-3">Triage Mix</h5>
+            @if (Model.TriageMix.Any())
+            {
+                <canvas id="triageChart" height="220"></canvas>
+            }
+            else
+            {
+                <p class="text-muted mb-0">No vitals recorded yet.</p>
+            }
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="pro-card h-100">
+            <h5 class="border-bottom pb-3 mb-3">AI Governance</h5>
+            @if (Model.AiVerdicts.Any())
+            {
+                <canvas id="aiChart" height="180"></canvas>
+                <div class="row text-center mt-3 pt-3 border-top">
+                    <div class="col-4">
+                        <div class="small text-muted">Input Tokens</div>
+                        <div class="fw-bold">@Model.AiTotalInputTokens.ToString("N0")</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="small text-muted">Output Tokens</div>
+                        <div class="fw-bold">@Model.AiTotalOutputTokens.ToString("N0")</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="small text-muted">Avg Latency</div>
+                        <div class="fw-bold">@Model.AiAverageLatencyMs.ToString("N0") ms</div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <p class="text-muted mb-0">No AI suggestions generated yet.</p>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-12">
+        <div class="pro-card h-100">
+            <h5 class="border-bottom pb-3 mb-3">Top 5 Prescribed Medicines</h5>
+            @if (Model.TopMedicines.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Medicine</th>
+                                <th class="text-end pe-4">Total Quantity Prescribed</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var med in Model.TopMedicines)
+                            {
+                                <tr>
+                                    <td class="ps-2">@med.Name</td>
+                                    <td class="text-end pe-4 fw-medium">@med.TotalQuantity</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <p class="text-muted mb-0">No prescriptions recorded yet.</p>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script>
+        (function () {
+            const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark'
+                || window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)';
+            const textColor = isDark ? '#adb5bd' : '#495057';
+            Chart.defaults.color = textColor;
+            Chart.defaults.borderColor = gridColor;
+
+            const palette = ['#4e73df', '#1cc88a', '#f6c23e', '#e74a3b', '#36b9cc', '#858796'];
+
+            const departmentLabels = @Html.Raw(JsonSerializer.Serialize(departmentLabels, jsonOptions));
+            const departmentAmounts = @Html.Raw(JsonSerializer.Serialize(departmentAmounts, jsonOptions));
+            if (departmentLabels.length) {
+                new Chart(document.getElementById('departmentChart'), {
+                    type: 'doughnut',
+                    data: { labels: departmentLabels, datasets: [{ data: departmentAmounts, backgroundColor: palette }] },
+                    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+                });
+            }
+
+            const occupancyLabels = @Html.Raw(JsonSerializer.Serialize(occupancyLabels, jsonOptions));
+            const occupancyFree = @Html.Raw(JsonSerializer.Serialize(occupancyFree, jsonOptions));
+            const occupancyOccupied = @Html.Raw(JsonSerializer.Serialize(occupancyOccupied, jsonOptions));
+            if (occupancyLabels.length) {
+                new Chart(document.getElementById('occupancyChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: occupancyLabels,
+                        datasets: [
+                            { label: 'Occupied', data: occupancyOccupied, backgroundColor: '#e74a3b' },
+                            { label: 'Free', data: occupancyFree, backgroundColor: '#1cc88a' }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } }
+                    }
+                });
+            }
+
+            const appointmentLabels = @Html.Raw(JsonSerializer.Serialize(appointmentLabels, jsonOptions));
+            const appointmentTotals = @Html.Raw(JsonSerializer.Serialize(appointmentTotals, jsonOptions));
+            if (appointmentLabels.length) {
+                new Chart(document.getElementById('appointmentChart'), {
+                    type: 'line',
+                    data: {
+                        labels: appointmentLabels,
+                        datasets: [{
+                            label: 'Appointments',
+                            data: appointmentTotals,
+                            borderColor: '#4e73df',
+                            backgroundColor: 'rgba(78,115,223,0.15)',
+                            fill: true,
+                            tension: 0.3
+                        }]
+                    },
+                    options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+                });
+            }
+
+            const triageLabels = @Html.Raw(JsonSerializer.Serialize(triageLabels, jsonOptions));
+            const triageCounts = @Html.Raw(JsonSerializer.Serialize(triageCounts, jsonOptions));
+            if (triageLabels.length) {
+                const triageColors = { Normal: '#1cc88a', Urgent: '#f6c23e', Emergency: '#e74a3b' };
+                new Chart(document.getElementById('triageChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: triageLabels,
+                        datasets: [{ data: triageCounts, backgroundColor: triageLabels.map(l => triageColors[l] || '#858796') }]
+                    },
+                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+                });
+            }
+
+            const aiLabels = @Html.Raw(JsonSerializer.Serialize(aiLabels, jsonOptions));
+            const aiCounts = @Html.Raw(JsonSerializer.Serialize(aiCounts, jsonOptions));
+            if (aiLabels.length) {
+                const verdictColors = { Pending: '#f6c23e', Accepted: '#1cc88a', Edited: '#36b9cc', Rejected: '#e74a3b' };
+                new Chart(document.getElementById('aiChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: aiLabels,
+                        datasets: [{ data: aiCounts, backgroundColor: aiLabels.map(l => verdictColors[l] || '#858796') }]
+                    },
+                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+                });
+            }
+        })();
+    </script>
+}

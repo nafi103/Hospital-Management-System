@@ -103,7 +103,7 @@ else if (User.IsInRole("Admin"))
     </div>
 
     <div class="row g-4">
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="pro-card h-100">
                 <div class="icon-box bg-primary-subtle text-primary">
                     <i class="bi bi-people-fill"></i>
@@ -114,7 +114,7 @@ else if (User.IsInRole("Admin"))
             </div>
         </div>
 
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="pro-card h-100">
                 <div class="icon-box bg-success-subtle text-success">
                     <i class="bi bi-file-medical-fill"></i>
@@ -125,7 +125,7 @@ else if (User.IsInRole("Admin"))
             </div>
         </div>
 
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="pro-card h-100">
                 <div class="icon-box bg-warning-subtle text-warning-emphasis">
                     <i class="bi bi-calendar2-check-fill"></i>
@@ -133,6 +133,17 @@ else if (User.IsInRole("Admin"))
                 <h4 class="mb-2">Appointments</h4>
                 <p class="text-muted mb-4 small">@ViewBag.TodaysAppointments appointment(s) scheduled today across all doctors.</p>
                 <a asp-controller="Admissions" asp-action="Index" class="btn btn-outline-warning w-100">View Admissions</a>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="pro-card h-100">
+                <div class="icon-box bg-info-subtle text-info">
+                    <i class="bi bi-bar-chart-line-fill"></i>
+                </div>
+                <h4 class="mb-2">Reports</h4>
+                <p class="text-muted mb-4 small">Revenue, occupancy, appointment volume, triage mix, and AI governance in one place.</p>
+                <a asp-controller="Reports" asp-action="Index" class="btn btn-outline-info w-100">View Reports</a>
             </div>
         </div>
     </div>

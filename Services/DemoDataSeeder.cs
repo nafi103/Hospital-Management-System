@@ -45,7 +45,12 @@ namespace HospitalManagementSystem.Services
             var admin = await GetUserAsync("admin");
             var drOne = await GetUserAsync("drmock");
             var drTwo = await EnsureUserAsync("dr2", roleIds["Doctor"], "Dr. Farhana Chowdhury", "Consultant", null);
-            var assistantOne = await GetUserAsync("mock-assistant");
+            // Unlike admin/drmock/pharmacistmock (guaranteed by migration HasData - see
+            // ApplicationDbContext.OnModelCreating), "mock-assistant" was never seeded
+            // anywhere in source control; it only exists in a long-running dev database
+            // because it was created once through the Staff UI. EnsureUserAsync (not
+            // GetUserAsync) so a genuinely fresh clone can seed successfully too.
+            var assistantOne = await EnsureUserAsync("mock-assistant", roleIds["Assistant"], "Mock Assistant", "Staff", drOne.Id);
             var assistantTwo = await EnsureUserAsync("assistant2", roleIds["Assistant"], "Tanvir Islam", "Staff", drTwo.Id);
             var pharmacistOne = await GetUserAsync("pharmacistmock");
             _ = await EnsureUserAsync("pharmacist2", roleIds["Pharmacist"], "Nusrat Jahan", "Pharmacy", null);
@@ -76,10 +81,19 @@ namespace HospitalManagementSystem.Services
             await SeedBillsAsync(admissions, admin.Id);
 
             Console.WriteLine("Seeding today's appointment queue...");
-            await SeedAppointmentsAsync(patients, drOne.Id, drTwo.Id);
+            var todaysAppointments = await SeedAppointmentsAsync(patients, drOne.Id, drTwo.Id);
+
+            Console.WriteLine("Seeding appointment history (last 14 days, for reporting)...");
+            await SeedHistoricalAppointmentsAsync(patients, drOne.Id, drTwo.Id);
+
+            Console.WriteLine("Seeding vitals and triage scores...");
+            await SeedVitalsAsync(patients, todaysAppointments, assistantOne.Id, assistantTwo.Id);
 
             Console.WriteLine("Seeding a canned AI suggestion (offline fallback for the demo)...");
             await SeedCannedAiSuggestionAsync(patients, records);
+
+            Console.WriteLine("Seeding additional AI suggestions (for reporting)...");
+            await SeedAdditionalAiSuggestionsAsync(patients, records, drOne.Id, drTwo.Id);
 
             await transaction.CommitAsync();
 
@@ -540,7 +554,7 @@ namespace HospitalManagementSystem.Services
 
         private sealed record AppointmentSpec(string PatientKey, int DoctorSlot, AppointmentStatus Status, int MinutesAgo, string Reason);
 
-        private async Task SeedAppointmentsAsync(Dictionary<string, Patient> patients, int drOneId, int drTwoId)
+        private async Task<Dictionary<string, Appointment>> SeedAppointmentsAsync(Dictionary<string, Patient> patients, int drOneId, int drTwoId)
         {
             var specs = new List<AppointmentSpec>
             {
@@ -556,11 +570,76 @@ namespace HospitalManagementSystem.Services
             };
 
             var now = DateTime.UtcNow;
+            var result = new Dictionary<string, Appointment>();
             foreach (var spec in specs)
             {
                 var patient = patients[spec.PatientKey];
                 var doctorId = spec.DoctorSlot == 1 ? drOneId : drTwoId;
                 var startedAt = now.AddMinutes(-spec.MinutesAgo);
+
+                var appointment = new Appointment
+                {
+                    PatientId = patient.Id,
+                    DoctorId = doctorId,
+                    AppointmentDatetime = startedAt,
+                    EndTime = startedAt.AddMinutes(15),
+                    ReasonForVisit = spec.Reason,
+                    Status = spec.Status,
+                    CreatedAt = startedAt,
+                    UpdatedAt = now
+                };
+                _context.Appointments.Add(appointment);
+                result[spec.PatientKey] = appointment;
+            }
+
+            await _context.SaveChangesAsync();
+            return result;
+        }
+
+        private sealed record HistoricalAppointmentSpec(string PatientKey, int DoctorSlot, AppointmentStatus Status, int DaysAgo, string Reason);
+
+        // Backdated appointment history spread across the last two weeks, so the admin
+        // Reports "appointment volume" chart has a real trend to plot instead of a
+        // single-day spike. Deliberately separate from SeedAppointmentsAsync above -
+        // today's queue is exactly what the Assistant/Doctor walkthroughs depend on, and
+        // this method never touches it.
+        private async Task SeedHistoricalAppointmentsAsync(Dictionary<string, Patient> patients, int drOneId, int drTwoId)
+        {
+            var specs = new List<HistoricalAppointmentSpec>
+            {
+                new("shirin",  1, AppointmentStatus.Completed, 1,  "Routine follow-up"),
+                new("rupa",    2, AppointmentStatus.Completed, 1,  "Medication review"),
+                new("karim",   1, AppointmentStatus.Completed, 2,  "Throat re-check"),
+                new("mizan",   2, AppointmentStatus.Cancelled, 2,  "Chronic gastritis review"),
+                new("nasrin",  1, AppointmentStatus.Completed, 3,  "Allergy follow-up"),
+                new("abdul",   2, AppointmentStatus.Completed, 3,  "GERD review"),
+                new("jashim",  1, AppointmentStatus.Completed, 4,  "Cough re-check"),
+                new("taslima", 2, AppointmentStatus.Completed, 4,  "Skin rash review"),
+                new("fatema",  1, AppointmentStatus.Cancelled, 5,  "Gastritis follow-up"),
+                new("rahim",   1, AppointmentStatus.Completed, 5,  "Fever re-check"),
+                new("baby2",   2, AppointmentStatus.Completed, 6,  "Fever recheck"),
+                new("karim",   1, AppointmentStatus.Completed, 6,  "Throat pain"),
+                new("rupa",    2, AppointmentStatus.Completed, 7,  "Sore throat"),
+                new("shirin",  1, AppointmentStatus.Completed, 7,  "Body ache"),
+                new("mizan",   2, AppointmentStatus.Completed, 8,  "Abdominal discomfort"),
+                new("nasrin",  1, AppointmentStatus.Cancelled, 8,  "Allergy check"),
+                new("abdul",   2, AppointmentStatus.Completed, 9,  "Heartburn review"),
+                new("jashim",  1, AppointmentStatus.Completed, 9,  "Nasal congestion"),
+                new("taslima", 2, AppointmentStatus.Completed, 10, "Rash follow-up"),
+                new("fatema",  1, AppointmentStatus.Completed, 10, "Epigastric pain"),
+                new("rahim",   1, AppointmentStatus.Completed, 11, "General checkup"),
+                new("baby1",   1, AppointmentStatus.Completed, 11, "Jaundice follow-up"),
+                new("karim",   1, AppointmentStatus.Completed, 12, "Sore throat"),
+                new("rupa",    2, AppointmentStatus.Cancelled, 13, "Throat infection"),
+                new("mizan",   2, AppointmentStatus.Completed, 14, "Gastritis check"),
+            };
+
+            var now = DateTime.UtcNow;
+            foreach (var spec in specs)
+            {
+                var patient = patients[spec.PatientKey];
+                var doctorId = spec.DoctorSlot == 1 ? drOneId : drTwoId;
+                var startedAt = now.Date.AddDays(-spec.DaysAgo).AddHours(10);
 
                 _context.Appointments.Add(new Appointment
                 {
@@ -571,7 +650,65 @@ namespace HospitalManagementSystem.Services
                     ReasonForVisit = spec.Reason,
                     Status = spec.Status,
                     CreatedAt = startedAt,
-                    UpdatedAt = now
+                    UpdatedAt = startedAt
+                });
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        private sealed record VitalSpec(
+            string PatientKey, int SystolicBp, int DiastolicBp, int HeartRate, decimal Spo2, decimal Temperature,
+            int RespiratoryRate, bool OnSupplementalOxygen, ConsciousnessLevel Consciousness, int RecordedBySlot, bool AttachToTodaysAppointment);
+
+        // NEWS2 Scale 1 is validated for adult patients only, so vitals are seeded for
+        // the ten adult patients and deliberately not for the two infant patients.
+        // TriagePriority is computed through News2Calculator itself, not hardcoded, so
+        // the seeded data is provably consistent with the same algorithm the test suite
+        // checks. Rahim and Abdul are today's two InConsultation patients, so attaching
+        // their vitals to those appointments makes the triage badge visible on the
+        // queue and the doctor's consultation card immediately after a reseed.
+        private async Task SeedVitalsAsync(Dictionary<string, Patient> patients, Dictionary<string, Appointment> todaysAppointments, int assistantOneId, int assistantTwoId)
+        {
+            var specs = new List<VitalSpec>
+            {
+                new("rahim",   95, 60,  78, 94, 37.2m, 22, false, ConsciousnessLevel.Alert, 1, true),  // Urgent: aggregate 5
+                new("abdul",  124, 80,  76, 98, 36.8m, 16, false, ConsciousnessLevel.Alert, 2, true),  // Normal
+
+                new("fatema", 118, 76,  82, 97, 37.0m, 18, false, ConsciousnessLevel.Alert, 1, false),
+                new("karim",  130, 84,  88, 96, 37.3m, 18, false, ConsciousnessLevel.Alert, 1, false),
+                new("nasrin", 112, 70,  72, 99, 36.9m, 15, false, ConsciousnessLevel.Alert, 1, false),
+                new("jashim", 122, 78,  84, 91, 37.1m, 18, false, ConsciousnessLevel.Alert, 1, false), // Urgent: single red score (SpO2)
+                new("shirin", 116, 74,  68, 98, 36.7m, 14, false, ConsciousnessLevel.Alert, 1, false),
+                new("rupa",   120, 78,  74, 97, 37.0m, 16, false, ConsciousnessLevel.Alert, 2, false),
+                new("mizan",   88, 55, 118, 90, 35.6m, 26, true,  ConsciousnessLevel.Voice, 2, false), // Emergency
+                new("taslima",110, 68,  70, 98, 36.8m, 15, false, ConsciousnessLevel.Alert, 2, false),
+            };
+
+            var now = DateTime.UtcNow;
+            foreach (var spec in specs)
+            {
+                var patient = patients[spec.PatientKey];
+                var recordedById = spec.RecordedBySlot == 1 ? assistantOneId : assistantTwoId;
+                var result = News2Calculator.Calculate(
+                    spec.RespiratoryRate, spec.Spo2, spec.OnSupplementalOxygen, spec.Temperature,
+                    spec.SystolicBp, spec.HeartRate, spec.Consciousness);
+
+                _context.PatientVitals.Add(new PatientVital
+                {
+                    PatientId = patient.Id,
+                    AppointmentId = spec.AttachToTodaysAppointment ? todaysAppointments[spec.PatientKey].Id : null,
+                    SystolicBp = spec.SystolicBp,
+                    DiastolicBp = spec.DiastolicBp,
+                    HeartRate = spec.HeartRate,
+                    Spo2 = spec.Spo2,
+                    Temperature = spec.Temperature,
+                    RespiratoryRate = spec.RespiratoryRate,
+                    OnSupplementalOxygen = spec.OnSupplementalOxygen,
+                    Consciousness = spec.Consciousness,
+                    TriagePriority = result.Priority,
+                    RecordedById = recordedById,
+                    CreatedAt = now
                 });
             }
 
@@ -626,6 +763,83 @@ namespace HospitalManagementSystem.Services
             await _context.SaveChangesAsync();
         }
 
+        private sealed record AdditionalAiSuggestionSpec(string PatientKey, AiSuggestionVerdict Verdict, int DoctorSlot, int InputTokens, int OutputTokens, int CachedTokens, int LatencyMs, int DaysAgo);
+
+        // Past AI activity across all four verdicts, so the admin Reports "AI
+        // governance" panel has more than Rahim's single pending draft to summarise.
+        // Reuses the same PayloadJson/CaseSummaryDraft shape as the canned suggestion
+        // above rather than inventing a second format.
+        private async Task SeedAdditionalAiSuggestionsAsync(Dictionary<string, Patient> patients, Dictionary<string, List<MedicalRecord>> recordsByPatient, int drOneId, int drTwoId)
+        {
+            var specs = new List<AdditionalAiSuggestionSpec>
+            {
+                new("fatema", AiSuggestionVerdict.Accepted, 1, 1450, 320, 200, 2100, 5),
+                new("karim",  AiSuggestionVerdict.Accepted, 1, 1600, 280, 150, 1850, 6),
+                new("shirin", AiSuggestionVerdict.Accepted, 1, 1550, 330, 220, 2000, 4),
+                new("abdul",  AiSuggestionVerdict.Edited,   2, 1720, 410, 300, 2400, 3),
+                new("rupa",   AiSuggestionVerdict.Edited,   2, 1380, 350, 100, 1950, 8),
+                new("mizan",  AiSuggestionVerdict.Rejected, 2, 1500, 300, 0,   2200, 9),
+                new("nasrin", AiSuggestionVerdict.Pending,  1, 1420, 290, 180, 2050, 0),
+            };
+
+            foreach (var spec in specs)
+            {
+                var records = recordsByPatient[spec.PatientKey];
+                if (records.Count == 0)
+                {
+                    continue;
+                }
+
+                var now = DateTime.UtcNow;
+                var createdAt = now.AddDays(-spec.DaysAgo);
+                var doctorId = spec.DoctorSlot == 1 ? drOneId : drTwoId;
+                var recordId = records[^1].Id;
+
+                var draft = new CaseSummaryDraft
+                {
+                    NarrativeText =
+                        $"**Case summary for {patients[spec.PatientKey].FullName}**\n\n" +
+                        $"- Summary generated from recent chart review [[rec:{recordId}]]",
+                    CitedRecordIds = new List<int> { recordId }
+                };
+
+                var suggestion = new AiSuggestion
+                {
+                    SuggestionType = AiSuggestionType.CaseSummary,
+                    PatientId = patients[spec.PatientKey].Id,
+                    PayloadJson = JsonSerializer.Serialize(draft),
+                    SourceRecordIds = JsonSerializer.Serialize(new[] { recordId }),
+                    ModelId = "gemini-3.8-flash",
+                    PromptVersion = "case-summary-v1",
+                    Verdict = spec.Verdict,
+                    InputTokens = spec.InputTokens,
+                    OutputTokens = spec.OutputTokens,
+                    CachedTokens = spec.CachedTokens,
+                    LatencyMs = spec.LatencyMs,
+                    CreatedAt = createdAt
+                };
+
+                if (spec.Verdict != AiSuggestionVerdict.Pending)
+                {
+                    suggestion.ReviewedById = doctorId;
+                    suggestion.ReviewedAt = createdAt.AddMinutes(3);
+
+                    if (spec.Verdict == AiSuggestionVerdict.Edited)
+                    {
+                        suggestion.EditedPayloadJson = JsonSerializer.Serialize(new CaseSummaryDraft
+                        {
+                            NarrativeText = draft.NarrativeText + "\n- Reviewed and refined by the attending physician.",
+                            CitedRecordIds = draft.CitedRecordIds
+                        });
+                    }
+                }
+
+                _context.AiSuggestions.Add(suggestion);
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
         private void PrintSummary()
         {
             Console.WriteLine();
@@ -647,8 +861,10 @@ namespace HospitalManagementSystem.Services
             Console.WriteLine("  (see the Patients list for each one's exact UHID/username)");
             Console.WriteLine();
             Console.WriteLine("12 patients, 20 beds (11 occupied / 9 free), 14 admissions (11 active, 3 discharged),");
-            Console.WriteLine("12 prescriptions, 6 bills (2 paid, 1 partially paid, 3 unpaid), 8 appointments today,");
-            Console.WriteLine("1 canned AI suggestion pending review on Rahim Uddin's chart.");
+            Console.WriteLine("12 prescriptions, 6 bills (2 paid, 1 partially paid, 3 unpaid), 8 appointments today");
+            Console.WriteLine("plus 25 historical appointments across the last 14 days (for the admin Reports chart),");
+            Console.WriteLine("10 vitals/triage readings (7 Normal, 2 Urgent, 1 Emergency), and 8 AI suggestions");
+            Console.WriteLine("across all four verdicts (Rahim Uddin's is the one still Pending review).");
         }
     }
 }
