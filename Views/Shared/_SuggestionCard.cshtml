@@ -1,9 +1,23 @@
 @model HospitalManagementSystem.Models.AiSuggestion
+@using HospitalManagementSystem.Models
+
+@{
+    // Labeled explicitly rather than left to context, since a patient can have more than
+    // one suggestion type in the same list (a case summary and a Bangla instruction sheet
+    // are both keyed to PatientId) - without this, a reader has no way to tell which is
+    // which at a glance.
+    var typeLabel = Model.SuggestionType switch
+    {
+        AiSuggestionType.CaseSummary => "Case Summary",
+        AiSuggestionType.PatientInstructions => "Patient Instructions (Bangla)",
+        _ => Model.SuggestionType.ToString()
+    };
+}
 
 <div class="pro-card border-start border-4 border-info mb-3">
     <div class="d-flex justify-content-between align-items-start mb-2">
         <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">
-            <i class="bi bi-robot me-1"></i> AI Draft &mdash; not a clinical record
+            <i class="bi bi-robot me-1"></i> AI Draft &mdash; @typeLabel &mdash; not a clinical record
         </span>
         <small class="text-muted">@Model.CreatedAt.ToLocalTime().ToString("MMM dd, hh:mm tt") &middot; @Model.ModelId</small>
     </div>
