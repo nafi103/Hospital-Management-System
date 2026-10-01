@@ -79,12 +79,23 @@ namespace HospitalManagementSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> MarkCompleted(int id)
         {
+            var userIdClaim = User.FindFirst("UserId")?.Value;
+            if (!int.TryParse(userIdClaim, out int currentDoctorId))
+            {
+                return Forbid();
+            }
+
             var appointment = await _context.Appointments
                 .Include(a => a.Patient)
                 .FirstOrDefaultAsync(a => a.Id == id);
 
             if (appointment != null && appointment.Status == AppointmentStatus.InConsultation)
             {
+                if (appointment.DoctorId != currentDoctorId)
+                {
+                    return Forbid();
+                }
+
                 appointment.Status = AppointmentStatus.Completed;
                 appointment.UpdatedAt = DateTime.UtcNow;
                 _context.Update(appointment);

@@ -41,11 +41,10 @@ namespace HospitalManagementSystem.Services
             _resolver = resolver;
         }
 
-        // Fetches the patient's recent records and scrubs them for the model, caching the
-        // scrubbed text so a doctor running several AI actions on the same patient in one
-        // sitting doesn't re-fetch and re-scrub identical data each time. The cache key
-        // bakes in the record count and max id, so a new/edited record simply misses
-        // instead of needing explicit invalidation.
+        // Fetches the patient's comprehensive clinical profile (allergies, latest vitals, active
+        // prescriptions, and medical records) and scrubs them for the model, caching the
+        // scrubbed text. The cache key bakes in the count and latest UpdatedAt/CreatedAt ticks
+        // across all 4 entity sets so any edit, addition, or status change immediately invalidates the cache.
         private async Task<(Patient Patient, List<MedicalRecord> Records, ScrubResult Scrubbed)> BuildScrubbedPatientContextAsync(int patientId, CancellationToken ct)
         {
             var patient = await _context.Patients.FindAsync(new object?[] { patientId }, ct)
@@ -62,17 +61,100 @@ namespace HospitalManagementSystem.Services
                 throw new ClinicalAiException(AiFailureReason.InvalidResponse, "This patient has no medical records to summarize yet.");
             }
 
-            var cacheKey = $"ai-ctx-{patientId}-{records.Count}-{records.Max(r => r.Id)}";
-            if (!_cache.TryGetValue(cacheKey, out ScrubResult? scrubbed) || scrubbed is null)
+            var allergies = await _context.PatientAllergies
+                .Where(a => a.PatientId == patientId)
+                .OrderByDescending(a => a.CreatedAt)
+                .ToListAsync(ct);
+
+            var latestVital = await _context.PatientVitals
+                .Where(v => v.PatientId == patientId)
+                .OrderByDescending(v => v.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+
+            var prescriptions = await _context.Prescriptions
+                .Include(p => p.PrescriptionItems)
+                    .ThenInclude(pi => pi.Medicine)
+                .Where(p => p.PatientId == patientId)
+                .OrderByDescending(p => p.CreatedAt)
+                .Take(5)
+                .ToListAsync(ct);
+
+            // Composite timestamp across all clinical domains ensures edits to existing records
+            // immediately result in a cache miss rather than serving stale prompt context.
+            var recordsTimestamp = records.Select(r => r.UpdatedAt.Ticks).DefaultIfEmpty(0).Max();
+            var allergiesTimestamp = allergies.Select(a => a.CreatedAt.Ticks).DefaultIfEmpty(0).Max();
+            var vitalsTimestamp = latestVital?.CreatedAt.Ticks ?? 0;
+            var presTimestamp = prescriptions.Select(p => p.UpdatedAt.Ticks).DefaultIfEmpty(0).Max();
+
+            var compositeKey = $"ai-ctx-{patientId}-{records.Count}-{recordsTimestamp}-{allergies.Count}-{allergiesTimestamp}-{vitalsTimestamp}-{prescriptions.Count}-{presTimestamp}";
+
+            if (!_cache.TryGetValue(compositeKey, out ScrubResult? scrubbed) || scrubbed is null)
             {
-                var contextText = string.Join("\n\n", records.Select(r =>
+                var sb = new StringBuilder();
+
+                // 1. Allergies section
+                if (allergies.Count > 0)
+                {
+                    sb.AppendLine("Patient Known Allergies:");
+                    foreach (var a in allergies)
+                    {
+                        var genericPart = !string.IsNullOrEmpty(a.AllergenGenericName) ? $" (Generic: {a.AllergenGenericName})" : "";
+                        var reactionPart = !string.IsNullOrEmpty(a.ReactionType) ? $" - Reaction: {a.ReactionType}" : "";
+                        sb.AppendLine($"- {a.Substance}{genericPart} [Severity: {a.Severity}]{reactionPart}");
+                    }
+                    sb.AppendLine();
+                }
+                else
+                {
+                    sb.AppendLine("Patient Known Allergies: None recorded.\n");
+                }
+
+                // 2. Latest Vitals & NEWS2 Priority section
+                if (latestVital != null)
+                {
+                    sb.AppendLine($"Latest Vital Signs ({latestVital.CreatedAt:yyyy-MM-dd HH:mm} UTC):");
+                    sb.AppendLine($"- Blood Pressure: {latestVital.SystolicBp}/{latestVital.DiastolicBp} mmHg");
+                    sb.AppendLine($"- Heart Rate: {latestVital.HeartRate} bpm, Respiratory Rate: {latestVital.RespiratoryRate}/min");
+                    sb.AppendLine($"- SpO2: {latestVital.Spo2}%, Temperature: {latestVital.Temperature}°C, Supplemental O2: {(latestVital.OnSupplementalOxygen ? "Yes" : "No")}");
+                    sb.AppendLine($"- Consciousness: {latestVital.Consciousness}, Blood Sugar: {(latestVital.BloodSugar.HasValue ? $"{latestVital.BloodSugar.Value} mmol/L" : "N/A")}");
+                    if (latestVital.TriagePriority.HasValue)
+                    {
+                        sb.AppendLine($"- Triage Priority: {latestVital.TriagePriority.Value}");
+                    }
+                    sb.AppendLine();
+                }
+
+                // 3. Active & Recent Prescriptions section
+                if (prescriptions.Count > 0)
+                {
+                    sb.AppendLine("Active & Recent Prescriptions:");
+                    foreach (var p in prescriptions)
+                    {
+                        var statusStr = p.Status == PrescriptionStatus.Dispensed ? "Dispensed" : "Pending Pharmacy";
+                        var dateStr = (p.DispensedAt ?? p.CreatedAt).ToString("yyyy-MM-dd");
+                        sb.AppendLine($"Prescription #{p.Id} ({dateStr}, Status: {statusStr}):");
+                        if (!string.IsNullOrWhiteSpace(p.Diagnosis)) sb.AppendLine($"  Diagnosis: {p.Diagnosis}");
+                        foreach (var item in p.PrescriptionItems)
+                        {
+                            var medName = item.Medicine?.Name ?? $"Medicine #{item.MedicineId}";
+                            var genName = item.Medicine?.GenericName;
+                            var genericStr = !string.IsNullOrWhiteSpace(genName) ? $" ({genName})" : "";
+                            sb.AppendLine($"  - {medName}{genericStr}: {item.DoseDisplay}, {(item.DurationDays.HasValue ? $"{item.DurationDays} days" : "unspecified duration")}");
+                        }
+                    }
+                    sb.AppendLine();
+                }
+
+                // 4. Medical Record History
+                sb.AppendLine("Medical Record History:");
+                sb.Append(string.Join("\n\n", records.Select(r =>
                     $"Record #{r.Id} ({r.RecordedAt:yyyy-MM-dd}):\n" +
                     $"Chief complaint: {r.ChiefComplaint}\n" +
                     $"Diagnosis: {r.Diagnosis}\n" +
-                    $"Treatment: {r.Treatment}"));
+                    $"Treatment: {r.Treatment}")));
 
-                scrubbed = _scrubber.Scrub(contextText, patient);
-                _cache.Set(cacheKey, scrubbed, TimeSpan.FromMinutes(10));
+                scrubbed = _scrubber.Scrub(sb.ToString(), patient);
+                _cache.Set(compositeKey, scrubbed, TimeSpan.FromMinutes(10));
             }
 
             return (patient, records, scrubbed);

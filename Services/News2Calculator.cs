@@ -16,6 +16,24 @@ namespace HospitalManagementSystem.Services
     {
         public readonly record struct Result(int Score, TriagePriority Priority);
 
+        /// <summary>
+        /// Calculates NEWS2 score only if the patient is not a child.
+        /// Returns null for pediatric patients because adult NEWS2 scoring is clinically invalid for minors.
+        /// </summary>
+        public static Result? TryCalculate(
+            bool isChild,
+            int respiratoryRate,
+            decimal spo2,
+            bool onSupplementalOxygen,
+            decimal temperature,
+            int systolicBp,
+            int heartRate,
+            ConsciousnessLevel consciousness)
+        {
+            if (isChild) return null;
+            return Calculate(respiratoryRate, spo2, onSupplementalOxygen, temperature, systolicBp, heartRate, consciousness);
+        }
+
         public static Result Calculate(
             int respiratoryRate,
             decimal spo2,

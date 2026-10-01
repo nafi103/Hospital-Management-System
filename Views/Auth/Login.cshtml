@@ -4,7 +4,7 @@
 }
 
 <div class="row justify-content-center align-items-center" style="min-height: 70vh;">
-    <div class="col-md-8 col-lg-6">
+    <div class="col-md-10 col-lg-8">
         <div class="card border-0 shadow-lg" style="border-radius: 1rem;">
             <div class="card-body p-5 text-center">
                 <i class="bi bi-hospital text-primary mb-3 d-block" style="font-size: 3rem;"></i>
@@ -26,7 +26,13 @@
                                 <input type="password" name="password" class="form-control" required />
                             </div>
                             <button type="submit" class="btn btn-primary w-100 mb-2">Log In</button>
-                            <small class="text-muted text-center d-block">Doctor Test: drmock / password123</small>
+                            <div class="mt-3 p-2 bg-light rounded border text-muted small text-start">
+                                <div class="fw-bold mb-1 text-secondary">Demo Credentials:</div>
+                                <div>&bull; <strong>Admin:</strong> <code>admin</code> / <code>admin123</code></div>
+                                <div>&bull; <strong>Doctor:</strong> <code>drmock</code> / <code>password123</code></div>
+                                <div>&bull; <strong>Staff:</strong> <code>dr2</code>, <code>assistant2</code>, <code>reception1</code> / <code>Passw0rd!</code></div>
+                                <div>&bull; <strong>Patient:</strong> <code>PT-202609-0001</code> / <code>Patient@123</code></div>
+                            </div>
                         </form>
                     </div>
 
@@ -93,6 +99,19 @@
                                             <i class="bi bi-person-vcard fs-2 mb-2"></i>
                                             <h6 class="mb-1 fw-bold">Mock Receptionist</h6>
                                             <small class="text-muted d-block mt-1" style="font-size: 0.75rem;">Front Desk</small>
+                                        </div>
+                                    </button>
+                                </form>
+                            </div>
+
+                            <div class="col-md-6 mt-2">
+                                <form asp-action="MockLogin" method="post">
+                                    <input type="hidden" name="role" value="Patient" />
+                                    <button type="submit" class="btn btn-outline-secondary w-100 py-3 h-100 rounded-3 text-start">
+                                        <div class="d-flex flex-column align-items-center text-center">
+                                            <i class="bi bi-person-heart fs-2 mb-2 text-primary"></i>
+                                            <h6 class="mb-1 fw-bold">Mock Patient</h6>
+                                            <small class="text-muted d-block mt-1" style="font-size: 0.75rem;">Patient Portal</small>
                                         </div>
                                     </button>
                                 </form>

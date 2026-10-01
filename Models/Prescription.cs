@@ -27,6 +27,11 @@ namespace HospitalManagementSystem.Models
         public PrescriptionStatus Status { get; set; }
         public bool IsBilled { get; set; } = false;
 
+        public int? DispensedById { get; set; }
+        [ForeignKey("DispensedById")]
+        public User? DispensedBy { get; set; }
+        public DateTime? DispensedAt { get; set; }
+
         // Populated only when PrescriptionSafetyChecker raised at least one warning and the
         // prescribing doctor explicitly acknowledged it - both null on an ordinary,
         // warning-free prescription. SafetyWarningsJson is a JSON array of the exact

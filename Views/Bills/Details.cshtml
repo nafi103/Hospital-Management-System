@@ -148,6 +148,38 @@
             </div>
         </div>
 
+        @if (Model.PaymentTransactions != null && Model.PaymentTransactions.Any())
+        {
+            <div class="mt-4 pt-3 border-top">
+                <h6 class="fw-bold mb-3"><i class="bi bi-receipt me-1"></i> Payment Transaction History</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date & Time</th>
+                                <th>Method</th>
+                                <th>Cashier / Processed By</th>
+                                <th>Reference / Notes</th>
+                                <th class="text-end">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var pt in Model.PaymentTransactions.OrderBy(t => t.TransactionDate))
+                            {
+                                <tr>
+                                    <td>@pt.TransactionDate.ToLocalTime().ToString("MMM dd, yyyy hh:mm tt")</td>
+                                    <td><span class="badge bg-light text-dark border">@pt.PaymentMethod</span></td>
+                                    <td>@(pt.ProcessedBy?.FullName ?? "Front Desk")</td>
+                                    <td class="text-muted small">@(string.IsNullOrWhiteSpace(pt.Notes) ? "—" : pt.Notes)</td>
+                                    <td class="text-end fw-bold text-success">৳@pt.Amount.ToString("0.00")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
         @if (isPaid)
         {
             <div class="position-absolute" style="top: 200px; right: 80px; opacity: 0.1; transform: rotate(-30deg); pointer-events: none;">

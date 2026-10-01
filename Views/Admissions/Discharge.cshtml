@@ -24,10 +24,64 @@
                 <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle">@Model.Patient.Uhid</span>
             </div>
 
-            <p class="text-center mb-4">
-                Are you sure you want to discharge this patient? <br />
-                This will automatically free up their currently assigned bed.
+            <p class="text-center mb-3">
+                Discharging this patient will record their discharge timestamp and automatically free up their currently assigned bed.
             </p>
+
+            @if (ViewBag.HasPendingFinancials == true)
+            {
+                <div class="alert alert-warning border border-warning-subtle mb-4">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="bi bi-exclamation-triangle-fill text-warning fs-4 me-2"></i>
+                        <h6 class="fw-bold mb-0 text-dark">Pending Charges / Unbilled Items Detected</h6>
+                    </div>
+                    <p class="small text-muted mb-3">
+                        The patient has unbilled services or outstanding balances. It is strongly recommended to reconcile and generate their final bill before releasing the bed.
+                    </p>
+
+                    <div class="table-responsive bg-white rounded border mb-3">
+                        <table class="table table-sm mb-0 align-middle">
+                            <tbody>
+                                @if (ViewBag.UnbilledPrescriptionsCount > 0)
+                                {
+                                    <tr>
+                                        <td class="ps-3 text-muted small"><i class="bi bi-capsule me-1"></i> Dispensed Medications</td>
+                                        <td class="text-center small">@ViewBag.UnbilledPrescriptionsCount prescription(s)</td>
+                                        <td class="text-end pe-3 fw-bold text-danger">৳@(((decimal)ViewBag.UnbilledPharmacyTotal).ToString("N2"))</td>
+                                    </tr>
+                                }
+                                @if (ViewBag.UnbilledCabinRent > 0)
+                                {
+                                    <tr>
+                                        <td class="ps-3 text-muted small"><i class="bi bi-hospital me-1"></i> Unbilled Cabin/Bed Rent</td>
+                                        <td class="text-center small">@ViewBag.TotalStayDays day(s) stay</td>
+                                        <td class="text-end pe-3 fw-bold text-danger">৳@(((decimal)ViewBag.UnbilledCabinRent).ToString("N2"))</td>
+                                    </tr>
+                                }
+                                @if (ViewBag.OutstandingBalance > 0)
+                                {
+                                    <tr>
+                                        <td class="ps-3 text-muted small"><i class="bi bi-receipt me-1"></i> Outstanding Invoices</td>
+                                        <td class="text-center small">@ViewBag.OutstandingBillsCount bill(s)</td>
+                                        <td class="text-end pe-3 fw-bold text-danger">৳@(((decimal)ViewBag.OutstandingBalance).ToString("N2"))</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <a asp-controller="Bills" asp-action="Create" asp-route-admissionId="@Model.Id" class="btn btn-outline-primary btn-sm w-100 fw-medium">
+                        <i class="bi bi-receipt-cutoff me-1"></i> Generate Final Bill for This Admission
+                    </a>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-success border border-success-subtle d-flex align-items-center mb-4">
+                    <i class="bi bi-check-circle-fill text-success fs-5 me-2"></i>
+                    <small class="mb-0">All pharmacy charges and cabin rent for this inpatient stay are settled.</small>
+                </div>
+            }
 
             <form asp-action="Discharge">
                 <input type="hidden" asp-for="Id" />

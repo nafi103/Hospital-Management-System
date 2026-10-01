@@ -38,12 +38,15 @@ namespace HospitalManagementSystem.Controllers
         // GET: Appointments
         public async Task<IActionResult> Index()
         {
-            // Show today's active queue
-            var today = DateTime.UtcNow.Date;
+            // Show today's active queue in hospital operational timezone
+            var todayLocal = HospitalClock.Today;
+            var startUtc = HospitalClock.GetStartOfDayUtc(todayLocal);
+            var endUtc = HospitalClock.GetEndOfDayUtc(todayLocal);
+
             var query = _context.Appointments
                 .Include(a => a.Patient)
                 .Include(a => a.Doctor)
-                .Where(a => a.AppointmentDatetime >= today && a.AppointmentDatetime < today.AddDays(1))
+                .Where(a => a.AppointmentDatetime >= startUtc && a.AppointmentDatetime < endUtc)
                 .AsQueryable();
 
             if (User.IsInRole("Assistant"))
@@ -92,13 +95,21 @@ namespace HospitalManagementSystem.Controllers
 
             var doctors = doctorsQuery.Select(u => new { u.Id, u.FullName }).ToList();
             ViewData["DoctorId"] = new SelectList(doctors, "Id", "FullName");
-            return View();
+
+            var nowLocal = HospitalClock.Now;
+            var defaultDateTime = new DateTime(nowLocal.Year, nowLocal.Month, nowLocal.Day, nowLocal.Hour, nowLocal.Minute, 0);
+
+            return View(new Appointment
+            {
+                AppointmentDatetime = defaultDateTime,
+                Status = AppointmentStatus.Scheduled
+            });
         }
 
         // POST: Appointments/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("Id,PatientId,DoctorId,ReasonForVisit,Status")] Appointment appointment)
+        public async Task<IActionResult> Create([Bind("Id,PatientId,DoctorId,AppointmentDatetime,ReasonForVisit,Status")] Appointment appointment)
         {
             ModelState.Remove("Patient");
             ModelState.Remove("Doctor");
@@ -110,17 +121,52 @@ namespace HospitalManagementSystem.Controllers
                 {
                     appointment.DoctorId = docId;
                 }
+                appointment.Status = AppointmentStatus.Scheduled;
+            }
+
+            // Convert local appointment datetime to UTC using HospitalClock operational timezone
+            var localDateTime = DateTime.SpecifyKind(appointment.AppointmentDatetime, DateTimeKind.Unspecified);
+            var appointmentUtc = TimeZoneInfo.ConvertTimeToUtc(localDateTime, HospitalClock.TimeZone);
+            appointment.AppointmentDatetime = appointmentUtc;
+            appointment.EndTime = appointmentUtc.AddMinutes(15);
+
+            // Validation: Cannot schedule in past (allow 15-minute grace for slight clock differences)
+            if (appointment.AppointmentDatetime < DateTime.UtcNow.AddMinutes(-15))
+            {
+                ModelState.AddModelError("AppointmentDatetime", "Cannot schedule an appointment in the past.");
+            }
+
+            // Conflict Detection: check if doctor has an active overlapping appointment
+            if (appointment.DoctorId > 0)
+            {
+                var newStart = appointment.AppointmentDatetime;
+                var newEnd = appointment.EndTime;
+                var conflict = await _context.Appointments
+                    .Include(a => a.Patient)
+                    .Where(a => a.DoctorId == appointment.DoctorId
+                             && a.Status != AppointmentStatus.Cancelled
+                             && a.Status != AppointmentStatus.Completed
+                             && a.AppointmentDatetime < newEnd
+                             && a.EndTime > newStart)
+                    .FirstOrDefaultAsync();
+
+                if (conflict != null)
+                {
+                    var conflictLocalStart = conflict.AppointmentDatetime.ToHospitalTime();
+                    var patientName = conflict.Patient?.FullName ?? "Unknown Patient";
+                    ModelState.AddModelError("AppointmentDatetime",
+                        $"Schedule Conflict: Doctor already has an appointment booked at {conflictLocalStart:hh:mm tt} for {patientName} (Status: {conflict.Status}). Please select another time slot.");
+                }
             }
 
             if (ModelState.IsValid)
             {
-                appointment.AppointmentDatetime = DateTime.UtcNow;
-                appointment.EndTime = DateTime.UtcNow.AddMinutes(15);
                 appointment.CreatedAt = DateTime.UtcNow;
                 appointment.UpdatedAt = DateTime.UtcNow;
 
                 _context.Add(appointment);
                 await _context.SaveChangesAsync();
+                TempData["SuccessMessage"] = "Appointment scheduled successfully.";
                 return RedirectToAction(nameof(Index));
             }
             
@@ -140,6 +186,9 @@ namespace HospitalManagementSystem.Controllers
 
             var doctors = doctorsQuery.Select(u => new { u.Id, u.FullName }).ToList();
             ViewData["DoctorId"] = new SelectList(doctors, "Id", "FullName", appointment.DoctorId);
+
+            // Re-convert to local time for re-rendering the datetime picker
+            appointment.AppointmentDatetime = appointment.AppointmentDatetime.ToHospitalTime();
             return View(appointment);
         }
 
@@ -159,8 +208,6 @@ namespace HospitalManagementSystem.Controllers
             {
                 return NotFound();
             }
-            
-            // Don't format time for view since we removed the input fields
 
             var doctors = _context.Users
                 .Include(u => u.Role)
@@ -174,7 +221,7 @@ namespace HospitalManagementSystem.Controllers
         // POST: Appointments/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("Id,PatientId,DoctorId,ReasonForVisit,Status")] Appointment appointment)
+        public async Task<IActionResult> Edit(int id, [Bind("Id,PatientId,DoctorId,ReasonForVisit,Status,Version")] Appointment appointment)
         {
             if (id != appointment.Id)
             {
@@ -184,21 +231,46 @@ namespace HospitalManagementSystem.Controllers
             ModelState.Remove("Patient");
             ModelState.Remove("Doctor");
 
+            var tracked = await _context.Appointments
+                .Include(a => a.Patient)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (tracked == null)
+            {
+                return NotFound();
+            }
+
+            // State machine validation: terminal appointments cannot revert to Scheduled or InConsultation
+            if ((tracked.Status == AppointmentStatus.Completed || tracked.Status == AppointmentStatus.Cancelled)
+                && appointment.Status != tracked.Status)
+            {
+                ModelState.AddModelError("Status", $"Cannot change the status of an appointment that is already {tracked.Status}. Terminal appointments cannot be reopened.");
+            }
+
+            if (appointment.Version > 0 && _context.Database.IsRelational())
+            {
+                try
+                {
+                    _context.Entry(tracked).Property(a => a.Version).OriginalValue = appointment.Version;
+                }
+                catch
+                {
+                    // Fallback
+                }
+            }
+
             if (ModelState.IsValid)
             {
                 try
                 {
-                    var existing = await _context.Appointments.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id);
-                    if (existing != null)
-                    {
-                        appointment.AppointmentDatetime = existing.AppointmentDatetime;
-                        appointment.EndTime = existing.EndTime;
-                        appointment.CreatedAt = existing.CreatedAt;
-                        appointment.UpdatedAt = DateTime.UtcNow;
+                    tracked.DoctorId = appointment.DoctorId;
+                    tracked.Status = appointment.Status;
+                    tracked.ReasonForVisit = appointment.ReasonForVisit;
+                    tracked.UpdatedAt = DateTime.UtcNow;
 
-                        _context.Update(appointment);
-                        await _context.SaveChangesAsync();
-                    }
+                    await _context.SaveChangesAsync();
+                    TempData["SuccessMessage"] = "Appointment updated successfully.";
+                    return RedirectToAction(nameof(Index));
                 }
                 catch (DbUpdateConcurrencyException)
                 {
@@ -206,20 +278,18 @@ namespace HospitalManagementSystem.Controllers
                     {
                         return NotFound();
                     }
-                    else
-                    {
-                        throw;
-                    }
+                    ModelState.AddModelError("", "This appointment was modified by another clinician or staff member while you were editing it. Please refresh the page to view the latest status.");
                 }
-                return RedirectToAction(nameof(Index));
             }
+
             var doctors = _context.Users
                 .Include(u => u.Role)
                 .Where(u => u.Role.RoleName == "Doctor")
                 .Select(u => new { u.Id, u.FullName })
                 .ToList();
             ViewData["DoctorId"] = new SelectList(doctors, "Id", "FullName", appointment.DoctorId);
-            return View(appointment);
+
+            return View(tracked);
         }
 
         // GET: Appointments/Delete/5
@@ -270,43 +340,70 @@ namespace HospitalManagementSystem.Controllers
             var appointment = await _context.Appointments
                 .Include(a => a.Patient)
                 .FirstOrDefaultAsync(a => a.Id == id);
-                
-            if (appointment != null && appointment.Status == AppointmentStatus.Scheduled)
+
+            if (appointment == null)
             {
-                appointment.Status = AppointmentStatus.InConsultation;
-                appointment.UpdatedAt = DateTime.UtcNow;
-                _context.Update(appointment);
-                await _context.SaveChangesAsync();
-
-                var latestVital = await _context.PatientVitals
-                    .Where(v => v.AppointmentId == appointment.Id)
-                    .OrderByDescending(v => v.CreatedAt)
-                    .FirstOrDefaultAsync();
-
-                var payload = new {
-                    id = appointment.Id,
-                    patientName = appointment.Patient?.FullName ?? "Unknown",
-                    uhid = appointment.Patient?.Uhid,
-                    reason = string.IsNullOrEmpty(appointment.ReasonForVisit) ? "No reason specified." : appointment.ReasonForVisit,
-                    patientId = appointment.PatientId,
-                    doctorId = appointment.DoctorId,
-                    time = appointment.UpdatedAt.ToLocalTime().ToString("hh:mm tt"),
-                    triage = latestVital?.TriagePriority?.ToString(),
-                    vitalsSummary = latestVital == null ? null :
-                        $"BP {latestVital.SystolicBp}/{latestVital.DiastolicBp} · HR {latestVital.HeartRate} · SpO2 {latestVital.Spo2}% · Temp {latestVital.Temperature}°C · RR {latestVital.RespiratoryRate}"
-                };
-                
-                // Scoped to this doctor's group (which their assistant also joins) -
-                // Clients.All used to push every arrival to every connected doctor,
-                // regardless of whose patient it was.
-                await _hubContext.Clients.Group($"Doctor_{appointment.DoctorId}").SendAsync("PatientSentIn", payload);
-
-                // Fire-and-forget so the assistant isn't stuck waiting several seconds
-                // on an AI call just to send a patient in. Runs in its own DI scope
-                // because this request's scoped DbContext is disposed as soon as the
-                // response returns - reusing _context here would throw once that happens.
-                _ = GenerateArrivalSummaryAsync(appointment.PatientId, appointment.DoctorId);
+                return NotFound();
             }
+
+            if (User.IsInRole("Assistant"))
+            {
+                var assignedDocClaim = User.Claims.FirstOrDefault(c => c.Type == "AssignedDoctorId")?.Value;
+                if (!int.TryParse(assignedDocClaim, out int assignedDocId) || appointment.DoctorId != assignedDocId)
+                {
+                    return Forbid();
+                }
+            }
+            else
+            {
+                // Only assigned assistants can send in patients to the doctor chamber
+                return Forbid();
+            }
+
+            var rowsAffected = await _context.Appointments
+                .Where(a => a.Id == id && a.Status == AppointmentStatus.Scheduled)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(a => a.Status, AppointmentStatus.InConsultation)
+                    .SetProperty(a => a.UpdatedAt, DateTime.UtcNow));
+
+            if (rowsAffected == 0)
+            {
+                TempData["ErrorMessage"] = "Patient has already been sent in or appointment is not in scheduled state.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            appointment.Status = AppointmentStatus.InConsultation;
+            appointment.UpdatedAt = DateTime.UtcNow;
+
+            var latestVital = await _context.PatientVitals
+                .Where(v => v.AppointmentId == appointment.Id)
+                .OrderByDescending(v => v.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            var payload = new {
+                id = appointment.Id,
+                patientName = appointment.Patient?.FullName ?? "Unknown",
+                uhid = appointment.Patient?.Uhid,
+                reason = string.IsNullOrEmpty(appointment.ReasonForVisit) ? "No reason specified." : appointment.ReasonForVisit,
+                patientId = appointment.PatientId,
+                doctorId = appointment.DoctorId,
+                time = appointment.UpdatedAt.ToLocalTime().ToString("hh:mm tt"),
+                triage = latestVital?.TriagePriority?.ToString(),
+                vitalsSummary = latestVital == null ? null :
+                    $"BP {latestVital.SystolicBp}/{latestVital.DiastolicBp} · HR {latestVital.HeartRate} · SpO2 {latestVital.Spo2}% · Temp {latestVital.Temperature}°C · RR {latestVital.RespiratoryRate}"
+            };
+            
+            // Scoped to this doctor's group (which their assistant also joins) -
+            // Clients.All used to push every arrival to every connected doctor,
+            // regardless of whose patient it was.
+            await _hubContext.Clients.Group($"Doctor_{appointment.DoctorId}").SendAsync("PatientSentIn", payload);
+
+            // Fire-and-forget so the assistant isn't stuck waiting several seconds
+            // on an AI call just to send a patient in. Runs in its own DI scope
+            // because this request's scoped DbContext is disposed as soon as the
+            // response returns - reusing _context here would throw once that happens.
+            _ = GenerateArrivalSummaryAsync(appointment.PatientId, appointment.DoctorId);
+
             return RedirectToAction(nameof(Index));
         }
 

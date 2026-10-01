@@ -61,9 +61,19 @@
                 }
 
                 <div class="mb-4 pt-3 border-top">
-                    <label asp-for="DiscountAmount" class="form-label fw-medium text-success">Discount Amount (৳)</label>
-                    <input asp-for="DiscountAmount" type="number" step="0.01" class="form-control border-success text-success fw-bold" placeholder="0.00" value="0.00" />
-                    <small class="text-muted">Discount will be applied to the final subtotal.</small>
+                    @if (User.IsInRole("Admin"))
+                    {
+                        <label asp-for="DiscountAmount" class="form-label fw-medium text-success">Discount Amount (৳) <span class="badge bg-success-subtle text-success border border-success-subtle ms-1">Admin Authorized</span></label>
+                        <input asp-for="DiscountAmount" type="number" step="0.01" min="0" class="form-control border-success text-success fw-bold" placeholder="0.00" value="0.00" />
+                        <span asp-validation-for="DiscountAmount" class="text-danger small d-block"></span>
+                        <small class="text-muted">Discount will be applied to the final subtotal.</small>
+                    }
+                    else
+                    {
+                        <label asp-for="DiscountAmount" class="form-label fw-medium text-muted">Discount Amount (৳)</label>
+                        <input asp-for="DiscountAmount" type="number" step="0.01" class="form-control text-muted" placeholder="0.00" value="0.00" readonly />
+                        <small class="text-muted d-block mt-1"><i class="bi bi-shield-lock me-1 text-warning"></i>Discounts require Administrator authorization.</small>
+                    }
                 </div>
             </div>
         </div>

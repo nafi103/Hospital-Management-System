@@ -85,7 +85,7 @@ $(document).ready(function () {
                                     </div>
 
                                     <div class="d-grid gap-2 mb-3">
-                                        <a href="/MedicalRecords/Create?patientId=${payload.patientId}&doctorId=${payload.doctorId}" class="btn btn-outline-primary text-start">
+                                        <a href="/MedicalRecords/Create?patientId=${payload.patientId}&doctorId=${payload.doctorId}&appointmentId=${payload.id}" class="btn btn-outline-primary text-start">
                                             <i class="bi bi-file-medical me-2"></i> Add Medical Record
                                         </a>
                                         <a href="/Prescriptions/Create?patientId=${payload.patientId}&doctorId=${payload.doctorId}" class="btn btn-outline-primary text-start">

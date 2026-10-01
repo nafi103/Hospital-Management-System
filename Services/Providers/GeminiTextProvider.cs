@@ -116,5 +116,35 @@ namespace HospitalManagementSystem.Services.Providers
             _logger.LogError(ex, "Gemini streaming request failed for model {Model} (status {StatusCode}): {Message}", modelId, statusCode, ex.Message);
             return new ClinicalAiException(reason, "The AI service request failed.", ex);
         }
+
+        public async Task<(bool Success, string? ErrorMessage)> PingAsync(string apiKey, string modelId, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(apiKey)) return (false, "API key is required.");
+            if (string.IsNullOrWhiteSpace(modelId)) return (false, "Model ID is required.");
+
+            try
+            {
+                var client = GetClient(apiKey);
+                var config = new GenerateContentConfig
+                {
+                    MaxOutputTokens = 1
+                };
+
+                await using var enumerator = client.Models.GenerateContentStreamAsync(
+                    model: modelId, contents: "ping", config: config, cancellationToken: ct).GetAsyncEnumerator(ct);
+
+                await enumerator.MoveNextAsync();
+                return (true, null);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                return (false, "Request timed out.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Gemini ping failed for model {Model}", modelId);
+                return (false, ex.Message);
+            }
+        }
     }
 }

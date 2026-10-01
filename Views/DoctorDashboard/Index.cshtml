@@ -1,5 +1,6 @@
 @model IEnumerable<HospitalManagementSystem.Models.Appointment>
 @using HospitalManagementSystem.Models
+@using HospitalManagementSystem.Services
 
 @{
     ViewData["Title"] = "Doctor's Desk";
@@ -42,7 +43,7 @@
                     <div class="col-md-7 pe-md-4 mb-4 mb-md-0">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <span class="badge bg-primary">In Consultation</span>
-                            <small class="text-muted"><i class="bi bi-clock"></i> Sent in @item.UpdatedAt.ToLocalTime().ToString("hh:mm tt")</small>
+                            <small class="text-muted"><i class="bi bi-clock"></i> Sent in @item.UpdatedAt.ToHospitalTime().ToString("hh:mm tt")</small>
                         </div>
 
                         <h4 class="fw-bold text-primary mb-1">@item.Patient?.FullName</h4>
@@ -71,7 +72,7 @@
                         </div>
 
                         <div class="d-grid gap-2 mb-3">
-                            <a asp-controller="MedicalRecords" asp-action="Create" asp-route-patientId="@item.PatientId" asp-route-doctorId="@item.DoctorId" class="btn btn-outline-primary text-start">
+                            <a asp-controller="MedicalRecords" asp-action="Create" asp-route-patientId="@item.PatientId" asp-route-doctorId="@item.DoctorId" asp-route-appointmentId="@item.Id" class="btn btn-outline-primary text-start">
                                 <i class="bi bi-file-medical me-2"></i> Add Medical Record
                             </a>
                             <a asp-controller="Prescriptions" asp-action="Create" asp-route-patientId="@item.PatientId" asp-route-doctorId="@item.DoctorId" class="btn btn-outline-primary text-start">

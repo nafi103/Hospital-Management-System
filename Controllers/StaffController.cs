@@ -24,6 +24,7 @@ namespace HospitalManagementSystem.Controllers
         {
             var staff = await _context.Users
                 .Include(u => u.Role)
+                .Include(u => u.AssignedDoctor)
                 .OrderBy(u => u.Role.RoleName)
                 .ThenBy(u => u.FullName)
                 .ToListAsync();
@@ -31,35 +32,67 @@ namespace HospitalManagementSystem.Controllers
         }
 
         // GET: Staff/Create
-        public IActionResult Create()
+        public async Task<IActionResult> Create()
         {
-            ViewData["RoleId"] = new SelectList(_context.Roles, "Id", "RoleName");
+            await PopulateStaffDropDownsAsync();
             return View();
         }
 
         // POST: Staff/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("RoleId,Username,Password,FullName,Category")] User user)
+        public async Task<IActionResult> Create([Bind("RoleId,Username,Password,FullName,Category,AssignedDoctorId")] User user)
         {
             ModelState.Remove("Role");
+            ModelState.Remove("AssignedDoctor");
             if (string.IsNullOrEmpty(user.Category))
             {
                 user.Category = "";
                 ModelState.Remove("Category");
             }
 
+            var usernameTrimmed = user.Username?.Trim() ?? string.Empty;
+            user.Username = usernameTrimmed;
+            if (string.IsNullOrWhiteSpace(usernameTrimmed))
+            {
+                ModelState.AddModelError("Username", "Username is required.");
+            }
+            else if (await _context.Users.AnyAsync(u => u.Username.ToLower() == usernameTrimmed.ToLower()))
+            {
+                ModelState.AddModelError("Username", "Username is already in use by another staff member.");
+            }
+
+            var role = await _context.Roles.FindAsync(user.RoleId);
+            if (role != null && role.RoleName != "Assistant")
+            {
+                user.AssignedDoctorId = null;
+            }
+
             if (ModelState.IsValid)
             {
-                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(user.Password);
-                user.CreatedAt = DateTime.UtcNow;
-                user.UpdatedAt = DateTime.UtcNow;
-                _context.Add(user);
-                await _context.SaveChangesAsync();
-                TempData["SuccessMessage"] = $"Staff member {user.FullName} successfully added!";
-                return RedirectToAction(nameof(Index));
+                try
+                {
+                    user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(user.Password);
+                    user.CreatedAt = DateTime.UtcNow;
+                    user.UpdatedAt = DateTime.UtcNow;
+                    _context.Add(user);
+                    await _context.SaveChangesAsync();
+                    TempData["SuccessMessage"] = $"Staff member {user.FullName} successfully added!";
+                    return RedirectToAction(nameof(Index));
+                }
+                catch (DbUpdateException)
+                {
+                    if (await _context.Users.AnyAsync(u => u.Username.ToLower() == usernameTrimmed.ToLower()))
+                    {
+                        ModelState.AddModelError("Username", "Username is already in use by another staff member.");
+                    }
+                    else
+                    {
+                        ModelState.AddModelError(string.Empty, "Unable to save staff member due to a database conflict.");
+                    }
+                }
             }
-            ViewData["RoleId"] = new SelectList(_context.Roles, "Id", "RoleName", user.RoleId);
+            await PopulateStaffDropDownsAsync(user.RoleId, user.AssignedDoctorId);
             return View(user);
         }
 
@@ -71,18 +104,22 @@ namespace HospitalManagementSystem.Controllers
             var user = await _context.Users.FindAsync(id);
             if (user == null) return NotFound();
 
-            ViewData["RoleId"] = new SelectList(_context.Roles, "Id", "RoleName", user.RoleId);
+            await PopulateStaffDropDownsAsync(user.RoleId, user.AssignedDoctorId);
             return View(user);
         }
 
         // POST: Staff/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("Id,RoleId,Username,Password,FullName,Category,CreatedAt")] User user)
+        public async Task<IActionResult> Edit(int id, [Bind("Id,RoleId,Username,Password,FullName,Category,AssignedDoctorId,CreatedAt")] User user)
         {
             if (id != user.Id) return NotFound();
 
+            var originalUser = await _context.Users.AsNoTracking().Include(u => u.Role).FirstOrDefaultAsync(u => u.Id == id);
+            if (originalUser == null) return NotFound();
+
             ModelState.Remove("Role");
+            ModelState.Remove("AssignedDoctor");
             if (string.IsNullOrEmpty(user.Category))
             {
                 user.Category = "";
@@ -95,6 +132,41 @@ namespace HospitalManagementSystem.Controllers
             if (string.IsNullOrWhiteSpace(user.Password))
             {
                 ModelState.Remove("Password");
+            }
+
+            var usernameTrimmed = user.Username?.Trim() ?? string.Empty;
+            user.Username = usernameTrimmed;
+            if (string.IsNullOrWhiteSpace(usernameTrimmed))
+            {
+                ModelState.AddModelError("Username", "Username is required.");
+            }
+            else if (await _context.Users.AnyAsync(u => u.Id != user.Id && u.Username.ToLower() == usernameTrimmed.ToLower()))
+            {
+                ModelState.AddModelError("Username", "Username is already in use by another staff member.");
+            }
+
+            var role = await _context.Roles.FindAsync(user.RoleId);
+            if (role != null && role.RoleName != "Assistant")
+            {
+                user.AssignedDoctorId = null;
+            }
+
+            // Prevent sole admin demotion or self-demotion
+            if (originalUser.Role?.RoleName == "Admin" && role?.RoleName != "Admin")
+            {
+                var adminCount = await _context.Users.CountAsync(u => u.Role.RoleName == "Admin");
+                if (adminCount <= 1)
+                {
+                    ModelState.AddModelError("RoleId", "Cannot change role: this user is the only Administrator in the system.");
+                }
+                else
+                {
+                    var currentUserIdStr = User.FindFirst("UserId")?.Value;
+                    if (int.TryParse(currentUserIdStr, out int currentUserId) && currentUserId == id)
+                    {
+                        ModelState.AddModelError("RoleId", "You cannot demote your own administrator account.");
+                    }
+                }
             }
 
             if (ModelState.IsValid)
@@ -111,11 +183,7 @@ namespace HospitalManagementSystem.Controllers
                     }
                     else
                     {
-                        var existingHash = await _context.Users
-                            .Where(u => u.Id == user.Id)
-                            .Select(u => u.PasswordHash)
-                            .FirstOrDefaultAsync();
-                        user.PasswordHash = existingHash ?? string.Empty;
+                        user.PasswordHash = originalUser.PasswordHash ?? string.Empty;
                     }
                     // Npgsql requires UTC for timestamp with time zone
                     user.CreatedAt = DateTime.SpecifyKind(user.CreatedAt, DateTimeKind.Utc);
@@ -123,16 +191,45 @@ namespace HospitalManagementSystem.Controllers
                     _context.Update(user);
                     await _context.SaveChangesAsync();
                     TempData["SuccessMessage"] = $"Staff member {user.FullName} successfully updated!";
+                    return RedirectToAction(nameof(Index));
                 }
                 catch (DbUpdateConcurrencyException)
                 {
                     if (!UserExists(user.Id)) return NotFound();
                     else throw;
                 }
-                return RedirectToAction(nameof(Index));
+                catch (DbUpdateException)
+                {
+                    if (await _context.Users.AnyAsync(u => u.Id != user.Id && u.Username.ToLower() == usernameTrimmed.ToLower()))
+                    {
+                        ModelState.AddModelError("Username", "Username is already in use by another staff member.");
+                    }
+                    else
+                    {
+                        ModelState.AddModelError(string.Empty, "Unable to update staff member due to a database conflict.");
+                    }
+                }
             }
-            ViewData["RoleId"] = new SelectList(_context.Roles, "Id", "RoleName", user.RoleId);
+            await PopulateStaffDropDownsAsync(user.RoleId, user.AssignedDoctorId);
             return View(user);
+        }
+
+        private async Task PopulateStaffDropDownsAsync(int? selectedRoleId = null, int? selectedDoctorId = null)
+        {
+            ViewData["RoleId"] = new SelectList(await _context.Roles.OrderBy(r => r.RoleName).ToListAsync(), "Id", "RoleName", selectedRoleId);
+
+            var doctors = await _context.Users
+                .Include(u => u.Role)
+                .Where(u => u.Role.RoleName == "Doctor")
+                .OrderBy(u => u.FullName)
+                .Select(u => new
+                {
+                    u.Id,
+                    DisplayName = "Dr. " + u.FullName + (!string.IsNullOrEmpty(u.Category) ? " (" + u.Category + ")" : "")
+                })
+                .ToListAsync();
+
+            ViewData["AssignedDoctorId"] = new SelectList(doctors, "Id", "DisplayName", selectedDoctorId);
         }
 
         // GET: Staff/Delete/5
@@ -146,6 +243,25 @@ namespace HospitalManagementSystem.Controllers
             
             if (user == null) return NotFound();
 
+            var currentUserIdStr = User.FindFirst("UserId")?.Value;
+            int.TryParse(currentUserIdStr, out int currentUserId);
+
+            ViewBag.CanDelete = true;
+            if (currentUserId == id)
+            {
+                ViewBag.CanDelete = false;
+                ViewBag.DeleteWarning = "You cannot delete your own administrator account.";
+            }
+            else if (user.Role?.RoleName == "Admin")
+            {
+                var adminCount = await _context.Users.CountAsync(u => u.Role.RoleName == "Admin");
+                if (adminCount <= 1)
+                {
+                    ViewBag.CanDelete = false;
+                    ViewBag.DeleteWarning = "Cannot delete the only Administrator in the system.";
+                }
+            }
+
             return View(user);
         }
 
@@ -154,9 +270,31 @@ namespace HospitalManagementSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            var user = await _context.Users.FindAsync(id);
+            var currentUserIdStr = User.FindFirst("UserId")?.Value;
+            int.TryParse(currentUserIdStr, out int currentUserId);
+
+            if (currentUserId == id)
+            {
+                TempData["ErrorMessage"] = "You cannot delete your own administrator account.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var user = await _context.Users
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.Id == id);
+
             if (user != null)
             {
+                if (user.Role?.RoleName == "Admin")
+                {
+                    var adminCount = await _context.Users.CountAsync(u => u.Role.RoleName == "Admin");
+                    if (adminCount <= 1)
+                    {
+                        TempData["ErrorMessage"] = "Cannot delete the only Administrator in the system.";
+                        return RedirectToAction(nameof(Index));
+                    }
+                }
+
                 try
                 {
                     _context.Users.Remove(user);

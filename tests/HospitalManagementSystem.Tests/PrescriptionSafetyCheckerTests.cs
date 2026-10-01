@@ -206,4 +206,85 @@ public class PrescriptionSafetyCheckerTests
         var exception = Record.Exception(() => CheckNoAllergiesNoChild(new SafetyCheckItem(9999, 1, DoseUnit.Tablet)));
         Assert.Null(exception);
     }
+
+    [Fact]
+    public void NewItem_DuplicatesActiveDispensedMedication_RaisesDuplicateTherapyWarning()
+    {
+        var activeMeds = new List<ActiveMedicationInfo>
+        {
+            new(Ace.Id, Ace.Name, Ace.GenericName, DateTime.UtcNow.AddDays(-2), 7, 101)
+        };
+
+        var warnings = PrescriptionSafetyChecker.Check(
+            patientIsChild: false,
+            allergies: [],
+            items: [new SafetyCheckItem(Napa.Id, 10, DoseUnit.Tablet)],
+            allMedicines: Formulary,
+            activeMedications: activeMeds);
+
+        var warning = Assert.Single(warnings);
+        Assert.Equal("Duplicate Therapy", warning.Category);
+        Assert.Equal(SafetyWarningSeverity.Warning, warning.Severity);
+        Assert.Contains("Paracetamol", warning.Message);
+        Assert.Contains("Prescription #101", warning.Message);
+        Assert.Contains(Ace.Name, warning.Message);
+        Assert.Contains(Napa.Name, warning.Message);
+    }
+
+    [Fact]
+    public void NewItem_DifferentGenericFromActiveMedication_RaisesNoDuplicateWarning()
+    {
+        var activeMeds = new List<ActiveMedicationInfo>
+        {
+            new(Seclo.Id, Seclo.Name, Seclo.GenericName, DateTime.UtcNow.AddDays(-2), 14, 102)
+        };
+
+        var warnings = PrescriptionSafetyChecker.Check(
+            patientIsChild: false,
+            allergies: [],
+            items: [new SafetyCheckItem(Napa.Id, 10, DoseUnit.Tablet)],
+            allMedicines: Formulary,
+            activeMedications: activeMeds);
+
+        Assert.Empty(warnings);
+    }
+
+    [Fact]
+    public void ActiveMedication_ConflictsWithPatientAllergy_RaisesAllergyConflict()
+    {
+        var allergies = new List<SafetyCheckAllergy> { new("Paracetamol", "Paracetamol", AllergySeverity.Severe) };
+        var activeMeds = new List<ActiveMedicationInfo>
+        {
+            new(Ace.Id, Ace.Name, Ace.GenericName, DateTime.UtcNow.AddDays(-1), 7, 103)
+        };
+
+        var warnings = PrescriptionSafetyChecker.Check(
+            patientIsChild: false,
+            allergies: allergies,
+            items: [new SafetyCheckItem(Seclo.Id, 14, DoseUnit.Capsule)],
+            allMedicines: Formulary,
+            activeMedications: activeMeds);
+
+        var warning = Assert.Single(warnings);
+        Assert.Equal("Allergy Conflict", warning.Category);
+        Assert.Equal(SafetyWarningSeverity.Critical, warning.Severity);
+        Assert.Contains("Ace 500mg", warning.Message);
+        Assert.Contains("Prescription #103", warning.Message);
+    }
+
+    [Fact]
+    public void AllergyConflict_FreeTextSubstanceFallback_MatchesGenericOrBrand()
+    {
+        var allergies = new List<SafetyCheckAllergy> { new("Omeprazole", null, AllergySeverity.Severe) };
+        var warnings = PrescriptionSafetyChecker.Check(
+            patientIsChild: false,
+            allergies: allergies,
+            items: [new SafetyCheckItem(Seclo.Id, 14, DoseUnit.Capsule)],
+            allMedicines: Formulary);
+
+        var warning = Assert.Single(warnings);
+        Assert.Equal("Allergy Conflict", warning.Category);
+        Assert.Equal(SafetyWarningSeverity.Critical, warning.Severity);
+        Assert.Contains("Seclo", warning.Message);
+    }
 }

@@ -17,6 +17,16 @@
 <div class="row">
     <div class="col-lg-6">
         <div class="pro-card border-danger border-opacity-25">
+            @if (ViewBag.HasBills == true)
+            {
+                <div class="alert alert-warning d-flex align-items-center mb-4" role="alert">
+                    <i class="bi bi-shield-lock-fill fs-4 me-3 text-warning"></i>
+                    <div>
+                        <strong>Deletion Blocked:</strong> This admission has linked billing records. Deleting it would compromise accounting and audit trails.
+                    </div>
+                </div>
+            }
+
             <div class="alert alert-danger d-flex align-items-center mb-4" role="alert">
                 <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
                 <div>
@@ -49,7 +59,7 @@
                     <input type="hidden" asp-for="Id" />
                     <div class="d-flex justify-content-end gap-2">
                         <a asp-action="Index" class="btn btn-light">Cancel</a>
-                        <button type="submit" class="btn btn-danger px-4">
+                        <button type="submit" class="btn btn-danger px-4" @(ViewBag.HasBills == true ? "disabled" : "")>
                             <i class="bi bi-trash me-1"></i> Delete Admission
                         </button>
                     </div>

@@ -21,6 +21,7 @@ namespace HospitalManagementSystem.Models
         public DbSet<PrescriptionItem> PrescriptionItems { get; set; }
         public DbSet<Bill> Bills { get; set; }
         public DbSet<BillItem> BillItems { get; set; }
+        public DbSet<PaymentTransaction> PaymentTransactions { get; set; }
         public DbSet<PatientVital> PatientVitals { get; set; }
         public DbSet<MedicalRecord> MedicalRecords { get; set; }
         public DbSet<PatientAllergy> PatientAllergies { get; set; }
@@ -44,6 +45,16 @@ namespace HospitalManagementSystem.Models
                 .HasForeignKey(a => a.DoctorId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            modelBuilder.Entity<Appointment>()
+                .Property(a => a.Version)
+                .IsRowVersion();
+
+            modelBuilder.Entity<BedTransfer>()
+                .HasOne(bt => bt.Bed)
+                .WithMany(b => b.BedTransfers)
+                .HasForeignKey(bt => bt.BedId)
+                .OnDelete(DeleteBehavior.Restrict);
+
 
 
             modelBuilder.Entity<Operation>()
@@ -58,11 +69,39 @@ namespace HospitalManagementSystem.Models
                 .HasForeignKey(p => p.DoctorId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            modelBuilder.Entity<Prescription>()
+                .HasOne(p => p.DispensedBy)
+                .WithMany()
+                .HasForeignKey(p => p.DispensedById)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PrescriptionItem>()
+                .HasOne(pi => pi.Medicine)
+                .WithMany()
+                .HasForeignKey(pi => pi.MedicineId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Bill>()
+                .Property(b => b.Version)
+                .IsRowVersion();
+
             modelBuilder.Entity<Bill>()
                 .HasOne(b => b.DiscountApprovedBy)
                 .WithMany()
                 .HasForeignKey(b => b.DiscountApprovedById)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PaymentTransaction>()
+                .HasOne(pt => pt.ProcessedBy)
+                .WithMany()
+                .HasForeignKey(pt => pt.ProcessedById)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<PaymentTransaction>()
+                .HasOne(pt => pt.Bill)
+                .WithMany(b => b.PaymentTransactions)
+                .HasForeignKey(pt => pt.BillId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<PatientVital>()
                 .HasOne(v => v.RecordedBy)

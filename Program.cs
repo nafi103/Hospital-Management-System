@@ -58,6 +58,8 @@ builder.Services.AddScoped<IAiTextProvider, GeminiTextProvider>();
 builder.Services.AddScoped<IAiTextProvider, GroqTextProvider>();
 builder.Services.AddScoped<IAiTextProvider, AnthropicTextProvider>();
 
+HospitalClock.Initialize(builder.Configuration["HospitalSettings:TimeZoneId"]);
+
 var app = builder.Build();
 
 // One-time seed: if no provider has ever been configured through the admin UI, copy

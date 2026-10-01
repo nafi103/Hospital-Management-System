@@ -80,6 +80,40 @@ namespace HospitalManagementSystem.Controllers
                 return NotFound();
             }
 
+            // Verify clinical care relationship if the caller is a Doctor or Assistant
+            if (User.IsInRole("Doctor") || User.IsInRole("Assistant"))
+            {
+                int? effectiveDoctorId = null;
+                if (User.IsInRole("Doctor"))
+                {
+                    var userIdClaim = User.FindFirst("UserId")?.Value;
+                    if (int.TryParse(userIdClaim, out int docId)) effectiveDoctorId = docId;
+                }
+                else if (User.IsInRole("Assistant"))
+                {
+                    var asstDocClaim = User.FindFirst("AssignedDoctorId")?.Value;
+                    if (int.TryParse(asstDocClaim, out int docId)) effectiveDoctorId = docId;
+                }
+
+                if (effectiveDoctorId.HasValue)
+                {
+                    var docId = effectiveDoctorId.Value;
+                    var hasCareRelationship = await _context.Appointments.AnyAsync(a => a.PatientId == id && a.DoctorId == docId)
+                        || await _context.Admissions.AnyAsync(a => a.PatientId == id && a.AdmittingDoctorId == docId)
+                        || await _context.MedicalRecords.AnyAsync(m => m.PatientId == id && m.DoctorId == docId)
+                        || await _context.Prescriptions.AnyAsync(p => p.PatientId == id && p.DoctorId == docId);
+
+                    if (!hasCareRelationship)
+                    {
+                        return Forbid();
+                    }
+                }
+                else
+                {
+                    return Forbid();
+                }
+            }
+
             ViewBag.KnownAllergens = await _context.Medicines
                 .Select(m => m.GenericName)
                 .Distinct()
@@ -143,42 +177,84 @@ namespace HospitalManagementSystem.Controllers
                     patient.RegisteredById = userId;
                 }
 
-                // Auto-generate UHID: PT-YYYYMM-XXXX
+                // Auto-generate UHID: PT-YYYYMM-XXXX with concurrency protection and collision retry
                 string prefix = $"PT-{DateTime.UtcNow:yyyyMM}-";
-                
-                var lastPatient = await _context.Patients
-                    .Where(p => p.Uhid.StartsWith(prefix))
-                    .OrderByDescending(p => p.Id)
-                    .FirstOrDefaultAsync();
+                int retryCount = 0;
+                bool saved = false;
+                var successMessage = string.Empty;
 
-                int nextNumber = 1;
-                if (lastPatient != null)
+                while (!saved && retryCount < 5)
                 {
-                    string lastNumberStr = lastPatient.Uhid.Substring(prefix.Length);
-                    if (int.TryParse(lastNumberStr, out int lastNumber))
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
+                    try
                     {
-                        nextNumber = lastNumber + 1;
+                        if (_context.Database.IsRelational())
+                        {
+                            try
+                            {
+                                // Advisory transaction lock serializes UHID assignment across concurrent registrations
+                                await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(882024);");
+                            }
+                            catch
+                            {
+                                // Non-Postgres relational provider fallback
+                            }
+                        }
+
+                        var lastPatientUhid = await _context.Patients
+                            .Where(p => p.Uhid.StartsWith(prefix))
+                            .OrderByDescending(p => p.Uhid)
+                            .Select(p => p.Uhid)
+                            .FirstOrDefaultAsync();
+
+                        int nextNumber = 1;
+                        if (lastPatientUhid != null && lastPatientUhid.Length > prefix.Length)
+                        {
+                            if (int.TryParse(lastPatientUhid.Substring(prefix.Length), out int lastNumber))
+                            {
+                                nextNumber = lastNumber + 1 + retryCount;
+                            }
+                        }
+
+                        patient.Uhid = $"{prefix}{nextNumber:D4}";
+                        patient.CreatedAt = DateTime.UtcNow;
+                        patient.UpdatedAt = DateTime.UtcNow;
+
+                        // PostgreSQL requires all DateTimes to be UTC
+                        patient.DateOfBirth = DateTime.SpecifyKind(patient.DateOfBirth, DateTimeKind.Utc);
+
+                        _context.Add(patient);
+                        await _context.SaveChangesAsync();
+
+                        successMessage = $"Patient {patient.FullName} registered successfully! UHID: {patient.Uhid}";
+
+                        // A child has no identity of their own to log in as - the checkbox only
+                        // applies to adult patients, silently ignored otherwise.
+                        if (issuePortalLogin && !patient.IsChild)
+                        {
+                            var tempPassword = await IssuePortalLoginAsync(patient);
+                            successMessage += $" Portal login issued - username: {patient.Uhid}, temporary password: {tempPassword} (shown once - share it with the patient now).";
+                        }
+
+                        await transaction.CommitAsync();
+                        saved = true;
                     }
-                }
-
-                patient.Uhid = $"{prefix}{nextNumber:D4}";
-                patient.CreatedAt = DateTime.UtcNow;
-                patient.UpdatedAt = DateTime.UtcNow;
-
-                // PostgreSQL requires all DateTimes to be UTC
-                patient.DateOfBirth = DateTime.SpecifyKind(patient.DateOfBirth, DateTimeKind.Utc);
-
-                _context.Add(patient);
-                await _context.SaveChangesAsync();
-
-                var successMessage = $"Patient {patient.FullName} registered successfully! UHID: {patient.Uhid}";
-
-                // A child has no identity of their own to log in as - the checkbox only
-                // applies to adult patients, silently ignored otherwise.
-                if (issuePortalLogin && !patient.IsChild)
-                {
-                    var tempPassword = await IssuePortalLoginAsync(patient);
-                    successMessage += $" Portal login issued - username: {patient.Uhid}, temporary password: {tempPassword} (shown once - share it with the patient now).";
+                    catch (DbUpdateException)
+                    {
+                        await transaction.RollbackAsync();
+                        _context.Entry(patient).State = EntityState.Detached;
+                        retryCount++;
+                        if (retryCount >= 5)
+                        {
+                            throw;
+                        }
+                        await Task.Delay(50 * retryCount);
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
                 }
 
                 TempData["SuccessMessage"] = successMessage;
@@ -193,19 +269,51 @@ namespace HospitalManagementSystem.Controllers
         {
             if (id == null) return NotFound();
 
+            if (User.IsInRole("Assistant"))
+            {
+                var asstDocClaim = User.FindFirst("AssignedDoctorId")?.Value;
+                if (!int.TryParse(asstDocClaim, out int docId)) return Forbid();
+
+                var hasCareRelationship = await _context.Appointments.AnyAsync(a => a.PatientId == id && a.DoctorId == docId)
+                    || await _context.Admissions.AnyAsync(a => a.PatientId == id && a.AdmittingDoctorId == docId)
+                    || await _context.MedicalRecords.AnyAsync(m => m.PatientId == id && m.DoctorId == docId)
+                    || await _context.Prescriptions.AnyAsync(p => p.PatientId == id && p.DoctorId == docId);
+
+                if (!hasCareRelationship) return Forbid();
+            }
+
             var patient = await _context.Patients.FindAsync(id);
             if (patient == null) return NotFound();
             
             return View(patient);
         }
 
-        // POST: Patients/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
         [Authorize(Roles = "Assistant,Admin")]
-        public async Task<IActionResult> Edit(int id, [Bind("Id,Uhid,IsChild,FullName,ContactInfo,DateOfBirth,Gender,BloodGroup,EmergencyContactName,EmergencyContactPhone,CreatedAt,RegisteredById,UserId")] Patient patient)
+        public async Task<IActionResult> Edit(int id, [Bind("Id,Uhid,IsChild,FullName,ContactInfo,DateOfBirth,Gender,BloodGroup,EmergencyContactName,EmergencyContactPhone,CreatedAt")] Patient patient)
         {
             if (id != patient.Id) return NotFound();
+
+            if (User.IsInRole("Assistant"))
+            {
+                var asstDocClaim = User.FindFirst("AssignedDoctorId")?.Value;
+                if (!int.TryParse(asstDocClaim, out int docId)) return Forbid();
+
+                var hasCareRelationship = await _context.Appointments.AnyAsync(a => a.PatientId == id && a.DoctorId == docId)
+                    || await _context.Admissions.AnyAsync(a => a.PatientId == id && a.AdmittingDoctorId == docId)
+                    || await _context.MedicalRecords.AnyAsync(m => m.PatientId == id && m.DoctorId == docId)
+                    || await _context.Prescriptions.AnyAsync(p => p.PatientId == id && p.DoctorId == docId);
+
+                if (!hasCareRelationship) return Forbid();
+            }
+
+            var existingPatient = await _context.Patients.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id);
+            if (existingPatient == null) return NotFound();
+
+            // Retain genuine portal user and registration audit associations to prevent identity tampering
+            patient.UserId = existingPatient.UserId;
+            patient.RegisteredById = existingPatient.RegisteredById;
 
             ModelState.Remove("Admissions");
             if (string.IsNullOrEmpty(patient.BloodGroup)) ModelState.Remove("BloodGroup");

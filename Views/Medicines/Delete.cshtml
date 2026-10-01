@@ -21,6 +21,15 @@
                 <dt class="col-sm-4 text-muted">Name</dt>
                 <dd class="col-sm-8 fw-bold">@Model.Name</dd>
 
+                <dt class="col-sm-4 text-muted">Generic Name</dt>
+                <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.GenericName) ? "—" : Model.GenericName)</dd>
+
+                <dt class="col-sm-4 text-muted">Strength</dt>
+                <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.Strength) ? "—" : Model.Strength)</dd>
+
+                <dt class="col-sm-4 text-muted">Therapeutic Class</dt>
+                <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.TherapeuticClass) ? "—" : Model.TherapeuticClass)</dd>
+
                 <dt class="col-sm-4 text-muted">Unit Price</dt>
                 <dd class="col-sm-8">৳@Model.UnitPrice.ToString("0.00")</dd>
 
@@ -28,13 +37,24 @@
                 <dd class="col-sm-8">@Model.StockQuantity units</dd>
             </dl>
 
-            <div class="alert alert-warning mt-4 mb-0">
-                <i class="bi bi-info-circle me-1"></i> Note: Deleting this medicine may affect past prescriptions linked to it. Consider setting stock to 0 instead if you want to keep historical records intact.
-            </div>
+            @if (ViewBag.IsReferenced == true)
+            {
+                <div class="alert alert-danger mt-4 mb-0">
+                    <i class="bi bi-shield-slash me-1"></i> <strong>Operation Blocked:</strong> This medicine cannot be deleted because it is referenced in <strong>@ViewBag.PrescriptionCount</strong> historical patient prescription(s). Hard-deleting it would corrupt clinical records. Please adjust stock to 0 or rename with "[Discontinued]" instead.
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-warning mt-4 mb-0">
+                    <i class="bi bi-info-circle me-1"></i> Note: This medicine is currently unreferenced by any patient prescriptions and can be safely deleted.
+                </div>
+            }
 
             <form asp-action="Delete" class="mt-4 pt-3 border-top d-flex gap-2">
                 <input type="hidden" asp-for="Id" />
-                <button type="submit" class="btn btn-danger"><i class="bi bi-trash me-1"></i> Delete Permanently</button>
+                <button type="submit" class="btn btn-danger" @(ViewBag.IsReferenced == true ? "disabled" : "")>
+                    <i class="bi bi-trash me-1"></i> Delete Permanently
+                </button>
                 <a asp-action="Index" class="btn btn-light border">Cancel</a>
             </form>
         </div>

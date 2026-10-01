@@ -77,6 +77,9 @@
                 </div>
             </div>
             <div class="col-md-3 d-flex gap-2 justify-content-end">
+                <button type="submit" formaction="@Url.Action("Test")" class="btn btn-outline-secondary" title="Test connectivity with these settings">
+                    <i class="bi bi-activity"></i> Test
+                </button>
                 <button type="submit" class="btn btn-primary">
                     @(row.IsConfigured ? "Update" : "Add")
                 </button>

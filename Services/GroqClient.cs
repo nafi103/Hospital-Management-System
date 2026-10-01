@@ -97,5 +97,43 @@ namespace HospitalManagementSystem.Services
                 yield return new GroqStreamDelta(delta, promptTokens, completionTokens);
             }
         }
+
+        public async Task<(bool Success, string? ErrorMessage)> PingAsync(string apiKey, string model, CancellationToken ct)
+        {
+            var requestBody = new
+            {
+                model,
+                max_tokens = 1,
+                messages = new object[]
+                {
+                    new { role = "user", content = "ping" }
+                }
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, "chat/completions")
+            {
+                Content = JsonContent.Create(requestBody)
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+            try
+            {
+                using var response = await _http.SendAsync(request, ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync(ct);
+                    return (false, $"Groq request failed ({response.StatusCode}): {body}");
+                }
+                return (true, null);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                return (false, "Request timed out.");
+            }
+            catch (Exception ex)
+            {
+                return (false, ex.Message);
+            }
+        }
     }
 }

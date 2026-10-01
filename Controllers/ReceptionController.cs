@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using HospitalManagementSystem.Models;
+using HospitalManagementSystem.Services;
 
 namespace HospitalManagementSystem.Controllers
 {
@@ -23,15 +24,20 @@ namespace HospitalManagementSystem.Controllers
 
         public async Task<IActionResult> Index()
         {
-            var today = DateTime.UtcNow.Date;
-            var todaysAppointments = await _context.Appointments
-                .Where(a => a.AppointmentDatetime >= today && a.AppointmentDatetime < today.AddDays(1))
+            var todayLocal = HospitalClock.Today;
+            var startUtc = HospitalClock.GetStartOfDayUtc(todayLocal);
+            var endUtc = HospitalClock.GetEndOfDayUtc(todayLocal);
+
+            var appointmentStats = await _context.Appointments
+                .Where(a => a.AppointmentDatetime >= startUtc && a.AppointmentDatetime < endUtc)
+                .GroupBy(a => a.Status)
+                .Select(g => new { Status = g.Key, Count = g.Count() })
                 .ToListAsync();
 
-            ViewBag.TotalToday = todaysAppointments.Count;
-            ViewBag.WaitingToday = todaysAppointments.Count(a => a.Status == AppointmentStatus.Scheduled);
-            ViewBag.InConsultationToday = todaysAppointments.Count(a => a.Status == AppointmentStatus.InConsultation);
-            ViewBag.CompletedToday = todaysAppointments.Count(a => a.Status == AppointmentStatus.Completed);
+            ViewBag.TotalToday = appointmentStats.Sum(s => s.Count);
+            ViewBag.WaitingToday = appointmentStats.FirstOrDefault(s => s.Status == AppointmentStatus.Scheduled)?.Count ?? 0;
+            ViewBag.InConsultationToday = appointmentStats.FirstOrDefault(s => s.Status == AppointmentStatus.InConsultation)?.Count ?? 0;
+            ViewBag.CompletedToday = appointmentStats.FirstOrDefault(s => s.Status == AppointmentStatus.Completed)?.Count ?? 0;
 
             var totalBeds = await _context.Beds.CountAsync();
             var occupiedBeds = await _context.BedTransfers
@@ -45,11 +51,18 @@ namespace HospitalManagementSystem.Controllers
 
             ViewBag.ActiveAdmissions = await _context.Admissions.CountAsync(a => a.DischargeDate == null);
 
-            var unpaidBills = await _context.Bills
+            var unpaidStats = await _context.Bills
                 .Where(b => b.Status != BillStatus.Paid)
-                .ToListAsync();
-            ViewBag.UnpaidBillCount = unpaidBills.Count;
-            ViewBag.OutstandingAmount = unpaidBills.Sum(b => b.NetTotal - b.PaidAmount);
+                .GroupBy(b => 1)
+                .Select(g => new
+                {
+                    Count = g.Count(),
+                    Outstanding = g.Sum(b => b.NetTotal - b.PaidAmount)
+                })
+                .FirstOrDefaultAsync();
+
+            ViewBag.UnpaidBillCount = unpaidStats?.Count ?? 0;
+            ViewBag.OutstandingAmount = unpaidStats?.Outstanding ?? 0m;
 
             ViewBag.RecentPatients = await _context.Patients
                 .OrderByDescending(p => p.CreatedAt)

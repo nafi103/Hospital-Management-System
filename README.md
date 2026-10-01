@@ -102,6 +102,7 @@ role):
 | Assistant | `mock-assistant` |
 | Pharmacist | `pharmacistmock` |
 | Receptionist | `reception1` |
+| Patient | `PT-202610-0001` |
 
 **Real username/password accounts** — needed to demonstrate two doctors (or two assistants)
 signed in simultaneously, and to log in as a patient:
@@ -119,17 +120,21 @@ Akter, Abdul Kader, and Rupa Chakma. Their username is their UHID (format `PT-yy
 month-dependent) — look it up in the Patients directory after seeding, or re-run
 `dotnet run -- --seed-demo` and read it off the console summary.
 
+## Security & Concurrency Guarantees
+
+- **Immutable Financial Ledger:** Billing updates record unalterable `PaymentTransaction` rows with cashier attribution. Total paid amounts and invoice statuses are derived dynamically, preventing accounting drift and race conditions.
+- **PostgreSQL `xmin` Concurrency Tokens:** `Bill` and `Appointment` models map PostgreSQL's native `xmin` rowversion token, protecting against double-payments and simultaneous doctor double-bookings.
+- **Strict SignalR Authorization:** `AiStreamHub` restricts connection to doctors, and stream subscription is gated to the initiating clinician. `NotificationHub` restricts connection to authenticated users and automatically scopes broadcasts to isolated user groups.
+- **Clinical Data Protection:** Formulary medicines reference `DeleteBehavior.Restrict` to eliminate cascade deletion of clinical prescription history. Admissions with active billing invoices cannot be deleted, avoiding broken accounting trails.
+- **Expanded AI Context & Invalidation:** Clinical AI summaries aggregate medical records, allergies, vitals, and active prescriptions, using dynamic composite hashes for cache invalidation and atomic state transitions on clinical reviews.
+
 ## Running tests
 
 ```bash
 dotnet test
 ```
 
-80 xUnit tests cover the NEWS2 triage algorithm (boundary values on all seven parameters plus the
-clinical escalation rules), the PHI-scrubbing/rehydration round trip, bill total/status
-calculations, and the prescription safety net's four checks — pure business logic with no database
-dependency. See [docs/DEFENSE-NOTES.md](docs/DEFENSE-NOTES.md) for what each suite is actually
-proving and why.
+104 xUnit tests cover the NEWS2 triage algorithm (including pediatric withholding), the PHI-scrubbing/rehydration round trip, bill total/status calculations, immutable payment ledger derivations, hospital operational clock timezone logic, AI provider connectivity pings, and the prescription safety net's checks (duplicate therapies, allergies with fallback matching, active dispensed prescriptions). Pure business logic with no database dependency. See [docs/DEFENSE-NOTES.md](docs/DEFENSE-NOTES.md) for what each suite is actually proving and why.
 
 ## Project structure
 

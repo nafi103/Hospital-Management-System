@@ -182,6 +182,48 @@ namespace HospitalManagementSystem.Controllers
 
         private static DoseUnit ParseDoseUnit(string value) => Enum.TryParse<DoseUnit>(value, out var unit) ? unit : DoseUnit.Tablet;
 
+        private async Task<List<ActiveMedicationInfo>> GetActiveMedicationsAsync(int patientId)
+        {
+            var now = DateTime.UtcNow;
+
+            var dispensedPrescriptions = await _context.Prescriptions
+                .AsNoTracking()
+                .Where(p => p.PatientId == patientId && p.Status == PrescriptionStatus.Dispensed)
+                .Include(p => p.PrescriptionItems)
+                    .ThenInclude(pi => pi.Medicine)
+                .OrderByDescending(p => p.DispensedAt ?? p.CreatedAt)
+                .Take(20)
+                .ToListAsync();
+
+            var activeMeds = new List<ActiveMedicationInfo>();
+
+            foreach (var p in dispensedPrescriptions)
+            {
+                var startDate = p.DispensedAt ?? p.CreatedAt;
+                foreach (var item in p.PrescriptionItems)
+                {
+                    if (item.Medicine == null) continue;
+
+                    var duration = item.DurationDays ?? 30;
+                    var endDate = startDate.AddDays(duration);
+
+                    if (endDate >= now)
+                    {
+                        activeMeds.Add(new ActiveMedicationInfo(
+                            item.MedicineId,
+                            item.Medicine.Name,
+                            item.Medicine.GenericName,
+                            startDate,
+                            item.DurationDays,
+                            p.Id
+                        ));
+                    }
+                }
+            }
+
+            return activeMeds;
+        }
+
         private async Task<List<SafetyWarning>> ComputeSafetyWarningsAsync(int patientId, List<SafetyCheckItem> items)
         {
             var patient = await _context.Patients.FindAsync(patientId);
@@ -199,7 +241,9 @@ namespace HospitalManagementSystem.Controllers
                 .Select(m => new MedicineInfo(m.Id, m.Name, m.GenericName, m.Strength, m.StockQuantity))
                 .ToListAsync();
 
-            return PrescriptionSafetyChecker.Check(patient.IsChild, allergies, items, allMedicines);
+            var activeMedications = await GetActiveMedicationsAsync(patientId);
+
+            return PrescriptionSafetyChecker.Check(patient.IsChild, allergies, items, allMedicines, activeMedications);
         }
 
         // POST: Prescriptions/Create
@@ -293,6 +337,7 @@ namespace HospitalManagementSystem.Controllers
             var prescription = await _context.Prescriptions
                 .Include(p => p.Patient)
                 .Include(p => p.Doctor)
+                .Include(p => p.DispensedBy)
                 .Include(p => p.PrescriptionItems)
                     .ThenInclude(pi => pi.Medicine)
                 .FirstOrDefaultAsync(m => m.Id == id);
@@ -332,6 +377,17 @@ namespace HospitalManagementSystem.Controllers
 
             if (prescription == null) return NotFound();
 
+            if (User.IsInRole("Patient"))
+            {
+                var userIdClaim = User.FindFirst("UserId")?.Value;
+                var isOwner = int.TryParse(userIdClaim, out int userId)
+                    && await _context.Patients.AnyAsync(p => p.Id == prescription.PatientId && p.UserId == userId);
+                if (!isOwner)
+                {
+                    return Forbid();
+                }
+            }
+
             ViewBag.Suggestion = suggestion;
             return View(prescription);
         }
@@ -342,44 +398,82 @@ namespace HospitalManagementSystem.Controllers
         [Authorize(Roles = "Pharmacist")]
         public async Task<IActionResult> Dispense(int id)
         {
-            var prescription = await _context.Prescriptions
-                .Include(p => p.PrescriptionItems)
-                    .ThenInclude(pi => pi.Medicine)
-                .FirstOrDefaultAsync(p => p.Id == id);
-
-            if (prescription == null) return NotFound();
-
-            if (prescription.Status == PrescriptionStatus.Dispensed)
+            int? pharmacistUserId = null;
+            var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "UserId")?.Value;
+            if (int.TryParse(userIdClaim, out int uid))
             {
-                TempData["ErrorMessage"] = "This prescription has already been dispensed.";
-                return RedirectToAction(nameof(Details), new { id = prescription.Id });
+                pharmacistUserId = uid;
             }
 
-            // Check stock first
-            foreach(var item in prescription.PrescriptionItems)
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
             {
-                if (item.Medicine.StockQuantity < item.Quantity)
+                // Verify and atomically lock the prescription status to prevent double-dispensing
+                var rowsAffected = await _context.Prescriptions
+                    .Where(p => p.Id == id && p.Status == PrescriptionStatus.PendingPharmacy)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(p => p.Status, PrescriptionStatus.Dispensed)
+                        .SetProperty(p => p.DispensedById, pharmacistUserId)
+                        .SetProperty(p => p.DispensedAt, DateTime.UtcNow)
+                        .SetProperty(p => p.UpdatedAt, DateTime.UtcNow));
+
+                if (rowsAffected == 0)
                 {
-                    TempData["ErrorMessage"] = $"Insufficient stock for {item.Medicine.Name}. Requested: {item.Quantity}, Available: {item.Medicine.StockQuantity}.";
-                    return RedirectToAction(nameof(Details), new { id = prescription.Id });
+                    await transaction.RollbackAsync();
+                    var existing = await _context.Prescriptions.FindAsync(id);
+                    if (existing == null)
+                    {
+                        return NotFound();
+                    }
+                    if (existing.Status == PrescriptionStatus.Dispensed)
+                    {
+                        TempData["ErrorMessage"] = "This prescription has already been dispensed.";
+                    }
+                    else
+                    {
+                        TempData["ErrorMessage"] = "Prescription is not ready for pharmacy fulfillment.";
+                    }
+                    return RedirectToAction(nameof(Details), new { id });
                 }
-            }
 
-            // Deduct stock
-            foreach(var item in prescription.PrescriptionItems)
+                // Check and decrement stock atomically for each prescribed medicine
+                var items = await _context.PrescriptionItems
+                    .Include(pi => pi.Medicine)
+                    .Where(pi => pi.PrescriptionId == id)
+                    .ToListAsync();
+
+                foreach (var item in items)
+                {
+                    var updated = await _context.Medicines
+                        .Where(m => m.Id == item.MedicineId && m.StockQuantity >= item.Quantity)
+                        .ExecuteUpdateAsync(m => m
+                            .SetProperty(x => x.StockQuantity, x => x.StockQuantity - item.Quantity)
+                            .SetProperty(x => x.UpdatedAt, DateTime.UtcNow));
+
+                    if (updated == 0)
+                    {
+                        await transaction.RollbackAsync();
+                        var medName = item.Medicine?.Name ?? $"Medicine #{item.MedicineId}";
+                        var currentStock = await _context.Medicines
+                            .Where(m => m.Id == item.MedicineId)
+                            .Select(m => m.StockQuantity)
+                            .FirstOrDefaultAsync();
+                        TempData["ErrorMessage"] = $"Insufficient stock for {medName}. Requested: {item.Quantity}, Available: {currentStock}. Dispensing cancelled.";
+                        return RedirectToAction(nameof(Details), new { id });
+                    }
+                }
+
+                await transaction.CommitAsync();
+
+                TempData["SuccessMessage"] = "Medicines dispensed successfully. Stock has been updated.";
+                return RedirectToAction(nameof(Details), new { id });
+            }
+            catch (Exception)
             {
-                item.Medicine.StockQuantity -= item.Quantity;
-                _context.Update(item.Medicine);
+                await transaction.RollbackAsync();
+                TempData["ErrorMessage"] = "An error occurred while dispensing medications.";
+                return RedirectToAction(nameof(Details), new { id });
             }
-
-            prescription.Status = PrescriptionStatus.Dispensed;
-            prescription.UpdatedAt = DateTime.UtcNow;
-            _context.Update(prescription);
-
-            await _context.SaveChangesAsync();
-            
-            TempData["SuccessMessage"] = "Medicines dispensed successfully. Stock has been updated.";
-            return RedirectToAction(nameof(Details), new { id = prescription.Id });
         }
     }
 }

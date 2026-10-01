@@ -97,48 +97,101 @@ namespace HospitalManagementSystem.Controllers
             ModelState.Remove("DiscountApprovedBy");
             ModelState.Remove("BillItems");
 
+            if (BillItems == null || BillItems.Count == 0)
+            {
+                ModelState.AddModelError("", "At least one billing line item is required.");
+            }
+
+            var subtotal = BillItems?.Sum(i => i.Amount) ?? 0;
+            if (bill.DiscountAmount < 0)
+            {
+                ModelState.AddModelError(nameof(bill.DiscountAmount), "Discount amount cannot be negative.");
+            }
+            else if (bill.DiscountAmount > subtotal)
+            {
+                ModelState.AddModelError(nameof(bill.DiscountAmount), $"Discount amount (৳{bill.DiscountAmount:0.00}) cannot exceed the subtotal (৳{subtotal:0.00}).");
+            }
+
+            if (bill.DiscountAmount > 0 && !User.IsInRole("Admin"))
+            {
+                ModelState.AddModelError(nameof(bill.DiscountAmount), "Discounts require Administrator authorization and cannot be self-approved by receptionists.");
+            }
+
             if (ModelState.IsValid)
             {
-                bill.CreatedAt = DateTime.UtcNow;
-                bill.UpdatedAt = DateTime.UtcNow;
-                
-                if (BillItems != null)
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    bill.BillItems = BillItems;
-                }
-
-                if (bill.DiscountAmount > 0)
-                {
-                    var userIdClaim = User.FindFirst("UserId")?.Value;
-                    if (int.TryParse(userIdClaim, out int approverId))
+                    bill.CreatedAt = DateTime.UtcNow;
+                    bill.UpdatedAt = DateTime.UtcNow;
+                    
+                    if (BillItems != null)
                     {
-                        bill.DiscountApprovedById = approverId;
+                        bill.BillItems = BillItems;
                     }
-                }
 
-                bill.RecalculateTotals();
-                
-                _context.Add(bill);
-
-                // Re-query rather than trust the posted BillItems - marks exactly the
-                // prescriptions this bill actually drew pharmacy charges from as billed.
-                if (bill.AdmissionId.HasValue)
-                {
-                    var unbilledPrescriptions = await _context.Prescriptions
-                        .Where(p => p.PatientId == bill.PatientId && p.Status == PrescriptionStatus.Dispensed && !p.IsBilled)
-                        .ToListAsync();
-
-                    foreach (var pres in unbilledPrescriptions)
+                    if (bill.DiscountAmount > 0)
                     {
-                        pres.IsBilled = true;
-                        _context.Update(pres);
+                        var userIdClaim = User.FindFirst("UserId")?.Value;
+                        if (int.TryParse(userIdClaim, out int approverId))
+                        {
+                            bill.DiscountApprovedById = approverId;
+                        }
                     }
-                }
 
-                await _context.SaveChangesAsync();
-                
-                TempData["SuccessMessage"] = "Bill generated successfully.";
-                return RedirectToAction(nameof(Details), new { id = bill.Id });
+                    bill.RecalculateTotals();
+                    
+                    _context.Add(bill);
+
+                    // Extract only the specific prescription IDs that are actually billed in BillItems
+                    var prescriptionIds = new List<int>();
+                    if (BillItems != null)
+                    {
+                        foreach (var item in BillItems.Where(i => i.Department == DepartmentType.Pharmacy))
+                        {
+                            var match = System.Text.RegularExpressions.Regex.Match(item.Description ?? "", @"Prescription #(\d+)");
+                            if (match.Success && int.TryParse(match.Groups[1].Value, out int presId))
+                            {
+                                prescriptionIds.Add(presId);
+                            }
+                        }
+                    }
+
+                    if (prescriptionIds.Count > 0)
+                    {
+                        var billedPrescriptions = await _context.Prescriptions
+                            .Where(p => prescriptionIds.Contains(p.Id) && p.PatientId == bill.PatientId && !p.IsBilled)
+                            .ToListAsync();
+
+                        foreach (var pres in billedPrescriptions)
+                        {
+                            pres.IsBilled = true;
+                            pres.UpdatedAt = DateTime.UtcNow;
+                            _context.Update(pres);
+                        }
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                    
+                    TempData["SuccessMessage"] = "Bill generated successfully.";
+                    return RedirectToAction(nameof(Details), new { id = bill.Id });
+                }
+                catch (Exception)
+                {
+                    await transaction.RollbackAsync();
+                    ModelState.AddModelError("", "An error occurred while creating the bill. Changes have been rolled back.");
+                }
+            }
+
+            if (bill.AdmissionId.HasValue)
+            {
+                var patient = await _context.Patients.FindAsync(bill.PatientId);
+                if (patient != null)
+                {
+                    ViewBag.PatientName = patient.FullName;
+                    ViewBag.PatientUhid = patient.Uhid;
+                }
             }
 
             return View(bill);
@@ -154,6 +207,8 @@ namespace HospitalManagementSystem.Controllers
                 .Include(b => b.Admission)
                 .Include(b => b.BillItems)
                 .Include(b => b.DiscountApprovedBy)
+                .Include(b => b.PaymentTransactions)
+                    .ThenInclude(pt => pt.ProcessedBy)
                 .FirstOrDefaultAsync(m => m.Id == id);
 
             if (bill == null) return NotFound();
@@ -168,9 +223,18 @@ namespace HospitalManagementSystem.Controllers
 
             var bill = await _context.Bills
                 .Include(b => b.Patient)
+                .Include(b => b.PaymentTransactions)
                 .FirstOrDefaultAsync(m => m.Id == id);
 
             if (bill == null) return NotFound();
+
+            var currentPaid = bill.PaymentTransactions.Sum(t => t.Amount);
+            var balanceDue = bill.NetTotal - currentPaid;
+            if (balanceDue <= 0)
+            {
+                TempData["SuccessMessage"] = "This invoice is already fully paid.";
+                return RedirectToAction(nameof(Details), new { id });
+            }
 
             return View(bill);
         }
@@ -178,27 +242,84 @@ namespace HospitalManagementSystem.Controllers
         // POST: Bills/Payment/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Payment(int id, decimal PaymentAmount)
+        public async Task<IActionResult> Payment(int id, decimal PaymentAmount, string paymentMethod = "Cash", string? notes = null)
         {
-            var bill = await _context.Bills
-                .Include(b => b.BillItems)
-                .FirstOrDefaultAsync(m => m.Id == id);
-
-            if (bill == null) return NotFound();
-
-            if (PaymentAmount > 0)
+            if (PaymentAmount <= 0)
             {
-                bill.PaidAmount += PaymentAmount;
-                bill.UpdatedAt = DateTime.UtcNow;
-                bill.RecalculateTotals();
-                
-                _context.Update(bill);
-                await _context.SaveChangesAsync();
-                
-                TempData["SuccessMessage"] = $"Payment of ৳{PaymentAmount:0.00} recorded successfully.";
+                TempData["ErrorMessage"] = "Payment amount must be greater than zero.";
+                return RedirectToAction(nameof(Payment), new { id });
             }
 
-            return RedirectToAction(nameof(Details), new { id = bill.Id });
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var bill = await _context.Bills
+                    .Include(b => b.BillItems)
+                    .Include(b => b.PaymentTransactions)
+                    .FirstOrDefaultAsync(m => m.Id == id);
+
+                if (bill == null) return NotFound();
+
+                var currentPaid = bill.PaymentTransactions.Sum(t => t.Amount);
+                var balanceDue = bill.NetTotal - currentPaid;
+
+                if (balanceDue <= 0)
+                {
+                    await transaction.RollbackAsync();
+                    TempData["ErrorMessage"] = "This invoice has already been fully paid.";
+                    return RedirectToAction(nameof(Details), new { id = bill.Id });
+                }
+
+                if (PaymentAmount > balanceDue)
+                {
+                    await transaction.RollbackAsync();
+                    TempData["ErrorMessage"] = $"Payment amount (৳{PaymentAmount:0.00}) exceeds balance due (৳{balanceDue:0.00}).";
+                    return RedirectToAction(nameof(Payment), new { id });
+                }
+
+                int? cashierId = null;
+                var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "UserId")?.Value;
+                if (int.TryParse(userIdClaim, out int uid))
+                {
+                    cashierId = uid;
+                }
+
+                var tx = new PaymentTransaction
+                {
+                    BillId = bill.Id,
+                    Amount = PaymentAmount,
+                    PaymentMethod = string.IsNullOrWhiteSpace(paymentMethod) ? "Cash" : paymentMethod.Trim(),
+                    ProcessedById = cashierId,
+                    TransactionDate = DateTime.UtcNow,
+                    Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim()
+                };
+
+                _context.PaymentTransactions.Add(tx);
+
+                // Derive bill.PaidAmount from all recorded ledger transactions
+                bill.PaidAmount = currentPaid + PaymentAmount;
+                bill.UpdatedAt = DateTime.UtcNow;
+                bill.RecalculateTotals();
+
+                _context.Update(bill);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                TempData["SuccessMessage"] = $"Payment of ৳{PaymentAmount:0.00} via {tx.PaymentMethod} recorded successfully.";
+                return RedirectToAction(nameof(Details), new { id = bill.Id });
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await transaction.RollbackAsync();
+                TempData["ErrorMessage"] = "Another transaction or modification occurred concurrently on this bill. Please review the updated balance.";
+                return RedirectToAction(nameof(Payment), new { id });
+            }
+            catch (Exception)
+            {
+                await transaction.RollbackAsync();
+                TempData["ErrorMessage"] = "An error occurred while recording the payment transaction.";
+                return RedirectToAction(nameof(Payment), new { id });
+            }
         }
     }
 }

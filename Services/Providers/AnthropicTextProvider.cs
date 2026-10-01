@@ -113,5 +113,35 @@ namespace HospitalManagementSystem.Services.Providers
             _logger.LogError(ex, "Anthropic streaming request failed for model {Model}: {Message}", modelId, ex.Message);
             return new ClinicalAiException(reason, "The AI service request failed.", ex);
         }
+
+        public async Task<(bool Success, string? ErrorMessage)> PingAsync(string apiKey, string modelId, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(apiKey)) return (false, "API key is required.");
+            if (string.IsNullOrWhiteSpace(modelId)) return (false, "Model ID is required.");
+
+            try
+            {
+                var client = GetClient(apiKey);
+                var parameters = new MessageCreateParams
+                {
+                    Model = modelId,
+                    MaxTokens = 1,
+                    Messages = [new() { Role = AnthropicRole.User, Content = "ping" }]
+                };
+
+                await using var enumerator = client.Messages.CreateStreaming(parameters).GetAsyncEnumerator(ct);
+                await enumerator.MoveNextAsync();
+                return (true, null);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                return (false, "Request timed out.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Anthropic ping failed for model {Model}", modelId);
+                return (false, ex.Message);
+            }
+        }
     }
 }

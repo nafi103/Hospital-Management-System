@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Hospital_Management_System.Models;
 using HospitalManagementSystem.Models;
+using HospitalManagementSystem.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Hospital_Management_System.Controllers;
@@ -18,16 +19,19 @@ public class HomeController : Controller
 
     public async Task<IActionResult> Index()
     {
+        var todayLocal = HospitalClock.Today;
+        var startUtc = HospitalClock.GetStartOfDayUtc(todayLocal);
+        var endUtc = HospitalClock.GetEndOfDayUtc(todayLocal);
+
         if (User.IsInRole("Assistant"))
         {
             var doctorIdClaim = User.Claims.FirstOrDefault(c => c.Type == "AssignedDoctorId")?.Value;
             if (int.TryParse(doctorIdClaim, out int docId))
             {
-                var today = DateTime.UtcNow.Date;
                 var appointments = await _context.Appointments
                     .Include(a => a.Patient)
                     .Include(a => a.Doctor)
-                    .Where(a => a.DoctorId == docId && a.AppointmentDatetime >= today && a.AppointmentDatetime < today.AddDays(1))
+                    .Where(a => a.DoctorId == docId && a.AppointmentDatetime >= startUtc && a.AppointmentDatetime < endUtc)
                     .ToListAsync();
 
                 ViewBag.TotalScheduled = appointments.Count;
@@ -43,8 +47,6 @@ public class HomeController : Controller
         }
         else if (User.IsInRole("Admin"))
         {
-            var today = DateTime.UtcNow.Date;
-
             ViewBag.TotalPatients = await _context.Patients.CountAsync();
             ViewBag.ActiveAdmissions = await _context.Admissions.CountAsync(a => a.DischargeDate == null);
 
@@ -63,7 +65,7 @@ public class HomeController : Controller
             ViewBag.OutstandingAmount = unpaidBills.Sum(b => b.NetTotal - b.PaidAmount);
 
             ViewBag.TodaysAppointments = await _context.Appointments
-                .CountAsync(a => a.AppointmentDatetime >= today && a.AppointmentDatetime < today.AddDays(1));
+                .CountAsync(a => a.AppointmentDatetime >= startUtc && a.AppointmentDatetime < endUtc);
         }
         return View();
     }

@@ -21,5 +21,10 @@ namespace HospitalManagementSystem.Services.Providers
 
         IAsyncEnumerable<AiStreamChunk> StreamAsync(
             string apiKey, string modelId, string systemInstruction, string userContent, CancellationToken ct);
+
+        /// <summary>
+        /// Sends a lightweight pre-flight request to verify provider credentials and model accessibility.
+        /// </summary>
+        Task<(bool Success, string? ErrorMessage)> PingAsync(string apiKey, string modelId, CancellationToken ct);
     }
 }

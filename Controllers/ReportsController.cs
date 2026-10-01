@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using HospitalManagementSystem.Models;
 using HospitalManagementSystem.Models.ViewModels;
+using HospitalManagementSystem.Services;
 
 namespace HospitalManagementSystem.Controllers
 {
@@ -51,23 +52,33 @@ namespace HospitalManagementSystem.Controllers
 
         private async Task<ReportsViewModel> BuildModelAsync(DateTime? from, DateTime? to)
         {
-            var toDate = (to ?? DateTime.UtcNow.Date).Date;
+            var toDate = (to ?? HospitalClock.Today).Date;
             var fromDate = (from ?? toDate.AddDays(-13)).Date;
-            // Inclusive of the whole "to" day.
-            var toDateExclusive = toDate.AddDays(1);
+            // Inclusive of the whole "to" day, converted to hospital timezone UTC bounds.
+            var fromDateUtc = HospitalClock.GetStartOfDayUtc(fromDate);
+            var toDateExclusiveUtc = HospitalClock.GetEndOfDayUtc(toDate);
 
             var model = new ReportsViewModel { FromDate = fromDate, ToDate = toDate };
 
-            var billsInRange = await _context.Bills
-                .Where(b => b.CreatedAt >= fromDate && b.CreatedAt < toDateExclusive)
-                .ToListAsync();
-            model.TotalBilled = billsInRange.Sum(b => b.NetTotal);
-            model.TotalCollected = billsInRange.Sum(b => b.PaidAmount);
+            var billsQuery = _context.Bills
+                .Where(b => b.CreatedAt >= fromDateUtc && b.CreatedAt < toDateExclusiveUtc);
+
+            var billStats = await billsQuery
+                .GroupBy(b => 1)
+                .Select(g => new
+                {
+                    TotalBilled = g.Sum(b => b.NetTotal),
+                    TotalCollected = g.Sum(b => b.PaidAmount)
+                })
+                .FirstOrDefaultAsync();
+
+            model.TotalBilled = billStats?.TotalBilled ?? 0m;
+            model.TotalCollected = billStats?.TotalCollected ?? 0m;
             model.TotalOutstanding = model.TotalBilled - model.TotalCollected;
 
             var revenueByDepartment = from bi in _context.BillItems
                                        join b in _context.Bills on bi.BillId equals b.Id
-                                       where b.CreatedAt >= fromDate && b.CreatedAt < toDateExclusive
+                                       where b.CreatedAt >= fromDateUtc && b.CreatedAt < toDateExclusiveUtc
                                        group bi by bi.Department into g
                                        select new { Department = g.Key, Amount = g.Sum(x => x.Amount) };
             model.RevenueByDepartment = (await revenueByDepartment.ToListAsync())
@@ -92,15 +103,16 @@ namespace HospitalManagementSystem.Controllers
                 .Select(t => new BedOccupancyByCategory(t.Category, t.Total, occupiedByCategory.GetValueOrDefault(t.Category)))
                 .ToList();
 
-            // Timestamptz truncation to a plain date isn't reliably translatable across
-            // providers, so the date/status pair is projected narrowly first and grouped
-            // into daily buckets in memory - at demo scale (dozens of rows) this is a
-            // single round trip either way.
+            // Timestamptz values are converted to the hospital operational timezone (Asia/Dhaka)
+            // before daily grouping in memory so early morning and late night appointments
+            // are not clipped across UTC calendar days.
             var appointmentsInRange = await _context.Appointments
-                .Where(a => a.AppointmentDatetime >= fromDate && a.AppointmentDatetime < toDateExclusive)
-                .Select(a => new { Date = a.AppointmentDatetime.Date, a.Status })
+                .Where(a => a.AppointmentDatetime >= fromDateUtc && a.AppointmentDatetime < toDateExclusiveUtc)
+                .Select(a => new { a.AppointmentDatetime, a.Status })
                 .ToListAsync();
-            var appointmentsByDate = appointmentsInRange.GroupBy(a => a.Date).ToDictionary(g => g.Key, g => g.ToList());
+            var appointmentsByDate = appointmentsInRange
+                .GroupBy(a => HospitalClock.ToHospitalLocal(a.AppointmentDatetime).Date)
+                .ToDictionary(g => g.Key, g => g.ToList());
 
             for (var day = fromDate; day <= toDate; day = day.AddDays(1))
             {
@@ -114,7 +126,7 @@ namespace HospitalManagementSystem.Controllers
             }
 
             model.TriageMix = (await _context.PatientVitals
-                    .Where(v => v.TriagePriority != null)
+                    .Where(v => v.CreatedAt >= fromDateUtc && v.CreatedAt < toDateExclusiveUtc && v.TriagePriority != null)
                     .GroupBy(v => v.TriagePriority)
                     .Select(g => new { Priority = g.Key!.Value, Count = g.Count() })
                     .ToListAsync())
@@ -123,6 +135,7 @@ namespace HospitalManagementSystem.Controllers
                 .ToList();
 
             model.AiVerdicts = (await _context.AiSuggestions
+                    .Where(s => s.CreatedAt >= fromDateUtc && s.CreatedAt < toDateExclusiveUtc)
                     .GroupBy(s => s.Verdict)
                     .Select(g => new { Verdict = g.Key, Count = g.Count() })
                     .ToListAsync())
@@ -131,6 +144,7 @@ namespace HospitalManagementSystem.Controllers
                 .ToList();
 
             var aiTotals = await _context.AiSuggestions
+                .Where(s => s.CreatedAt >= fromDateUtc && s.CreatedAt < toDateExclusiveUtc)
                 .GroupBy(s => 1)
                 .Select(g => new
                 {
@@ -147,7 +161,7 @@ namespace HospitalManagementSystem.Controllers
             }
 
             model.TopMedicines = (await _context.PrescriptionItems
-                    .Where(pi => pi.Medicine != null)
+                    .Where(pi => pi.Medicine != null && pi.Prescription != null && pi.Prescription.CreatedAt >= fromDateUtc && pi.Prescription.CreatedAt < toDateExclusiveUtc)
                     .GroupBy(pi => pi.Medicine!.Name)
                     .Select(g => new { Name = g.Key, TotalQuantity = g.Sum(pi => pi.Quantity) })
                     .OrderByDescending(x => x.TotalQuantity)
@@ -156,7 +170,12 @@ namespace HospitalManagementSystem.Controllers
                 .Select(x => new TopMedicine(x.Name, x.TotalQuantity))
                 .ToList();
 
-            PopulateSafetyMetrics(model, await _context.Prescriptions.Select(p => p.SafetyWarningsJson).ToListAsync());
+            var prescriptionsInRange = await _context.Prescriptions
+                .Where(p => p.CreatedAt >= fromDateUtc && p.CreatedAt < toDateExclusiveUtc)
+                .Select(p => p.SafetyWarningsJson)
+                .ToListAsync();
+
+            PopulateSafetyMetrics(model, prescriptionsInRange);
 
             return model;
         }

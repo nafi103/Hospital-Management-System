@@ -9,7 +9,7 @@ using HospitalManagementSystem.Services;
 
 namespace HospitalManagementSystem.Controllers
 {
-    [Authorize]
+    [Authorize(Roles = "Doctor")]
     public class AiReviewController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -150,10 +150,20 @@ namespace HospitalManagementSystem.Controllers
             var suggestion = await _context.AiSuggestions.FindAsync(id);
             if (suggestion == null) return NotFound();
 
-            suggestion.Verdict = AiSuggestionVerdict.Accepted;
-            suggestion.ReviewedById = userId.Value;
-            suggestion.ReviewedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            var now = DateTime.UtcNow;
+            var rowsAffected = await _context.AiSuggestions
+                .Where(s => s.Id == id && s.Verdict == AiSuggestionVerdict.Pending)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(s => s.Verdict, AiSuggestionVerdict.Accepted)
+                    .SetProperty(s => s.ReviewedById, userId.Value)
+                    .SetProperty(s => s.ReviewedAt, now));
+
+            if (rowsAffected == 0)
+            {
+                var current = await _context.AiSuggestions.FindAsync(id);
+                TempData["ErrorMessage"] = $"This AI suggestion has already been reviewed ({current?.Verdict}) and cannot be modified.";
+                return RedirectAfterReview(returnUrl, suggestion.PatientId);
+            }
 
             TempData["SuccessMessage"] = "AI suggestion accepted.";
             return RedirectAfterReview(returnUrl, suggestion.PatientId);
@@ -170,10 +180,20 @@ namespace HospitalManagementSystem.Controllers
             var suggestion = await _context.AiSuggestions.FindAsync(id);
             if (suggestion == null) return NotFound();
 
-            suggestion.Verdict = AiSuggestionVerdict.Rejected;
-            suggestion.ReviewedById = userId.Value;
-            suggestion.ReviewedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            var now = DateTime.UtcNow;
+            var rowsAffected = await _context.AiSuggestions
+                .Where(s => s.Id == id && s.Verdict == AiSuggestionVerdict.Pending)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(s => s.Verdict, AiSuggestionVerdict.Rejected)
+                    .SetProperty(s => s.ReviewedById, userId.Value)
+                    .SetProperty(s => s.ReviewedAt, now));
+
+            if (rowsAffected == 0)
+            {
+                var current = await _context.AiSuggestions.FindAsync(id);
+                TempData["ErrorMessage"] = $"This AI suggestion has already been reviewed ({current?.Verdict}) and cannot be modified.";
+                return RedirectAfterReview(returnUrl, suggestion.PatientId);
+            }
 
             TempData["SuccessMessage"] = "AI suggestion rejected.";
             return RedirectAfterReview(returnUrl, suggestion.PatientId);
@@ -187,14 +207,31 @@ namespace HospitalManagementSystem.Controllers
             var userId = CurrentUserId();
             if (userId == null) return Forbid();
 
+            if (string.IsNullOrWhiteSpace(editedPayloadJson))
+            {
+                TempData["ErrorMessage"] = "Edited payload content cannot be empty.";
+                var existing = await _context.AiSuggestions.FindAsync(id);
+                return existing != null ? RedirectAfterReview(returnUrl, existing.PatientId) : NotFound();
+            }
+
             var suggestion = await _context.AiSuggestions.FindAsync(id);
             if (suggestion == null) return NotFound();
 
-            suggestion.Verdict = AiSuggestionVerdict.Edited;
-            suggestion.EditedPayloadJson = editedPayloadJson;
-            suggestion.ReviewedById = userId.Value;
-            suggestion.ReviewedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            var now = DateTime.UtcNow;
+            var rowsAffected = await _context.AiSuggestions
+                .Where(s => s.Id == id && s.Verdict == AiSuggestionVerdict.Pending)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(s => s.Verdict, AiSuggestionVerdict.Edited)
+                    .SetProperty(s => s.EditedPayloadJson, editedPayloadJson)
+                    .SetProperty(s => s.ReviewedById, userId.Value)
+                    .SetProperty(s => s.ReviewedAt, now));
+
+            if (rowsAffected == 0)
+            {
+                var current = await _context.AiSuggestions.FindAsync(id);
+                TempData["ErrorMessage"] = $"This AI suggestion has already been reviewed ({current?.Verdict}) and cannot be modified.";
+                return RedirectAfterReview(returnUrl, suggestion.PatientId);
+            }
 
             TempData["SuccessMessage"] = "Edited AI suggestion saved.";
             return RedirectAfterReview(returnUrl, suggestion.PatientId);

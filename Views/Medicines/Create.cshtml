@@ -19,9 +19,28 @@
                 <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
                 
                 <div class="mb-3">
-                    <label asp-for="Name" class="form-label fw-medium">Medicine Name <span class="text-danger">*</span></label>
-                    <input asp-for="Name" class="form-control" placeholder="e.g. Paracetamol 500mg" required />
+                    <label asp-for="Name" class="form-label fw-medium">Brand / Medicine Name <span class="text-danger">*</span></label>
+                    <input asp-for="Name" class="form-control" placeholder="e.g. Napa Extra" required />
                     <span asp-validation-for="Name" class="text-danger small"></span>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label asp-for="GenericName" class="form-label fw-medium">Generic Name <span class="text-danger">*</span></label>
+                        <input asp-for="GenericName" class="form-control" placeholder="e.g. Paracetamol + Caffeine" required />
+                        <span asp-validation-for="GenericName" class="text-danger small"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="Strength" class="form-label fw-medium">Strength / Dosage Form</label>
+                        <input asp-for="Strength" class="form-control" placeholder="e.g. 500mg + 65mg" />
+                        <span asp-validation-for="Strength" class="text-danger small"></span>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="TherapeuticClass" class="form-label fw-medium">Therapeutic Class</label>
+                    <input asp-for="TherapeuticClass" class="form-control" placeholder="e.g. Analgesic / Antipyretic" />
+                    <span asp-validation-for="TherapeuticClass" class="text-danger small"></span>
                 </div>
                 
                 <div class="row mb-4">

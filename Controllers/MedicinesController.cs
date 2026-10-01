@@ -34,10 +34,8 @@ namespace HospitalManagementSystem.Controllers
         // POST: Medicines/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("Name,UnitPrice,StockQuantity")] Medicine medicine)
+        public async Task<IActionResult> Create([Bind("Name,GenericName,Strength,TherapeuticClass,UnitPrice,StockQuantity")] Medicine medicine)
         {
-
-
             if (ModelState.IsValid)
             {
                 medicine.CreatedAt = DateTime.UtcNow;
@@ -65,7 +63,7 @@ namespace HospitalManagementSystem.Controllers
         // POST: Medicines/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("Id,Name,UnitPrice,StockQuantity,CreatedAt")] Medicine medicine)
+        public async Task<IActionResult> Edit(int id, [Bind("Id,Name,GenericName,Strength,TherapeuticClass,UnitPrice,StockQuantity,CreatedAt")] Medicine medicine)
         {
             if (id != medicine.Id) return NotFound();
 
@@ -96,6 +94,10 @@ namespace HospitalManagementSystem.Controllers
             var medicine = await _context.Medicines.FirstOrDefaultAsync(m => m.Id == id);
             if (medicine == null) return NotFound();
 
+            var prescriptionCount = await _context.PrescriptionItems.CountAsync(pi => pi.MedicineId == id.Value);
+            ViewBag.PrescriptionCount = prescriptionCount;
+            ViewBag.IsReferenced = prescriptionCount > 0;
+
             return View(medicine);
         }
 
@@ -104,12 +106,26 @@ namespace HospitalManagementSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
+            var isReferenced = await _context.PrescriptionItems.AnyAsync(pi => pi.MedicineId == id);
+            if (isReferenced)
+            {
+                TempData["ErrorMessage"] = "Cannot delete this medicine because it is referenced in historical patient prescriptions. Discontinue the medicine or set stock to 0 instead to maintain medical history.";
+                return RedirectToAction(nameof(Index));
+            }
+
             var medicine = await _context.Medicines.FindAsync(id);
             if (medicine != null)
             {
-                _context.Medicines.Remove(medicine);
-                await _context.SaveChangesAsync();
-                TempData["SuccessMessage"] = "Medicine deleted successfully.";
+                try
+                {
+                    _context.Medicines.Remove(medicine);
+                    await _context.SaveChangesAsync();
+                    TempData["SuccessMessage"] = "Medicine deleted successfully.";
+                }
+                catch (DbUpdateException)
+                {
+                    TempData["ErrorMessage"] = "Cannot delete this medicine because existing clinical records depend on it.";
+                }
             }
             return RedirectToAction(nameof(Index));
         }

@@ -9,7 +9,7 @@ using HospitalManagementSystem.Models;
 
 namespace HospitalManagementSystem.Controllers
 {
-    [Authorize]
+    [Authorize(Roles = "Doctor,Admin,Assistant")]
     public class PatientAllergiesController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -39,11 +39,29 @@ namespace HospitalManagementSystem.Controllers
                 return Forbid();
             }
 
+            var resolvedGeneric = string.IsNullOrWhiteSpace(allergenGenericName) ? null : allergenGenericName.Trim();
+            if (string.IsNullOrEmpty(resolvedGeneric))
+            {
+                var trimmedSubstance = substance.Trim();
+                var matchedMedicine = await _context.Medicines
+                    .AsNoTracking()
+                    .Where(m => !string.IsNullOrEmpty(m.GenericName) && (
+                        EF.Functions.ILike(m.GenericName, trimmedSubstance) ||
+                        EF.Functions.ILike(m.Name, $"%{trimmedSubstance}%") ||
+                        EF.Functions.ILike(trimmedSubstance, $"%{m.GenericName}%")))
+                    .FirstOrDefaultAsync();
+
+                if (matchedMedicine != null && !string.IsNullOrWhiteSpace(matchedMedicine.GenericName))
+                {
+                    resolvedGeneric = matchedMedicine.GenericName;
+                }
+            }
+
             var allergy = new PatientAllergy
             {
                 PatientId = patientId,
                 Substance = substance.Trim(),
-                AllergenGenericName = string.IsNullOrWhiteSpace(allergenGenericName) ? null : allergenGenericName.Trim(),
+                AllergenGenericName = resolvedGeneric,
                 ReactionType = string.IsNullOrWhiteSpace(reactionType) ? null : reactionType.Trim(),
                 Severity = severity,
                 RecordedById = recordedById,

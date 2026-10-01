@@ -63,29 +63,75 @@ namespace HospitalManagementSystem.Controllers
             ModelState.Remove("AdmittingDoctor");
             ModelState.Remove("BedTransfers");
 
+            var hasActiveAdmission = await _context.Admissions.AnyAsync(a => a.PatientId == admission.PatientId && a.DischargeDate == null);
+            if (hasActiveAdmission)
+            {
+                ModelState.AddModelError("", "This patient already has an active inpatient admission. A patient cannot have multiple simultaneous admissions.");
+            }
+
+            if (BedId.HasValue)
+            {
+                var isOccupied = await _context.BedTransfers.AnyAsync(bt => bt.BedId == BedId.Value && bt.EndDate == null);
+                if (isOccupied)
+                {
+                    ModelState.AddModelError("", "The selected bed is currently occupied. Please choose an available bed.");
+                }
+            }
+
             if (ModelState.IsValid)
             {
-                admission.AdmissionDate = DateTime.SpecifyKind(admission.AdmissionDate, DateTimeKind.Utc);
-                admission.CreatedAt = DateTime.UtcNow;
-                admission.UpdatedAt = DateTime.UtcNow;
-
-                if (BedId.HasValue)
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    // Add Bed Transfer record
-                    var transfer = new BedTransfer
+                    var hasActiveAdmissionConcurrently = await _context.Admissions.AnyAsync(a => a.PatientId == admission.PatientId && a.DischargeDate == null);
+                    if (hasActiveAdmissionConcurrently)
                     {
-                        BedId = BedId.Value,
-                        StartDate = admission.AdmissionDate
-                    };
-                    admission.BedTransfers.Add(transfer);
-                }
+                        await transaction.RollbackAsync();
+                        ModelState.AddModelError("", "This patient already has an active inpatient admission.");
+                        goto Repopulate;
+                    }
 
-                _context.Add(admission);
-                await _context.SaveChangesAsync();
-                
-                TempData["SuccessMessage"] = "Patient admitted successfully.";
-                return RedirectToAction(nameof(Index));
+                    if (BedId.HasValue)
+                    {
+                        var isOccupied = await _context.BedTransfers.AnyAsync(bt => bt.BedId == BedId.Value && bt.EndDate == null);
+                        if (isOccupied)
+                        {
+                            await transaction.RollbackAsync();
+                            ModelState.AddModelError("", "The selected bed is already occupied. Please choose an available bed.");
+                            goto Repopulate;
+                        }
+                    }
+
+                    admission.AdmissionDate = DateTime.SpecifyKind(admission.AdmissionDate, DateTimeKind.Utc);
+                    admission.CreatedAt = DateTime.UtcNow;
+                    admission.UpdatedAt = DateTime.UtcNow;
+
+                    if (BedId.HasValue)
+                    {
+                        // Add Bed Transfer record
+                        var transfer = new BedTransfer
+                        {
+                            BedId = BedId.Value,
+                            StartDate = admission.AdmissionDate
+                        };
+                        admission.BedTransfers.Add(transfer);
+                    }
+
+                    _context.Add(admission);
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                    
+                    TempData["SuccessMessage"] = "Patient admitted successfully.";
+                    return RedirectToAction(nameof(Index));
+                }
+                catch (Exception)
+                {
+                    await transaction.RollbackAsync();
+                    ModelState.AddModelError("", "An unexpected error occurred while creating the admission.");
+                }
             }
+
+        Repopulate:
 
             // Repopulate ViewDatas on error
             
@@ -119,6 +165,58 @@ namespace HospitalManagementSystem.Controllers
                 
             if (admission == null) return NotFound();
 
+            if (admission.DischargeDate.HasValue)
+            {
+                TempData["ErrorMessage"] = "This patient has already been discharged.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // Check unbilled dispensed prescriptions
+            var unbilledPrescriptions = await _context.Prescriptions
+                .Include(p => p.PrescriptionItems).ThenInclude(pi => pi.Medicine)
+                .Where(p => p.PatientId == admission.PatientId && p.Status == PrescriptionStatus.Dispensed && !p.IsBilled)
+                .ToListAsync();
+            decimal unbilledPharmacyTotal = unbilledPrescriptions.Sum(p => p.PrescriptionItems.Sum(pi => pi.Quantity * pi.UnitPrice));
+
+            // Check accrued vs billed cabin rent
+            decimal accruedCabinRent = 0m;
+            int totalStayDays = 0;
+            foreach (var transfer in admission.BedTransfers)
+            {
+                var end = transfer.EndDate ?? DateTime.UtcNow;
+                var duration = end - transfer.StartDate;
+                var days = Math.Max(1, (int)Math.Ceiling(duration.TotalDays));
+                totalStayDays += days;
+                accruedCabinRent += days * (transfer.Bed?.DailyRate ?? 0m);
+            }
+
+            var existingBills = await _context.Bills
+                .Include(b => b.BillItems)
+                .Where(b => b.AdmissionId == admission.Id)
+                .ToListAsync();
+
+            decimal billedCabinRent = existingBills
+                .SelectMany(b => b.BillItems)
+                .Where(bi => bi.Department == DepartmentType.CabinRent)
+                .Sum(bi => bi.Amount);
+
+            decimal unbilledCabinRent = Math.Max(0m, accruedCabinRent - billedCabinRent);
+
+            // Check outstanding unpaid bills for this admission/patient
+            var unpaidBills = await _context.Bills
+                .Where(b => (b.AdmissionId == admission.Id || b.PatientId == admission.PatientId) && b.Status != BillStatus.Paid)
+                .ToListAsync();
+            decimal outstandingBalance = unpaidBills.Sum(b => b.NetTotal - b.PaidAmount);
+
+            ViewBag.UnbilledPrescriptionsCount = unbilledPrescriptions.Count;
+            ViewBag.UnbilledPharmacyTotal = unbilledPharmacyTotal;
+            ViewBag.TotalStayDays = totalStayDays;
+            ViewBag.UnbilledCabinRent = unbilledCabinRent;
+            ViewBag.AccruedCabinRent = accruedCabinRent;
+            ViewBag.OutstandingBillsCount = unpaidBills.Count;
+            ViewBag.OutstandingBalance = outstandingBalance;
+            ViewBag.HasPendingFinancials = (unbilledPrescriptions.Count > 0 || unbilledCabinRent > 0 || outstandingBalance > 0);
+
             return View(admission);
         }
 
@@ -132,6 +230,12 @@ namespace HospitalManagementSystem.Controllers
                 .FirstOrDefaultAsync(a => a.Id == id);
                 
             if (admission == null) return NotFound();
+
+            if (admission.DischargeDate.HasValue)
+            {
+                TempData["ErrorMessage"] = "This patient has already been discharged.";
+                return RedirectToAction(nameof(Index));
+            }
 
             // Set Discharge date
             admission.DischargeDate = DateTime.UtcNow;
@@ -213,9 +317,15 @@ namespace HospitalManagementSystem.Controllers
             var admission = await _context.Admissions
                 .Include(a => a.Patient)
                 .Include(a => a.BedTransfers).ThenInclude(bt => bt.Bed)
-                .FirstOrDefaultAsync(a => a.Id == id && a.DischargeDate == null);
+                .FirstOrDefaultAsync(a => a.Id == id);
                 
             if (admission == null) return NotFound();
+
+            if (admission.DischargeDate.HasValue)
+            {
+                TempData["ErrorMessage"] = "Cannot transfer beds for a patient who has already been discharged.";
+                return RedirectToAction(nameof(Index));
+            }
 
             var currentTransfer = admission.BedTransfers.FirstOrDefault(bt => bt.EndDate == null);
             ViewBag.CurrentBed = currentTransfer?.Bed;
@@ -239,36 +349,64 @@ namespace HospitalManagementSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> TransferBed(int id, int BedId)
         {
-            var admission = await _context.Admissions
-                .Include(a => a.BedTransfers)
-                .FirstOrDefaultAsync(a => a.Id == id && a.DischargeDate == null);
-
-            if (admission == null) return NotFound();
-
-            var activeTransfer = admission.BedTransfers.FirstOrDefault(bt => bt.EndDate == null);
-            if (activeTransfer != null)
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
             {
-                if (activeTransfer.BedId == BedId)
+                var admission = await _context.Admissions
+                    .Include(a => a.BedTransfers)
+                    .FirstOrDefaultAsync(a => a.Id == id);
+
+                if (admission == null) return NotFound();
+
+                if (admission.DischargeDate.HasValue)
+                {
+                    await transaction.RollbackAsync();
+                    TempData["ErrorMessage"] = "Cannot transfer beds for a patient who has already been discharged.";
+                    return RedirectToAction(nameof(Index));
+                }
+
+                var activeTransfer = admission.BedTransfers.FirstOrDefault(bt => bt.EndDate == null);
+                if (activeTransfer != null && activeTransfer.BedId == BedId)
                 {
                     TempData["SuccessMessage"] = "Patient is already in this bed.";
                     return RedirectToAction(nameof(Index));
                 }
-                activeTransfer.EndDate = DateTime.UtcNow;
+
+                // Server-side transactional validation ensuring the target bed is not occupied
+                var isOccupied = await _context.BedTransfers.AnyAsync(bt => bt.BedId == BedId && bt.EndDate == null);
+                if (isOccupied)
+                {
+                    await transaction.RollbackAsync();
+                    TempData["ErrorMessage"] = "The target bed is currently occupied. Please choose an available bed.";
+                    return RedirectToAction(nameof(TransferBed), new { id });
+                }
+
+                if (activeTransfer != null)
+                {
+                    activeTransfer.EndDate = DateTime.UtcNow;
+                }
+
+                var newTransfer = new BedTransfer
+                {
+                    BedId = BedId,
+                    StartDate = DateTime.UtcNow
+                };
+                
+                admission.BedTransfers.Add(newTransfer);
+                admission.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                TempData["SuccessMessage"] = "Patient successfully transferred to the new bed.";
+                return RedirectToAction(nameof(Index));
             }
-
-            var newTransfer = new BedTransfer
+            catch (Exception)
             {
-                BedId = BedId,
-                StartDate = DateTime.UtcNow
-            };
-            
-            admission.BedTransfers.Add(newTransfer);
-            admission.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            TempData["SuccessMessage"] = "Patient successfully transferred to the new bed.";
-            
-            return RedirectToAction(nameof(Index));
+                await transaction.RollbackAsync();
+                TempData["ErrorMessage"] = "An unexpected error occurred while transferring beds.";
+                return RedirectToAction(nameof(TransferBed), new { id });
+            }
         }
 
         // GET: Admissions/Delete/5
@@ -283,6 +421,8 @@ namespace HospitalManagementSystem.Controllers
 
             if (admission == null) return NotFound();
 
+            ViewBag.HasBills = await _context.Bills.AnyAsync(b => b.AdmissionId == id);
+
             return View(admission);
         }
 
@@ -291,15 +431,28 @@ namespace HospitalManagementSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
+            if (await _context.Bills.AnyAsync(b => b.AdmissionId == id))
+            {
+                TempData["ErrorMessage"] = "Cannot delete this admission because billing records are attached to it. Please void or adjust associated bills first.";
+                return RedirectToAction(nameof(Index));
+            }
+
             var admission = await _context.Admissions
                 .Include(a => a.BedTransfers)
                 .FirstOrDefaultAsync(a => a.Id == id);
             
             if (admission != null)
             {
-                _context.Admissions.Remove(admission);
-                await _context.SaveChangesAsync();
-                TempData["SuccessMessage"] = "Admission deleted successfully.";
+                try
+                {
+                    _context.Admissions.Remove(admission);
+                    await _context.SaveChangesAsync();
+                    TempData["SuccessMessage"] = "Admission deleted successfully.";
+                }
+                catch (DbUpdateException)
+                {
+                    TempData["ErrorMessage"] = "Unable to delete admission due to linked database records. Ensure all related bills and transactions are resolved.";
+                }
             }
 
             return RedirectToAction(nameof(Index));

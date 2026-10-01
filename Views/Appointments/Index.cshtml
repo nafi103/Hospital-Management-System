@@ -1,5 +1,6 @@
 @model IEnumerable<HospitalManagementSystem.Models.Appointment>
 @using HospitalManagementSystem.Models
+@using HospitalManagementSystem.Services
 
 @{
     ViewData["Title"] = "Consultations";
@@ -44,7 +45,7 @@
                             else waitText = $"{(int)waitTime.TotalHours}h {waitTime.Minutes}m";
                         }
                         <div class="fw-medium text-danger">@waitText</div>
-                        <small class="text-muted">Arrived: @item.AppointmentDatetime.ToLocalTime().ToString("hh:mm tt")</small>
+                        <small class="text-muted">Arrived: @item.AppointmentDatetime.ToHospitalTime().ToString("hh:mm tt")</small>
                     </td>
                     <td>
                         <div class="fw-bold text-primary">@item.Patient?.FullName</div>

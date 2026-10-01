@@ -175,4 +175,38 @@ public class News2CalculatorTests
         Assert.Equal(TriagePriority.Emergency, result.Priority);
         Assert.True(result.Score >= 7);
     }
+
+    [Fact]
+    public void TryCalculate_WhenPatientIsChild_ReturnsNull()
+    {
+        var result = News2Calculator.TryCalculate(
+            isChild: true,
+            respiratoryRate: 16,
+            spo2: 98,
+            onSupplementalOxygen: false,
+            temperature: 37.0m,
+            systolicBp: 120,
+            heartRate: 70,
+            consciousness: ConsciousnessLevel.Alert);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void TryCalculate_WhenPatientIsAdult_ReturnsScoreAndPriority()
+    {
+        var result = News2Calculator.TryCalculate(
+            isChild: false,
+            respiratoryRate: 16,
+            spo2: 98,
+            onSupplementalOxygen: false,
+            temperature: 37.0m,
+            systolicBp: 120,
+            heartRate: 70,
+            consciousness: ConsciousnessLevel.Alert);
+
+        Assert.NotNull(result);
+        Assert.Equal(0, result.Value.Score);
+        Assert.Equal(TriagePriority.Normal, result.Value.Priority);
+    }
 }

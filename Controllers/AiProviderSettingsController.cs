@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using HospitalManagementSystem.Models;
 using HospitalManagementSystem.Services;
+using HospitalManagementSystem.Services.Providers;
 
 namespace HospitalManagementSystem.Controllers
 {
@@ -34,11 +36,16 @@ namespace HospitalManagementSystem.Controllers
 
         private readonly ApplicationDbContext _context;
         private readonly ApiKeyProtector _protector;
+        private readonly IEnumerable<IAiTextProvider> _providers;
 
-        public AiProviderSettingsController(ApplicationDbContext context, ApiKeyProtector protector)
+        public AiProviderSettingsController(
+            ApplicationDbContext context,
+            ApiKeyProtector protector,
+            IEnumerable<IAiTextProvider> providers)
         {
             _context = context;
             _protector = protector;
+            _providers = providers;
         }
 
         private int? CurrentUserId()
@@ -90,19 +97,39 @@ namespace HospitalManagementSystem.Controllers
             var userId = CurrentUserId();
             var now = DateTime.UtcNow;
 
+            var keyToUse = !string.IsNullOrWhiteSpace(apiKey)
+                ? apiKey.Trim()
+                : (existing != null ? _protector.Unprotect(existing.EncryptedApiKey) : null);
+
+            if (existing == null && string.IsNullOrWhiteSpace(keyToUse))
+            {
+                TempData["ErrorMessage"] = "An API key is required to add a new provider.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // Pre-flight connectivity check if the provider is being saved as enabled
+            if (isEnabled && !string.IsNullOrWhiteSpace(keyToUse))
+            {
+                var providerImpl = _providers.FirstOrDefault(p => p.Type == provider);
+                if (providerImpl != null)
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                    var (success, errorMsg) = await providerImpl.PingAsync(keyToUse, modelId.Trim(), cts.Token);
+                    if (!success)
+                    {
+                        TempData["ErrorMessage"] = $"Pre-flight connectivity check failed for {provider} (model: {modelId.Trim()}): {errorMsg}";
+                        return RedirectToAction(nameof(Index));
+                    }
+                }
+            }
+
             if (existing == null)
             {
-                if (string.IsNullOrWhiteSpace(apiKey))
-                {
-                    TempData["ErrorMessage"] = "An API key is required to add a new provider.";
-                    return RedirectToAction(nameof(Index));
-                }
-
                 var maxPriority = await _context.AiProviderSettings.Select(s => (int?)s.Priority).MaxAsync() ?? -1;
                 _context.AiProviderSettings.Add(new AiProviderSetting
                 {
                     Provider = provider,
-                    EncryptedApiKey = _protector.Protect(apiKey),
+                    EncryptedApiKey = _protector.Protect(keyToUse!),
                     ModelId = modelId.Trim(),
                     IsEnabled = isEnabled,
                     Priority = maxPriority + 1,
@@ -110,22 +137,68 @@ namespace HospitalManagementSystem.Controllers
                     CreatedAt = now,
                     UpdatedAt = now
                 });
-                TempData["SuccessMessage"] = $"{provider} added.";
+                TempData["SuccessMessage"] = $"{provider} verified and added successfully.";
             }
             else
             {
                 if (!string.IsNullOrWhiteSpace(apiKey))
                 {
-                    existing.EncryptedApiKey = _protector.Protect(apiKey);
+                    existing.EncryptedApiKey = _protector.Protect(keyToUse!);
                 }
                 existing.ModelId = modelId.Trim();
                 existing.IsEnabled = isEnabled;
                 existing.UpdatedById = userId;
                 existing.UpdatedAt = now;
-                TempData["SuccessMessage"] = $"{provider} updated.";
+                TempData["SuccessMessage"] = isEnabled
+                    ? $"{provider} verified and updated successfully."
+                    : $"{provider} updated (disabled).";
             }
 
             await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(Index));
+        }
+
+        // POST: AiProviderSettings/Test
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Test(AiProviderType provider, string? apiKey, string modelId)
+        {
+            if (string.IsNullOrWhiteSpace(modelId))
+            {
+                TempData["ErrorMessage"] = "Model id is required to test connectivity.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var existing = await _context.AiProviderSettings.FirstOrDefaultAsync(s => s.Provider == provider);
+            var keyToTest = !string.IsNullOrWhiteSpace(apiKey)
+                ? apiKey.Trim()
+                : (existing != null ? _protector.Unprotect(existing.EncryptedApiKey) : null);
+
+            if (string.IsNullOrWhiteSpace(keyToTest))
+            {
+                TempData["ErrorMessage"] = $"Cannot test {provider}: no API key provided or configured.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var providerImpl = _providers.FirstOrDefault(p => p.Type == provider);
+            if (providerImpl == null)
+            {
+                TempData["ErrorMessage"] = $"Provider implementation for {provider} not found.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var (success, errorMsg) = await providerImpl.PingAsync(keyToTest, modelId.Trim(), cts.Token);
+
+            if (success)
+            {
+                TempData["SuccessMessage"] = $"Connectivity to {provider} (model: {modelId.Trim()}) verified successfully!";
+            }
+            else
+            {
+                TempData["ErrorMessage"] = $"Connectivity test failed for {provider}: {errorMsg}";
+            }
+
             return RedirectToAction(nameof(Index));
         }
 

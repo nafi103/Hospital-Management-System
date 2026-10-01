@@ -28,27 +28,33 @@
                 <div class="row g-4 mb-4">
                     <div class="col-md-4">
                         <label asp-for="SystolicBp" class="form-label fw-medium">Systolic BP (mmHg) <span class="text-danger">*</span></label>
-                        <input asp-for="SystolicBp" type="number" class="form-control" placeholder="e.g. 120" required />
+                        <input asp-for="SystolicBp" type="number" min="40" max="260" class="form-control" placeholder="e.g. 120 (40-260)" required />
+                        <span asp-validation-for="SystolicBp" class="text-danger small"></span>
                     </div>
                     <div class="col-md-4">
                         <label asp-for="DiastolicBp" class="form-label fw-medium">Diastolic BP (mmHg) <span class="text-danger">*</span></label>
-                        <input asp-for="DiastolicBp" type="number" class="form-control" placeholder="e.g. 80" required />
+                        <input asp-for="DiastolicBp" type="number" min="20" max="180" class="form-control" placeholder="e.g. 80 (20-180)" required />
+                        <span asp-validation-for="DiastolicBp" class="text-danger small"></span>
                     </div>
                     <div class="col-md-4">
                         <label asp-for="HeartRate" class="form-label fw-medium">Heart Rate (bpm) <span class="text-danger">*</span></label>
-                        <input asp-for="HeartRate" type="number" class="form-control" placeholder="e.g. 78" required />
+                        <input asp-for="HeartRate" type="number" min="25" max="250" class="form-control" placeholder="e.g. 78 (25-250)" required />
+                        <span asp-validation-for="HeartRate" class="text-danger small"></span>
                     </div>
                     <div class="col-md-4">
                         <label asp-for="RespiratoryRate" class="form-label fw-medium">Respiratory Rate (breaths/min) <span class="text-danger">*</span></label>
-                        <input asp-for="RespiratoryRate" type="number" class="form-control" placeholder="e.g. 16" required />
+                        <input asp-for="RespiratoryRate" type="number" min="4" max="60" class="form-control" placeholder="e.g. 16 (4-60)" required />
+                        <span asp-validation-for="RespiratoryRate" class="text-danger small"></span>
                     </div>
                     <div class="col-md-4">
                         <label asp-for="Spo2" class="form-label fw-medium">SpO2 (%) <span class="text-danger">*</span></label>
-                        <input asp-for="Spo2" type="number" step="0.1" class="form-control" placeholder="e.g. 98" required />
+                        <input asp-for="Spo2" type="number" step="0.1" min="50" max="100" class="form-control" placeholder="e.g. 98 (50-100)" required />
+                        <span asp-validation-for="Spo2" class="text-danger small"></span>
                     </div>
                     <div class="col-md-4">
                         <label asp-for="Temperature" class="form-label fw-medium">Temperature (&deg;C) <span class="text-danger">*</span></label>
-                        <input asp-for="Temperature" type="number" step="0.1" class="form-control" placeholder="e.g. 37.0" required />
+                        <input asp-for="Temperature" type="number" step="0.1" min="30.0" max="45.0" class="form-control" placeholder="e.g. 37.0 (30.0-45.0)" required />
+                        <span asp-validation-for="Temperature" class="text-danger small"></span>
                     </div>
                 </div>
 
@@ -56,10 +62,12 @@
                     <div class="col-md-6">
                         <label asp-for="Consciousness" class="form-label fw-medium">Consciousness (ACVPU) <span class="text-danger">*</span></label>
                         <select asp-for="Consciousness" class="form-select" asp-items="Html.GetEnumSelectList<ConsciousnessLevel>()"></select>
+                        <span asp-validation-for="Consciousness" class="text-danger small"></span>
                     </div>
                     <div class="col-md-6">
                         <label asp-for="BloodSugar" class="form-label fw-medium">Blood Sugar (mmol/L)</label>
-                        <input asp-for="BloodSugar" type="number" step="0.1" class="form-control" placeholder="Optional" />
+                        <input asp-for="BloodSugar" type="number" step="0.1" min="0.5" max="50.0" class="form-control" placeholder="Optional (0.5-50.0)" />
+                        <span asp-validation-for="BloodSugar" class="text-danger small"></span>
                     </div>
                     <div class="col-md-12">
                         <div class="form-check form-switch fs-5">
@@ -69,10 +77,25 @@
                     </div>
                 </div>
 
-                <div class="alert alert-info border-0 bg-info bg-opacity-10 mb-4 d-flex align-items-center">
-                    <i class="bi bi-info-circle fs-4 text-info me-3"></i>
-                    <small class="text-muted">Triage priority is calculated automatically from these readings using the NEWS2 scoring method.</small>
-                </div>
+                @if (appointment.Patient?.IsChild == true)
+                {
+                    <div class="alert alert-warning border-0 bg-warning bg-opacity-10 mb-4 d-flex align-items-start">
+                        <i class="bi bi-shield-exclamation fs-4 text-warning me-3 mt-1"></i>
+                        <div>
+                            <strong class="text-warning-emphasis d-block mb-1">Pediatric Safety Advisory:</strong>
+                            <span class="small text-muted">
+                                This patient is a pediatric patient (child/minor). Adult NEWS2 score is clinically invalid and contraindicated for minors due to different physiological baselines. Automated NEWS2 calculation is withheld; clinical priority must be determined using pediatric protocols (PEWS).
+                            </span>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-info border-0 bg-info bg-opacity-10 mb-4 d-flex align-items-center">
+                        <i class="bi bi-info-circle fs-4 text-info me-3"></i>
+                        <small class="text-muted">Triage priority is calculated automatically from these readings using the adult NEWS2 scoring method.</small>
+                    </div>
+                }
 
                 <div class="d-grid">
                     <button type="submit" class="btn btn-primary btn-lg">
@@ -83,3 +106,7 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}

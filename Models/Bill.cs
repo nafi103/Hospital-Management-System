@@ -33,14 +33,18 @@ namespace HospitalManagementSystem.Models
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
 
+        [Timestamp]
+        public uint Version { get; set; }
+
         public List<BillItem> BillItems { get; set; } = new List<BillItem>();
+        public List<PaymentTransaction> PaymentTransactions { get; set; } = new List<PaymentTransaction>();
 
         public void RecalculateTotals()
         {
             SubtotalAmount = BillItems?.Sum(i => i.Amount) ?? 0;
-            NetTotal = SubtotalAmount - DiscountAmount;
+            NetTotal = Math.Max(0, SubtotalAmount - DiscountAmount);
             
-            if (PaidAmount >= NetTotal && NetTotal > 0)
+            if (NetTotal == 0 || PaidAmount >= NetTotal)
                 Status = BillStatus.Paid;
             else if (PaidAmount > 0)
                 Status = BillStatus.PartiallyPaid;

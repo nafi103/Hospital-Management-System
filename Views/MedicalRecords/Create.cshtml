@@ -48,8 +48,22 @@
                         </div>
 
                         <input type="hidden" asp-for="PatientId" id="PatientIdHidden" required />
+                        <input type="hidden" asp-for="AppointmentId" />
                         <span asp-validation-for="PatientId" class="text-danger small"></span>
                     </div>
+
+                    @if (ViewBag.AppointmentId != null)
+                    {
+                        <div class="col-md-12">
+                            <div class="alert alert-info border-0 bg-info bg-opacity-10 py-2 px-3 mb-0 d-flex align-items-center">
+                                <i class="bi bi-calendar-check fs-5 text-info me-2"></i>
+                                <div>
+                                    <span class="fw-medium">Linked Consultation:</span>
+                                    <span class="small text-muted ms-1">Encounter / Appointment #@ViewBag.AppointmentId</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
 
                     @if (ViewBag.PreselectedDoctorId != null)
                     {

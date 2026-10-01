@@ -78,16 +78,22 @@ public class BillTotalsTests
     }
 
     [Fact]
-    public void RecalculateTotals_FullyDiscountedBill_CurrentlyStaysUnpaidDespiteZeroBalance()
+    public void RecalculateTotals_FullyDiscountedBill_TransitionsToPaid()
     {
-        // Known limitation: RecalculateTotals guards Paid with "NetTotal > 0", so a
-        // fully-discounted bill (NetTotal == 0, nothing owed) can never reach Paid -
-        // it stays Unpaid forever even though the patient owes nothing. Documented
-        // here rather than silently fixed; see docs/DEFENSE-NOTES.md.
         var bill = MakeBill(discount: 200m, paid: 0m, itemAmounts: [200m]);
         bill.RecalculateTotals();
 
         Assert.Equal(0m, bill.NetTotal);
-        Assert.Equal(BillStatus.Unpaid, bill.Status);
+        Assert.Equal(BillStatus.Paid, bill.Status);
+    }
+
+    [Fact]
+    public void RecalculateTotals_DiscountExceedingSubtotal_ClampsToZeroAndTransitionsToPaid()
+    {
+        var bill = MakeBill(discount: 250m, paid: 0m, itemAmounts: [200m]);
+        bill.RecalculateTotals();
+
+        Assert.Equal(0m, bill.NetTotal);
+        Assert.Equal(BillStatus.Paid, bill.Status);
     }
 }

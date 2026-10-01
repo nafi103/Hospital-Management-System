@@ -94,12 +94,33 @@ namespace HospitalManagementSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
+            var isOccupied = await _context.BedTransfers.AnyAsync(bt => bt.BedId == id && bt.EndDate == null);
+            if (isOccupied)
+            {
+                TempData["ErrorMessage"] = "Cannot delete bed because a patient is currently occupying it. Transfer or discharge the patient first.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var hasHistoricalTransfers = await _context.BedTransfers.AnyAsync(bt => bt.BedId == id);
+            if (hasHistoricalTransfers)
+            {
+                TempData["ErrorMessage"] = "Cannot delete bed because historical patient admissions and transfers are linked to it.";
+                return RedirectToAction(nameof(Index));
+            }
+
             var bed = await _context.Beds.FindAsync(id);
             if (bed != null)
             {
-                _context.Beds.Remove(bed);
-                await _context.SaveChangesAsync();
-                TempData["SuccessMessage"] = "Bed removed from system.";
+                try
+                {
+                    _context.Beds.Remove(bed);
+                    await _context.SaveChangesAsync();
+                    TempData["SuccessMessage"] = "Bed removed from system.";
+                }
+                catch (DbUpdateException)
+                {
+                    TempData["ErrorMessage"] = "Cannot delete bed because existing records depend on it.";
+                }
             }
             return RedirectToAction(nameof(Index));
         }

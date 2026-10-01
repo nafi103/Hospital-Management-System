@@ -28,7 +28,7 @@
                 <div class="row mb-3">
                     <div class="col-md-6">
                         <label asp-for="RoleId" class="form-label fw-medium">System Role <span class="text-danger">*</span></label>
-                        <select asp-for="RoleId" class="form-select" asp-items="ViewBag.RoleId" required>
+                        <select asp-for="RoleId" id="roleSelect" class="form-select" asp-items="ViewBag.RoleId" required>
                             <option value="">Select Role...</option>
                         </select>
                         <span asp-validation-for="RoleId" class="text-danger small"></span>
@@ -40,6 +40,15 @@
                     </div>
                 </div>
 
+                <div class="mb-3" id="assistantChamberGroup" style="display: none;">
+                    <label asp-for="AssignedDoctorId" class="form-label fw-medium">Assigned Doctor (Chamber Assignment)</label>
+                    <select asp-for="AssignedDoctorId" class="form-select" asp-items="ViewBag.AssignedDoctorId">
+                        <option value="">-- No Assigned Doctor (Floating) --</option>
+                    </select>
+                    <span asp-validation-for="AssignedDoctorId" class="text-danger small"></span>
+                    <div class="form-text small text-muted">Assistants receive chamber queue and 'Send In' access for this doctor's appointments.</div>
+                </div>
+
                 <h6 class="mt-4 mb-3 text-primary border-bottom pb-2">Login Credentials</h6>
 
                 <div class="row mb-4">
@@ -49,8 +58,8 @@
                         <span asp-validation-for="Username" class="text-danger small"></span>
                     </div>
                     <div class="col-md-6">
-                        <label asp-for="Password" class="form-label fw-medium">Password <span class="text-danger">*</span></label>
-                        <input asp-for="Password" type="text" class="form-control" required />
+                        <label asp-for="Password" class="form-label fw-medium">Password</label>
+                        <input asp-for="Password" type="password" class="form-control" placeholder="Leave blank to keep current password" />
                         <span asp-validation-for="Password" class="text-danger small"></span>
                     </div>
                 </div>
@@ -66,4 +75,20 @@
 
 @section Scripts {
     @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        function toggleAssistantDoctor() {
+            var roleSelect = document.getElementById("roleSelect");
+            var chamberGroup = document.getElementById("assistantChamberGroup");
+            if (!roleSelect || !chamberGroup) return;
+            var selectedText = roleSelect.options[roleSelect.selectedIndex]?.text?.trim() || "";
+            if (selectedText.toLowerCase() === "assistant") {
+                chamberGroup.style.display = "block";
+            } else {
+                chamberGroup.style.display = "none";
+            }
+        }
+        document.getElementById("roleSelect")?.addEventListener("change", toggleAssistantDoctor);
+        document.addEventListener("DOMContentLoaded", toggleAssistantDoctor);
+        toggleAssistantDoctor();
+    </script>
 }

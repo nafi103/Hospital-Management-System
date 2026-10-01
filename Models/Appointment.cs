@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore;
 namespace HospitalManagementSystem.Models
 {
     [Index(nameof(CreatedAt))]
+    [Index(nameof(AppointmentDatetime))]
+    [Index(nameof(DoctorId), nameof(AppointmentDatetime))]
     public class Appointment
     {
         [Key]
@@ -25,5 +27,8 @@ namespace HospitalManagementSystem.Models
 
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+
+        [Timestamp]
+        public uint Version { get; set; }
     }
 }

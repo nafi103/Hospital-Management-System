@@ -18,8 +18,15 @@ namespace HospitalManagementSystem.Services
     public record MedicineInfo(int Id, string Name, string GenericName, string Strength, int StockQuantity);
     public record SafetyCheckItem(int MedicineId, int RequestedQuantity, DoseUnit DoseUnit);
     public record SafetyCheckAllergy(string Substance, string? AllergenGenericName, AllergySeverity Severity);
+    public record ActiveMedicationInfo(
+        int MedicineId,
+        string MedicineName,
+        string GenericName,
+        DateTime PrescribedOrDispensedAt,
+        int? DurationDays,
+        int PrescriptionId);
 
-    // Four checks run on prescription save, all deterministic - no AI call for any of them.
+    // Checks run on prescription save, all deterministic - no AI call for any of them.
     // Three are plain SQL-shaped lookups (duplicate generic, allergy match, stock shortfall);
     // the fourth (pediatric strength) is a documented heuristic, not a clinical dosing
     // calculation - see the comment on CheckPediatricStrength for its limits.
@@ -29,7 +36,8 @@ namespace HospitalManagementSystem.Services
             bool patientIsChild,
             IReadOnlyList<SafetyCheckAllergy> allergies,
             IReadOnlyList<SafetyCheckItem> items,
-            IReadOnlyList<MedicineInfo> allMedicines)
+            IReadOnlyList<MedicineInfo> allMedicines,
+            IReadOnlyList<ActiveMedicationInfo>? activeMedications = null)
         {
             var warnings = new List<SafetyWarning>();
             var medById = allMedicines.ToDictionary(m => m.Id);
@@ -39,8 +47,8 @@ namespace HospitalManagementSystem.Services
                 .Select(i => (Item: i, Medicine: medById[i.MedicineId]))
                 .ToList();
 
-            CheckDuplicateTherapy(resolvedItems, warnings);
-            CheckAllergyConflicts(resolvedItems, allergies, warnings);
+            CheckDuplicateTherapy(resolvedItems, activeMedications, warnings);
+            CheckAllergyConflicts(resolvedItems, allergies, activeMedications, warnings);
             CheckStock(resolvedItems, allMedicines, warnings);
             if (patientIsChild)
             {
@@ -52,9 +60,13 @@ namespace HospitalManagementSystem.Services
 
         private static void CheckDuplicateTherapy(
             List<(SafetyCheckItem Item, MedicineInfo Medicine)> resolvedItems,
+            IReadOnlyList<ActiveMedicationInfo>? activeMedications,
             List<SafetyWarning> warnings)
         {
-            var byGeneric = resolvedItems.GroupBy(x => x.Medicine.GenericName, StringComparer.OrdinalIgnoreCase);
+            var byGeneric = resolvedItems
+                .Where(x => !string.IsNullOrWhiteSpace(x.Medicine.GenericName))
+                .GroupBy(x => x.Medicine.GenericName, StringComparer.OrdinalIgnoreCase);
+
             foreach (var group in byGeneric.Where(g => g.Count() > 1))
             {
                 var names = string.Join(" and ", group.Select(x => x.Medicine.Name).Distinct());
@@ -63,19 +75,38 @@ namespace HospitalManagementSystem.Services
                     SafetyWarningSeverity.Warning,
                     $"{names} are both {group.Key} - confirm this isn't unintentional duplicate therapy."));
             }
+
+            if (activeMedications != null && activeMedications.Count > 0)
+            {
+                foreach (var (_, medicine) in resolvedItems)
+                {
+                    if (string.IsNullOrWhiteSpace(medicine.GenericName)) continue;
+
+                    var activeDuplicates = activeMedications
+                        .Where(a => string.Equals(a.GenericName, medicine.GenericName, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                    foreach (var active in activeDuplicates)
+                    {
+                        var dispensedDateStr = active.PrescribedOrDispensedAt.ToString("MMM dd, yyyy");
+                        warnings.Add(new SafetyWarning(
+                            "Duplicate Therapy",
+                            SafetyWarningSeverity.Warning,
+                            $"{medicine.Name} ({medicine.GenericName}) duplicates active dispensed medication {active.MedicineName} from Prescription #{active.PrescriptionId} (dispensed {dispensedDateStr}) - confirm this isn't unintentional duplicate therapy."));
+                    }
+                }
+            }
         }
 
         private static void CheckAllergyConflicts(
             List<(SafetyCheckItem Item, MedicineInfo Medicine)> resolvedItems,
             IReadOnlyList<SafetyCheckAllergy> allergies,
+            IReadOnlyList<ActiveMedicationInfo>? activeMedications,
             List<SafetyWarning> warnings)
         {
             foreach (var (_, medicine) in resolvedItems)
             {
-                var match = allergies.FirstOrDefault(a =>
-                    a.AllergenGenericName != null &&
-                    string.Equals(a.AllergenGenericName, medicine.GenericName, StringComparison.OrdinalIgnoreCase));
-
+                var match = allergies.FirstOrDefault(a => IsAllergyConflict(a, medicine.GenericName, medicine.Name));
                 if (match != null)
                 {
                     warnings.Add(new SafetyWarning(
@@ -85,6 +116,51 @@ namespace HospitalManagementSystem.Services
                         $"{medicine.Name} ({medicine.GenericName}) conflicts with this."));
                 }
             }
+
+            if (activeMedications != null && activeMedications.Count > 0)
+            {
+                foreach (var active in activeMedications)
+                {
+                    var match = allergies.FirstOrDefault(a => IsAllergyConflict(a, active.GenericName, active.MedicineName));
+                    if (match != null)
+                    {
+                        warnings.Add(new SafetyWarning(
+                            "Allergy Conflict",
+                            SafetyWarningSeverity.Critical,
+                            $"Patient has a recorded {match.Severity} allergy to {match.Substance}. " +
+                            $"Active dispensed medication {active.MedicineName} ({active.GenericName}) from Prescription #{active.PrescriptionId} conflicts with this."));
+                    }
+                }
+            }
+        }
+
+        private static bool IsAllergyConflict(SafetyCheckAllergy allergy, string genericName, string medicineName)
+        {
+            if (!string.IsNullOrEmpty(allergy.AllergenGenericName) &&
+                string.Equals(allergy.AllergenGenericName, genericName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(allergy.Substance))
+            {
+                var substance = allergy.Substance.Trim();
+                if (!string.IsNullOrEmpty(genericName) && (
+                    genericName.Contains(substance, StringComparison.OrdinalIgnoreCase) ||
+                    substance.Contains(genericName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return true;
+                }
+
+                if (!string.IsNullOrEmpty(medicineName) && (
+                    medicineName.Contains(substance, StringComparison.OrdinalIgnoreCase) ||
+                    substance.Contains(medicineName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static void CheckStock(

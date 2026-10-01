@@ -90,6 +90,18 @@
                 <div class="text-muted small mt-1">@Model.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy hh:mm tt")</div>
             </div>
 
+            @if (Model.Status == PrescriptionStatus.Dispensed)
+            {
+                <div class="mb-4">
+                    <label class="text-muted small mb-1">Dispensed By</label>
+                    <div class="fw-medium"><i class="bi bi-person-check text-success me-1"></i> @(Model.DispensedBy?.FullName ?? "Pharmacy Staff")</div>
+                    @if (Model.DispensedAt.HasValue)
+                    {
+                        <div class="text-muted small mt-1">@Model.DispensedAt.Value.ToLocalTime().ToString("MMM dd, yyyy hh:mm tt")</div>
+                    }
+                </div>
+            }
+
             @if (!string.IsNullOrWhiteSpace(Model.ChiefComplaints))
             {
                 <div class="mb-3">

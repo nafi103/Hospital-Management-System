@@ -150,3 +150,31 @@ Three things this diagram is standing in for:
   then scoped to that patient's own `Id`. A route or query-string `id` is never trusted for
   ownership — see the IDOR walkthrough in
   [DEFENSE-NOTES.md](DEFENSE-NOTES.md#anticipated-questions).
+- **SignalR Hubs enforce strict identity isolation and role gating.**
+  - `AiStreamHub`: Annotated with `[Authorize(Roles = "Doctor")]`. Clients can only join a stream group when the doctor's authenticated identity matches the clinician initiating the AI streaming pipeline. This completely blocks unauthenticated or unauthorized users from intercepting live rehydrated PHI tokens over WebSockets.
+  - `NotificationHub`: Enforces `[Authorize]`. On connection, callers are strictly assigned to their personal user group `user_{userId}` derived from authentication claims, preventing users from arbitrarily subscribing to other users' private notification channels.
+
+## 4. Financial Integrity & Optimistic Concurrency
+
+```mermaid
+flowchart LR
+    Payment["Cashier / Patient Payment"] --> ConcurrencyCheck{"PostgreSQL xmin<br/>Concurrency Check"}
+    ConcurrencyCheck -- "Conflict Detected" --> ConcurrencyException["DbUpdateConcurrencyException<br/>(Transaction Rolled Back)"]
+    ConcurrencyCheck -- "Token Match" --> BalanceVerify{"Dynamic Balance Check<br/>(NetTotal - Sum(Tx))"}
+    BalanceVerify -- "Exceeds Balance" --> OverpayAbort["Reject Over-Payment<br/>(Transaction Rolled Back)"]
+    BalanceVerify -- "Valid Amount" --> LedgerInsert["INSERT PaymentTransaction<br/>(Immutable Ledger Row)"]
+    LedgerInsert --> BillUpdate["Update Bill.PaidAmount<br/>& Recalculate Totals"]
+```
+
+- **Immutable `PaymentTransaction` Ledger:** Financial payments are never recorded as simple in-place mutations on `Bill.PaidAmount`. Every collection writes an immutable `PaymentTransaction` row (recording the transaction timestamp, payment method, cashier `UserId`, and amount). The bill's `PaidAmount` and status (`Paid`, `PartiallyPaid`, `Unpaid`) are derived atomically from the sum of all recorded transactions, preserving an unalterable audit trail.
+- **PostgreSQL `xmin` Concurrency Tokens:** `Bill` and `Appointment` entities utilize PostgreSQL's internal `xmin` system column mapped via EF Core's `IsRowVersion()`. If two cashiers record payments simultaneously or two receptionists attempt to book the same doctor's slot, the second commit fails with a `DbUpdateConcurrencyException`, triggering an immediate transaction rollback and alerting the user before any balance or schedule corruption occurs.
+
+## 5. Clinical Safety Net & Referential Integrity
+
+- **Preventing Clinical History Data Loss (Restrict Deletions):**
+  - `PrescriptionItem.Medicine` is configured with `DeleteBehavior.Restrict` in EF Core and enforced with pre-flight checks in `MedicinesController.DeleteConfirmed`. A formulary medicine cannot be deleted if historical prescription records reference it, eliminating cascade deletion hazards that could silently purge historic patient charts.
+  - Inpatient admissions linked to billing invoices cannot be deleted (`_context.Bills.AnyAsync(b => b.AdmissionId == id)`), preventing unhandled foreign key `500 Internal Server Error` crashes and protecting accounting audit trails.
+- **AI Context Expansion & Dynamic Cache Invalidation:**
+  - The clinical AI case summary pipeline aggregates comprehensive patient context: recent medical records, active allergies, latest vitals (including NEWS2 priority score), and active prescriptions.
+  - Dynamic cache invalidation computes a composite hash from the latest `UpdatedAt` timestamps across all four clinical domains, ensuring clinician edits immediately invalidate cached prompts without redundant database queries.
+  - Review verdicts (`Accept`, `Reject`, `Edit`) execute atomic database transitions via `ExecuteUpdateAsync` conditioned on `s.Verdict == AiSuggestionVerdict.Pending`, preventing terminal decision race conditions.

@@ -34,7 +34,23 @@
                     foreach (var item in Model)
                     {
                         <tr>
-                            <td class="ps-4 fw-bold">@item.Name</td>
+                            <td class="ps-4">
+                                <div class="fw-bold">@item.Name</div>
+                                @if (!string.IsNullOrEmpty(item.GenericName))
+                                {
+                                    <div class="small text-muted">
+                                        @item.GenericName
+                                        @if (!string.IsNullOrEmpty(item.Strength))
+                                        {
+                                            <span>(@item.Strength)</span>
+                                        }
+                                        @if (!string.IsNullOrEmpty(item.TherapeuticClass))
+                                        {
+                                            <span class="badge bg-light text-secondary border ms-1">@item.TherapeuticClass</span>
+                                        }
+                                    </div>
+                                }
+                            </td>
                             <td>৳@item.UnitPrice.ToString("0.00")</td>
                             <td>
                                 <span class="fw-medium">@item.StockQuantity</span> units

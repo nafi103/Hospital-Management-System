@@ -72,5 +72,13 @@ namespace HospitalManagementSystem.Services.Providers
                 }
             }
         }
+
+        public async Task<(bool Success, string? ErrorMessage)> PingAsync(string apiKey, string modelId, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(apiKey)) return (false, "API key is required.");
+            if (string.IsNullOrWhiteSpace(modelId)) return (false, "Model ID is required.");
+
+            return await _client.PingAsync(apiKey, modelId, ct);
+        }
     }
 }

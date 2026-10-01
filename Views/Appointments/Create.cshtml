@@ -1,5 +1,6 @@
 @model HospitalManagementSystem.Models.Appointment
 @using HospitalManagementSystem.Models
+@using HospitalManagementSystem.Services
 
 @{
     ViewData["Title"] = "Add to Consultations";
@@ -81,8 +82,13 @@
                         </div>
                     }
 
-                    <!-- Removed Start Time and End Time. Handled automatically in backend. -->
-                    
+                    <div class="col-md-6">
+                        <label asp-for="AppointmentDatetime" class="form-label fw-medium">Appointment Date & Time <span class="text-danger">*</span></label>
+                        <input asp-for="AppointmentDatetime" type="datetime-local" class="form-control" required />
+                        <span asp-validation-for="AppointmentDatetime" class="text-danger small"></span>
+                        <div class="form-text small text-muted">Consultation slots are reserved for 15 minutes.</div>
+                    </div>
+
                     @if (User.IsInRole("Assistant"))
                     {
                         <input type="hidden" asp-for="Status" value="0" />

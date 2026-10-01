@@ -63,24 +63,40 @@ namespace HospitalManagementSystem.Controllers
                 return NotFound();
             }
 
-            string? username = role switch
+            User? user = null;
+            if (role == "Patient")
             {
-                "Doctor" => "drmock",
-                "Assistant" => "mock-assistant",
-                "Pharmacist" => "pharmacistmock",
-                "Admin" => "admin",
-                "Receptionist" => "reception1",
-                _ => null
-            };
-
-            if (username == null)
-            {
-                return RedirectToAction("Login");
+                // Prefer primary demo patient account, or fallback to any active patient account
+                user = await _context.Users
+                    .Include(u => u.Role)
+                    .FirstOrDefaultAsync(u => u.Username == "PT-202609-0001")
+                    ?? await _context.Users
+                        .Include(u => u.Role)
+                        .Where(u => u.Role.RoleName == "Patient" && _context.Patients.Any(p => p.UserId == u.Id))
+                        .OrderBy(u => u.Id)
+                        .FirstOrDefaultAsync();
             }
+            else
+            {
+                string? username = role switch
+                {
+                    "Doctor" => "drmock",
+                    "Assistant" => "mock-assistant",
+                    "Pharmacist" => "pharmacistmock",
+                    "Admin" => "admin",
+                    "Receptionist" => "reception1",
+                    _ => null
+                };
 
-            var user = await _context.Users
-                .Include(u => u.Role)
-                .FirstOrDefaultAsync(u => u.Username == username);
+                if (username == null)
+                {
+                    return RedirectToAction("Login");
+                }
+
+                user = await _context.Users
+                    .Include(u => u.Role)
+                    .FirstOrDefaultAsync(u => u.Username == username);
+            }
 
             if (user == null)
             {
