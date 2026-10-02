@@ -196,6 +196,7 @@ namespace HospitalManagementSystem.Controllers
 
             var bills = await _context.Bills
                 .Include(b => b.BillItems)
+                .Include(b => b.PaymentTransactions)
                 .Where(b => b.PatientId == patient.Id)
                 .OrderByDescending(b => b.CreatedAt)
                 .ToListAsync();

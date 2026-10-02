@@ -7,9 +7,41 @@
 
 @await Html.PartialAsync("_PortalDependentBanner")
 
-<div class="mb-4 border-bottom pb-3">
-    <h2 class="mb-1">@(ViewBag.IsViewingDependent == true ? $"{patient.FullName}'s Bills" : "My Bills")</h2>
-    <p class="text-muted mb-0">Billing history for UHID: <span class="fw-medium font-monospace">@patient.Uhid</span></p>
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show d-flex align-items-center gap-2 mb-4" role="alert">
+        <i class="bi bi-check-circle-fill fs-5 text-success"></i>
+        <div>@TempData["SuccessMessage"]</div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+@if (TempData["WarningMessage"] != null)
+{
+    <div class="alert alert-warning alert-dismissible fade show d-flex align-items-center gap-2 mb-4" role="alert">
+        <i class="bi bi-exclamation-triangle-fill fs-5 text-warning"></i>
+        <div>@TempData["WarningMessage"]</div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center gap-2 mb-4" role="alert">
+        <i class="bi bi-x-circle-fill fs-5 text-danger"></i>
+        <div>@TempData["ErrorMessage"]</div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="mb-4 border-bottom pb-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
+    <div>
+        <h2 class="mb-1">@(ViewBag.IsViewingDependent == true ? $"{patient.FullName}'s Bills" : "My Bills")</h2>
+        <p class="text-muted mb-0">Billing & payment history for UHID: <span class="fw-medium font-monospace">@patient.Uhid</span></p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-3 py-2 rounded-pill">
+            <i class="bi bi-shield-check text-success me-1"></i> bKash Verified Gateway
+        </span>
+    </div>
 </div>
 
 @if (Model != null && Model.Any())
@@ -19,51 +51,160 @@
         {
             var outstanding = bill.NetTotal - bill.PaidAmount;
             <div class="col-12">
-                <div class="pro-card">
+                <div class="pro-card shadow-sm border">
                     <div class="d-flex justify-content-between align-items-start mb-3">
                         <div>
-                            <h5 class="mb-1">Invoice #@bill.Id.ToString("D5")</h5>
-                            <small class="text-muted">@bill.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy")</small>
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <h5 class="mb-0">Invoice #@bill.Id.ToString("D5")</h5>
+                                @if (bill.Status == BillStatus.Paid)
+                                {
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-1">Fully Paid</span>
+                                }
+                                else if (bill.Status == BillStatus.PartiallyPaid)
+                                {
+                                    <span class="badge bg-warning bg-opacity-10 text-warning border border-warning-subtle px-2 py-1">Partially Paid</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-1">Unpaid</span>
+                                }
+                            </div>
+                            <small class="text-muted">Issued on @bill.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy")</small>
                         </div>
-                        @if (bill.Status == BillStatus.Paid)
-                        {
-                            <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-1">Fully Paid</span>
-                        }
-                        else if (bill.Status == BillStatus.PartiallyPaid)
-                        {
-                            <span class="badge bg-warning bg-opacity-10 text-warning border border-warning-subtle px-2 py-1">Partial</span>
-                        }
-                        else
-                        {
-                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-1">Unpaid</span>
-                        }
+                        <div class="text-end">
+                            <span class="text-muted small d-block">Outstanding Balance</span>
+                            <span class="fs-5 fw-bold @(outstanding > 0 ? "text-danger" : "text-success")">
+                                ৳@outstanding.ToString("0.00")
+                            </span>
+                        </div>
                     </div>
-                    <ul class="list-group list-group-flush mb-3">
-                        @foreach (var item in bill.BillItems)
-                        {
-                            <li class="list-group-item px-0 d-flex justify-content-between">
-                                <span>@item.Description <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle ms-1">@item.Department</span></span>
-                                <span>৳@item.Amount.ToString("0.00")</span>
-                            </li>
-                        }
-                    </ul>
-                    <div class="d-flex justify-content-end">
-                        <table class="table table-borderless table-sm mb-0" style="max-width: 320px;">
-                            <tbody>
-                                <tr>
-                                    <td class="text-end text-muted">Net Total:</td>
-                                    <td class="text-end fw-bold" width="120">৳@bill.NetTotal.ToString("0.00")</td>
-                                </tr>
-                                <tr>
-                                    <td class="text-end text-muted">Paid:</td>
-                                    <td class="text-end text-success">৳@bill.PaidAmount.ToString("0.00")</td>
-                                </tr>
-                                <tr>
-                                    <td class="text-end fw-bold">Outstanding:</td>
-                                    <td class="text-end fw-bold @(outstanding > 0 ? "text-danger" : "text-success")">৳@outstanding.ToString("0.00")</td>
-                                </tr>
-                            </tbody>
-                        </table>
+
+                    <!-- Bill Items List -->
+                    <div class="card bg-body-tertiary border-0 mb-3">
+                        <div class="card-body p-3">
+                            <h6 class="text-muted text-uppercase fs-7 mb-2 fw-semibold">Services & Charges</h6>
+                            <ul class="list-group list-group-flush bg-transparent">
+                                @foreach (var item in bill.BillItems)
+                                {
+                                    <li class="list-group-item bg-transparent px-0 py-1 d-flex justify-content-between align-items-center">
+                                        <span class="text-body">
+                                            @item.Description
+                                            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle ms-1 fs-8">@item.Department</span>
+                                        </span>
+                                        <span class="fw-medium">৳@item.Amount.ToString("0.00")</span>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Payment Transactions History if any -->
+                    @if (bill.PaymentTransactions != null && bill.PaymentTransactions.Any())
+                    {
+                        <div class="mb-3">
+                            <h6 class="text-muted text-uppercase fs-7 mb-2 fw-semibold">Payment History</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover align-middle mb-0">
+                                    <thead class="table-light fs-8 text-muted">
+                                        <tr>
+                                            <th>Date & Time</th>
+                                            <th>Method</th>
+                                            <th>Transaction ID</th>
+                                            <th class="text-end">Amount Paid</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="fs-8">
+                                        @foreach (var tx in bill.PaymentTransactions.OrderByDescending(t => t.TransactionDate))
+                                        {
+                                            <tr>
+                                                <td class="text-muted">@tx.TransactionDate.ToLocalTime().ToString("MMM dd, yyyy hh:mm tt")</td>
+                                                <td>
+                                                    @if (string.Equals(tx.PaymentMethod, "bKash", StringComparison.OrdinalIgnoreCase))
+                                                    {
+                                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle fw-semibold">
+                                                            <i class="bi bi-wallet2 me-1"></i> bKash
+                                                        </span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle">
+                                                            @tx.PaymentMethod
+                                                        </span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (!string.IsNullOrEmpty(tx.TransactionId))
+                                                    {
+                                                        <span class="font-monospace text-primary fw-medium">@tx.TransactionId</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted">—</span>
+                                                    }
+                                                </td>
+                                                <td class="text-end fw-bold text-success">৳@tx.Amount.ToString("0.00")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Financial Summary & Action Area -->
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center pt-3 border-top gap-3">
+                        <div>
+                            @if (outstanding > 0)
+                            {
+                                <form asp-controller="Bkash" asp-action="Pay" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="billId" value="@bill.Id" />
+                                    <button type="submit" class="btn btn-bkash d-inline-flex align-items-center gap-2 px-4 py-2">
+                                        <i class="bi bi-lightning-charge-fill"></i>
+                                        <span>Pay with bKash (৳@outstanding.ToString("0.00"))</span>
+                                        <i class="bi bi-arrow-right"></i>
+                                    </button>
+                                </form>
+                            }
+                            else
+                            {
+                                <div class="d-inline-flex align-items-center gap-2 text-success fw-medium">
+                                    <i class="bi bi-check-circle-fill fs-5"></i>
+                                    <span>This bill is settled. No further payment required.</span>
+                                </div>
+                            }
+                        </div>
+                        <div>
+                            <table class="table table-borderless table-sm mb-0" style="min-width: 240px;">
+                                <tbody>
+                                    <tr>
+                                        <td class="text-end text-muted pb-0">Subtotal:</td>
+                                        <td class="text-end fw-medium pb-0" width="110">৳@bill.SubtotalAmount.ToString("0.00")</td>
+                                    </tr>
+                                    @if (bill.DiscountAmount > 0)
+                                    {
+                                        <tr>
+                                            <td class="text-end text-muted py-0">Discount:</td>
+                                            <td class="text-end text-danger py-0">-৳@bill.DiscountAmount.ToString("0.00")</td>
+                                        </tr>
+                                    }
+                                    <tr>
+                                        <td class="text-end text-muted py-0">Net Total:</td>
+                                        <td class="text-end fw-bold py-0">৳@bill.NetTotal.ToString("0.00")</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="text-end text-muted py-0">Total Paid:</td>
+                                        <td class="text-end text-success py-0">৳@bill.PaidAmount.ToString("0.00")</td>
+                                    </tr>
+                                    <tr class="border-top">
+                                        <td class="text-end fw-bold pt-1">Due Amount:</td>
+                                        <td class="text-end fw-bold pt-1 @(outstanding > 0 ? "text-danger" : "text-success")">
+                                            ৳@outstanding.ToString("0.00")
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -74,6 +215,27 @@ else
 {
     <div class="pro-card text-center py-5">
         <i class="bi bi-receipt fs-2 d-block mb-3 text-muted"></i>
-        <p class="text-muted mb-0">No bills yet.</p>
+        <p class="text-muted mb-0">No bills found.</p>
     </div>
 }
+
+<style>
+    .btn-bkash {
+        background-color: #E2136E;
+        border-color: #E2136E;
+        color: #ffffff;
+        font-weight: 600;
+        border-radius: 8px;
+        transition: all 0.2s ease-in-out;
+        box-shadow: 0 2px 6px rgba(226, 19, 110, 0.25);
+    }
+    .btn-bkash:hover, .btn-bkash:focus {
+        background-color: #c0105d;
+        border-color: #c0105d;
+        color: #ffffff;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(226, 19, 110, 0.35);
+    }
+    .fs-7 { font-size: 0.85rem; }
+    .fs-8 { font-size: 0.775rem; }
+</style>

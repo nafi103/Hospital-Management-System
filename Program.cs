@@ -46,6 +46,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // user-secrets before this feature existed.
 builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
 builder.Services.Configure<GroqOptions>(builder.Configuration.GetSection("Groq"));
+builder.Services.Configure<BkashSettings>(builder.Configuration.GetSection("Bkash"));
 builder.Services.AddDataProtection();
 builder.Services.AddSingleton<ApiKeyProtector>();
 builder.Services.AddScoped<PhiScrubber>();
@@ -55,6 +56,7 @@ builder.Services.AddScoped<IAppointmentBookingService, DoctorScheduleService>();
 builder.Services.AddScoped<DemoDataSeeder>();
 
 builder.Services.AddHttpClient<GroqClient>();
+builder.Services.AddHttpClient<IBkashPaymentService, BkashPaymentService>();
 builder.Services.AddScoped<IAiTextProvider, GeminiTextProvider>();
 builder.Services.AddScoped<IAiTextProvider, GroqTextProvider>();
 builder.Services.AddScoped<IAiTextProvider, AnthropicTextProvider>();

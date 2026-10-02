@@ -7,6 +7,7 @@ namespace HospitalManagementSystem.Models
 {
     [Index(nameof(BillId))]
     [Index(nameof(TransactionDate))]
+    [Index(nameof(TransactionId))]
     public class PaymentTransaction
     {
         [Key]
@@ -23,6 +24,9 @@ namespace HospitalManagementSystem.Models
         [Required]
         [StringLength(50)]
         public string PaymentMethod { get; set; } = "Cash";
+
+        [StringLength(100)]
+        public string? TransactionId { get; set; }
 
         public int? ProcessedById { get; set; }
         [ForeignKey("ProcessedById")]
