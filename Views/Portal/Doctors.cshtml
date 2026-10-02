@@ -1,0 +1,148 @@
+@model List<HospitalManagementSystem.Models.ViewModels.DoctorDirectoryItemViewModel>
+@{
+    ViewData["Title"] = "Find Doctors";
+    var categories = ViewBag.Categories as List<string> ?? new List<string>();
+    var currentSearch = ViewBag.CurrentSearch as string ?? string.Empty;
+    var currentCategory = ViewBag.CurrentCategory as string ?? string.Empty;
+}
+
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4 border-bottom pb-3">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-person-badge text-primary me-2"></i>Find a Doctor</h2>
+        <p class="text-muted mb-0">Browse our clinical specialists and book a 15-minute consultation slot.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Index" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> My Appointments
+        </a>
+        <a asp-action="Book" class="btn btn-primary">
+            <i class="bi bi-calendar-plus me-1"></i> Quick Book
+        </a>
+    </div>
+</div>
+
+<!-- Search & Specialty Filter -->
+<div class="pro-card mb-4 p-4">
+    <form method="get" asp-action="Doctors" class="row g-3 align-items-center">
+        <div class="col-md-6 col-lg-5">
+            <div class="input-group">
+                <span class="input-group-text bg-transparent border-end-0">
+                    <i class="bi bi-search text-muted"></i>
+                </span>
+                <input type="text" name="search" class="form-control border-start-0" 
+                       placeholder="Search by doctor name or specialty..." value="@currentSearch" />
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-4">
+            <select name="category" class="form-select" onchange="this.form.submit()">
+                <option value="All" selected="@(string.IsNullOrEmpty(currentCategory) || currentCategory == "All")">All Specialties / Departments</option>
+                @foreach (var cat in categories)
+                {
+                    <option value="@cat" selected="@(currentCategory == cat)">@cat</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2 col-lg-3 d-flex gap-2">
+            <button type="submit" class="btn btn-primary flex-grow-1">Filter</button>
+            @if (!string.IsNullOrEmpty(currentSearch) || (!string.IsNullOrEmpty(currentCategory) && currentCategory != "All"))
+            {
+                <a asp-action="Doctors" class="btn btn-outline-secondary" title="Reset Filters">
+                    <i class="bi bi-x-circle"></i>
+                </a>
+            }
+        </div>
+    </form>
+
+    <!-- Quick filter chips -->
+    @if (categories.Any())
+    {
+        <div class="d-flex flex-wrap gap-2 mt-3 pt-3 border-top">
+            <span class="small text-muted me-1 align-self-center">Popular:</span>
+            <a asp-action="Doctors" asp-route-category="All" asp-route-search="@currentSearch"
+               class="badge rounded-pill text-decoration-none px-3 py-2 @(string.IsNullOrEmpty(currentCategory) || currentCategory == "All" ? "bg-primary text-white" : "bg-light text-dark border")">
+                All Specialties
+            </a>
+            @foreach (var cat in categories)
+            {
+                <a asp-action="Doctors" asp-route-category="@cat" asp-route-search="@currentSearch"
+                   class="badge rounded-pill text-decoration-none px-3 py-2 @(currentCategory == cat ? "bg-primary text-white" : "bg-light text-dark border")">
+                    @cat
+                </a>
+            }
+        </div>
+    }
+</div>
+
+<!-- Doctors Grid -->
+@if (Model != null && Model.Any())
+{
+    <div class="row g-4">
+        @foreach (var doc in Model)
+        {
+            var initials = string.Join("", doc.FullName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(s => s[0])).ToUpper();
+            if (initials.Length > 2) initials = initials.Substring(0, 2);
+
+            <div class="col-md-6 col-lg-4">
+                <div class="pro-card h-100 d-flex flex-column justify-content-between p-4 border transition-all hover-shadow">
+                    <div>
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <div class="avatar-circle bg-primary bg-opacity-10 text-primary fw-bold d-flex align-items-center justify-content-center rounded-circle"
+                                 style="width: 52px; height: 52px; font-size: 1.2rem;">
+                                @initials
+                            </div>
+                            <div>
+                                <h5 class="mb-0 fw-bold">Dr. @doc.FullName</h5>
+                                <span class="badge bg-info bg-opacity-10 text-info border border-info-subtle mt-1">
+                                    <i class="bi bi-stethoscope me-1"></i>@doc.Category
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="border-top pt-3 mb-3 small">
+                            <div class="d-flex justify-content-between text-muted mb-2">
+                                <span><i class="bi bi-clock me-1"></i>OPD Hours:</span>
+                                <span class="fw-medium text-dark">09:00 AM – 05:00 PM</span>
+                            </div>
+                            <div class="d-flex justify-content-between text-muted mb-2">
+                                <span><i class="bi bi-hourglass-split me-1"></i>Slot Duration:</span>
+                                <span class="fw-medium text-dark">15 mins</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted"><i class="bi bi-calendar-event me-1"></i>Availability:</span>
+                                @if (doc.NextAvailableSlot.HasValue)
+                                {
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">
+                                        @doc.NextAvailableSlotDisplay
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle">
+                                        No upcoming slots
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-2">
+                        <a asp-action="Book" asp-route-doctorId="@doc.Id" class="btn btn-primary w-100 d-flex align-items-center justify-content-center gap-2">
+                            <i class="bi bi-calendar-check"></i> Book Consultation
+                        </a>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="pro-card text-center p-5">
+        <div class="display-6 text-muted mb-3"><i class="bi bi-person-x"></i></div>
+        <h4>No doctors match your criteria</h4>
+        <p class="text-muted mb-4">Try clearing the search query or selecting a different medical department.</p>
+        <a asp-action="Doctors" class="btn btn-outline-primary">
+            <i class="bi bi-arrow-counterclockwise me-1"></i> Reset All Filters
+        </a>
+    </div>
+}

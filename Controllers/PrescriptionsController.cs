@@ -408,62 +408,126 @@ namespace HospitalManagementSystem.Controllers
             await using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // Verify and atomically lock the prescription status to prevent double-dispensing
-                var rowsAffected = await _context.Prescriptions
-                    .Where(p => p.Id == id && p.Status == PrescriptionStatus.PendingPharmacy)
-                    .ExecuteUpdateAsync(s => s
-                        .SetProperty(p => p.Status, PrescriptionStatus.Dispensed)
-                        .SetProperty(p => p.DispensedById, pharmacistUserId)
-                        .SetProperty(p => p.DispensedAt, DateTime.UtcNow)
-                        .SetProperty(p => p.UpdatedAt, DateTime.UtcNow));
-
-                if (rowsAffected == 0)
+                if (_context.Database.IsRelational())
                 {
-                    await transaction.RollbackAsync();
+                    // Relational path: direct atomic SQL ExecuteUpdate with database-level concurrency locking
+                    var rowsAffected = await _context.Prescriptions
+                        .Where(p => p.Id == id && p.Status == PrescriptionStatus.PendingPharmacy)
+                        .ExecuteUpdateAsync(s => s
+                            .SetProperty(p => p.Status, PrescriptionStatus.Dispensed)
+                            .SetProperty(p => p.DispensedById, pharmacistUserId)
+                            .SetProperty(p => p.DispensedAt, DateTime.UtcNow)
+                            .SetProperty(p => p.UpdatedAt, DateTime.UtcNow));
+
+                    if (rowsAffected == 0)
+                    {
+                        await transaction.RollbackAsync();
+                        var existing = await _context.Prescriptions.FindAsync(id);
+                        if (existing == null)
+                        {
+                            return NotFound();
+                        }
+                        if (existing.Status == PrescriptionStatus.Dispensed)
+                        {
+                            TempData["ErrorMessage"] = "This prescription has already been dispensed.";
+                        }
+                        else
+                        {
+                            TempData["ErrorMessage"] = "Prescription is not ready for pharmacy fulfillment.";
+                        }
+                        return RedirectToAction(nameof(Details), new { id });
+                    }
+
+                    var items = await _context.PrescriptionItems
+                        .Include(pi => pi.Medicine)
+                        .Where(pi => pi.PrescriptionId == id)
+                        .ToListAsync();
+
+                    foreach (var item in items)
+                    {
+                        var updated = await _context.Medicines
+                            .Where(m => m.Id == item.MedicineId && m.StockQuantity >= item.Quantity)
+                            .ExecuteUpdateAsync(m => m
+                                .SetProperty(x => x.StockQuantity, x => x.StockQuantity - item.Quantity)
+                                .SetProperty(x => x.UpdatedAt, DateTime.UtcNow));
+
+                        if (updated == 0)
+                        {
+                            await transaction.RollbackAsync();
+                            var medName = item.Medicine?.Name ?? $"Medicine #{item.MedicineId}";
+                            var currentStock = await _context.Medicines
+                                .Where(m => m.Id == item.MedicineId)
+                                .Select(m => m.StockQuantity)
+                                .FirstOrDefaultAsync();
+                            TempData["ErrorMessage"] = $"Insufficient stock for {medName}. Requested: {item.Quantity}, Available: {currentStock}. Dispensing cancelled.";
+                            return RedirectToAction(nameof(Details), new { id });
+                        }
+                    }
+
+                    await transaction.CommitAsync();
+                }
+                else
+                {
+                    // Non-relational / in-memory test fallback: validate all conditions before mutating
                     var existing = await _context.Prescriptions.FindAsync(id);
                     if (existing == null)
                     {
+                        await transaction.RollbackAsync();
                         return NotFound();
                     }
+
                     if (existing.Status == PrescriptionStatus.Dispensed)
                     {
-                        TempData["ErrorMessage"] = "This prescription has already been dispensed.";
-                    }
-                    else
-                    {
-                        TempData["ErrorMessage"] = "Prescription is not ready for pharmacy fulfillment.";
-                    }
-                    return RedirectToAction(nameof(Details), new { id });
-                }
-
-                // Check and decrement stock atomically for each prescribed medicine
-                var items = await _context.PrescriptionItems
-                    .Include(pi => pi.Medicine)
-                    .Where(pi => pi.PrescriptionId == id)
-                    .ToListAsync();
-
-                foreach (var item in items)
-                {
-                    var updated = await _context.Medicines
-                        .Where(m => m.Id == item.MedicineId && m.StockQuantity >= item.Quantity)
-                        .ExecuteUpdateAsync(m => m
-                            .SetProperty(x => x.StockQuantity, x => x.StockQuantity - item.Quantity)
-                            .SetProperty(x => x.UpdatedAt, DateTime.UtcNow));
-
-                    if (updated == 0)
-                    {
                         await transaction.RollbackAsync();
-                        var medName = item.Medicine?.Name ?? $"Medicine #{item.MedicineId}";
-                        var currentStock = await _context.Medicines
-                            .Where(m => m.Id == item.MedicineId)
-                            .Select(m => m.StockQuantity)
-                            .FirstOrDefaultAsync();
-                        TempData["ErrorMessage"] = $"Insufficient stock for {medName}. Requested: {item.Quantity}, Available: {currentStock}. Dispensing cancelled.";
+                        TempData["ErrorMessage"] = "This prescription has already been dispensed.";
                         return RedirectToAction(nameof(Details), new { id });
                     }
-                }
 
-                await transaction.CommitAsync();
+                    if (existing.Status != PrescriptionStatus.PendingPharmacy)
+                    {
+                        await transaction.RollbackAsync();
+                        TempData["ErrorMessage"] = "Prescription is not ready for pharmacy fulfillment.";
+                        return RedirectToAction(nameof(Details), new { id });
+                    }
+
+                    var items = await _context.PrescriptionItems
+                        .Include(pi => pi.Medicine)
+                        .Where(pi => pi.PrescriptionId == id)
+                        .ToListAsync();
+
+                    // Pre-flight check: ensure every item has sufficient stock before making any changes
+                    foreach (var item in items)
+                    {
+                        var medicine = await _context.Medicines.FindAsync(item.MedicineId);
+                        if (medicine == null || medicine.StockQuantity < item.Quantity)
+                        {
+                            await transaction.RollbackAsync();
+                            var medName = medicine?.Name ?? item.Medicine?.Name ?? $"Medicine #{item.MedicineId}";
+                            var currentStock = medicine?.StockQuantity ?? 0;
+                            TempData["ErrorMessage"] = $"Insufficient stock for {medName}. Requested: {item.Quantity}, Available: {currentStock}. Dispensing cancelled.";
+                            return RedirectToAction(nameof(Details), new { id });
+                        }
+                    }
+
+                    // All items verified; apply mutations
+                    existing.Status = PrescriptionStatus.Dispensed;
+                    existing.DispensedById = pharmacistUserId;
+                    existing.DispensedAt = DateTime.UtcNow;
+                    existing.UpdatedAt = DateTime.UtcNow;
+
+                    foreach (var item in items)
+                    {
+                        var medicine = await _context.Medicines.FindAsync(item.MedicineId);
+                        if (medicine != null)
+                        {
+                            medicine.StockQuantity -= item.Quantity;
+                            medicine.UpdatedAt = DateTime.UtcNow;
+                        }
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
 
                 TempData["SuccessMessage"] = "Medicines dispensed successfully. Stock has been updated.";
                 return RedirectToAction(nameof(Details), new { id });

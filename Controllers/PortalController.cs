@@ -6,6 +6,12 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using HospitalManagementSystem.Models;
 
+using System.Collections.Generic;
+using System.Globalization;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using HospitalManagementSystem.Services;
+using HospitalManagementSystem.Models.ViewModels;
+
 namespace HospitalManagementSystem.Controllers
 {
     // The patient-facing self-service portal. Every action resolves the caller's own
@@ -17,10 +23,12 @@ namespace HospitalManagementSystem.Controllers
     public class PortalController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly IAppointmentBookingService _bookingService;
 
-        public PortalController(ApplicationDbContext context)
+        public PortalController(ApplicationDbContext context, IAppointmentBookingService bookingService)
         {
             _context = context;
+            _bookingService = bookingService;
         }
 
         private async Task<Patient?> GetCurrentPatientAsync()
@@ -103,6 +111,335 @@ namespace HospitalManagementSystem.Controllers
 
             ViewBag.Patient = patient;
             return View(bills);
+        }
+
+        // GET: Portal/Doctors
+        public async Task<IActionResult> Doctors(string? search, string? category)
+        {
+            var patient = await GetCurrentPatientAsync();
+            if (patient == null) return Forbid();
+
+            var doctors = await _bookingService.GetDoctorDirectoryAsync(search, category);
+
+            var categories = await _context.Users
+                .AsNoTracking()
+                .Include(u => u.Role)
+                .Where(u => u.Role.RoleName == "Doctor" && !string.IsNullOrEmpty(u.Category))
+                .Select(u => u.Category)
+                .Distinct()
+                .OrderBy(c => c)
+                .ToListAsync();
+
+            ViewBag.Patient = patient;
+            ViewBag.Categories = categories;
+            ViewBag.CurrentSearch = search;
+            ViewBag.CurrentCategory = category;
+
+            return View(doctors);
+        }
+
+        // GET: Portal/GetAvailableSlots?doctorId=1&date=2026-10-03&excludeAppointmentId=5
+        [HttpGet]
+        public async Task<IActionResult> GetAvailableSlots(int doctorId, string date, int? excludeAppointmentId = null)
+        {
+            if (doctorId <= 0 || string.IsNullOrWhiteSpace(date) ||
+                !DateTime.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
+            {
+                return BadRequest(new { error = "Invalid doctor ID or date format (expected yyyy-MM-dd)." });
+            }
+
+            var slotsDto = await _bookingService.GetDailySlotsAsync(doctorId, parsedDate, excludeAppointmentId);
+            return Json(slotsDto);
+        }
+
+        // GET: Portal/Book
+        public async Task<IActionResult> Book(int? doctorId, string? date)
+        {
+            var patient = await GetCurrentPatientAsync();
+            if (patient == null) return Forbid();
+
+            var doctors = await _context.Users
+                .AsNoTracking()
+                .Include(u => u.Role)
+                .Where(u => u.Role.RoleName == "Doctor")
+                .OrderBy(u => u.FullName)
+                .ToListAsync();
+
+            var doctorItems = doctors.Select(d => new SelectListItem
+            {
+                Value = d.Id.ToString(),
+                Text = $"Dr. {d.FullName} ({(string.IsNullOrEmpty(d.Category) ? "General Physician" : d.Category)})"
+            }).ToList();
+
+            var selectedDocId = doctorId.HasValue && doctors.Any(d => d.Id == doctorId.Value)
+                ? doctorId.Value
+                : (doctors.FirstOrDefault()?.Id ?? 0);
+
+            var selectedDoc = doctors.FirstOrDefault(d => d.Id == selectedDocId);
+
+            var targetDate = string.IsNullOrWhiteSpace(date)
+                ? HospitalClock.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                : date;
+
+            var model = new BookAppointmentViewModel
+            {
+                DoctorId = selectedDocId,
+                DoctorName = selectedDoc?.FullName,
+                DoctorCategory = selectedDoc?.Category,
+                SelectedDate = targetDate,
+                AvailableDoctors = doctorItems
+            };
+
+            ViewBag.Patient = patient;
+            return View(model);
+        }
+
+        // POST: Portal/Book
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Book(BookAppointmentViewModel model)
+        {
+            var patient = await GetCurrentPatientAsync();
+            if (patient == null) return Forbid();
+
+            if (!DateTime.TryParse(model.SelectedSlotTime, null, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var slotStartUtc))
+            {
+                ModelState.AddModelError("SelectedSlotTime", "Please select a valid consultation time slot.");
+            }
+            else
+            {
+                var nowUtc = DateTime.UtcNow;
+                if (slotStartUtc <= nowUtc.AddMinutes(5))
+                {
+                    ModelState.AddModelError("SelectedSlotTime", "Cannot book an appointment in the past or immediately starting.");
+                }
+                else
+                {
+                    var slotEndUtc = slotStartUtc.AddMinutes(DoctorScheduleService.SlotDurationMinutes);
+
+                    var doctorConflict = await _bookingService.CheckDoctorCollisionAsync(model.DoctorId, slotStartUtc, slotEndUtc);
+                    if (doctorConflict)
+                    {
+                        ModelState.AddModelError("SelectedSlotTime", "This time slot was just booked by another patient. Please choose another slot.");
+                    }
+
+                    var patientConflict = await _bookingService.CheckPatientCollisionAsync(patient.Id, slotStartUtc, slotEndUtc);
+                    if (patientConflict)
+                    {
+                        ModelState.AddModelError("SelectedSlotTime", "You already have another active appointment scheduled during this time interval.");
+                    }
+
+                    if (ModelState.IsValid)
+                    {
+                        var appointment = new Appointment
+                        {
+                            PatientId = patient.Id,
+                            DoctorId = model.DoctorId,
+                            AppointmentDatetime = slotStartUtc,
+                            EndTime = slotEndUtc,
+                            ReasonForVisit = model.ReasonForVisit.Trim(),
+                            Status = AppointmentStatus.Scheduled,
+                            CreatedAt = nowUtc,
+                            UpdatedAt = nowUtc
+                        };
+
+                        _context.Appointments.Add(appointment);
+                        await _context.SaveChangesAsync();
+
+                        var doctor = await _context.Users.FindAsync(model.DoctorId);
+                        var localTime = slotStartUtc.ToHospitalTime();
+                        TempData["SuccessMessage"] = $"Appointment booked successfully with Dr. {doctor?.FullName} on {localTime:dddd, MMM dd} at {localTime:hh:mm tt}!";
+                        return RedirectToAction(nameof(Index));
+                    }
+                }
+            }
+
+            var doctors = await _context.Users
+                .AsNoTracking()
+                .Include(u => u.Role)
+                .Where(u => u.Role.RoleName == "Doctor")
+                .OrderBy(u => u.FullName)
+                .ToListAsync();
+
+            model.AvailableDoctors = doctors.Select(d => new SelectListItem
+            {
+                Value = d.Id.ToString(),
+                Text = $"Dr. {d.FullName} ({(string.IsNullOrEmpty(d.Category) ? "General Physician" : d.Category)})"
+            }).ToList();
+
+            var selectedDoctor = doctors.FirstOrDefault(d => d.Id == model.DoctorId);
+            model.DoctorName = selectedDoctor?.FullName;
+            model.DoctorCategory = selectedDoctor?.Category;
+
+            ViewBag.Patient = patient;
+            return View(model);
+        }
+
+        // GET: Portal/Reschedule/5
+        public async Task<IActionResult> Reschedule(int? id)
+        {
+            if (id == null) return NotFound();
+
+            var patient = await GetCurrentPatientAsync();
+            if (patient == null) return Forbid();
+
+            var appt = await _context.Appointments
+                .Include(a => a.Doctor)
+                .FirstOrDefaultAsync(a => a.Id == id && a.PatientId == patient.Id);
+
+            if (appt == null) return NotFound();
+
+            if (appt.Status != AppointmentStatus.Scheduled || appt.AppointmentDatetime <= DateTime.UtcNow)
+            {
+                TempData["ErrorMessage"] = "Only upcoming scheduled appointments can be rescheduled.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var localTime = appt.AppointmentDatetime.ToHospitalTime();
+            var model = new RescheduleAppointmentViewModel
+            {
+                AppointmentId = appt.Id,
+                DoctorId = appt.DoctorId,
+                DoctorName = appt.Doctor?.FullName,
+                DoctorCategory = appt.Doctor?.Category,
+                CurrentDatetimeUtc = appt.AppointmentDatetime,
+                CurrentDatetimeDisplay = localTime.ToString("dddd, MMM dd, yyyy - hh:mm tt"),
+                SelectedDate = localTime.ToString("yyyy-MM-dd"),
+                ReasonForVisit = appt.ReasonForVisit,
+                Version = appt.Version
+            };
+
+            ViewBag.Patient = patient;
+            return View(model);
+        }
+
+        // POST: Portal/Reschedule/5
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Reschedule(RescheduleAppointmentViewModel model)
+        {
+            var patient = await GetCurrentPatientAsync();
+            if (patient == null) return Forbid();
+
+            var tracked = await _context.Appointments
+                .Include(a => a.Doctor)
+                .FirstOrDefaultAsync(a => a.Id == model.AppointmentId && a.PatientId == patient.Id);
+
+            if (tracked == null) return NotFound();
+
+            if (tracked.Status != AppointmentStatus.Scheduled || tracked.AppointmentDatetime <= DateTime.UtcNow)
+            {
+                ModelState.AddModelError("", "Only upcoming scheduled appointments can be rescheduled.");
+            }
+
+            if (!DateTime.TryParse(model.SelectedSlotTime, null, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var slotStartUtc))
+            {
+                ModelState.AddModelError("SelectedSlotTime", "Please select a valid new consultation time slot.");
+            }
+            else
+            {
+                var nowUtc = DateTime.UtcNow;
+                if (slotStartUtc <= nowUtc.AddMinutes(5))
+                {
+                    ModelState.AddModelError("SelectedSlotTime", "Cannot reschedule an appointment to the past.");
+                }
+                else
+                {
+                    var slotEndUtc = slotStartUtc.AddMinutes(DoctorScheduleService.SlotDurationMinutes);
+
+                    var doctorConflict = await _bookingService.CheckDoctorCollisionAsync(tracked.DoctorId, slotStartUtc, slotEndUtc, tracked.Id);
+                    if (doctorConflict)
+                    {
+                        ModelState.AddModelError("SelectedSlotTime", "This time slot is no longer available. Please select another slot.");
+                    }
+
+                    var patientConflict = await _bookingService.CheckPatientCollisionAsync(patient.Id, slotStartUtc, slotEndUtc, tracked.Id);
+                    if (patientConflict)
+                    {
+                        ModelState.AddModelError("SelectedSlotTime", "You already have another active appointment scheduled during this time interval.");
+                    }
+
+                    if (model.Version > 0 && _context.Database.IsRelational())
+                    {
+                        try
+                        {
+                            _context.Entry(tracked).Property(a => a.Version).OriginalValue = model.Version;
+                        }
+                        catch
+                        {
+                            // In-memory provider fallback
+                        }
+                    }
+
+                    if (ModelState.IsValid)
+                    {
+                        try
+                        {
+                            tracked.AppointmentDatetime = slotStartUtc;
+                            tracked.EndTime = slotEndUtc;
+                            tracked.UpdatedAt = nowUtc;
+                            if (!string.IsNullOrWhiteSpace(model.ReasonForVisit))
+                            {
+                                tracked.ReasonForVisit = model.ReasonForVisit.Trim();
+                            }
+
+                            await _context.SaveChangesAsync();
+                            var newLocalTime = slotStartUtc.ToHospitalTime();
+                            TempData["SuccessMessage"] = $"Appointment successfully rescheduled to {newLocalTime:dddd, MMM dd} at {newLocalTime:hh:mm tt}.";
+                            return RedirectToAction(nameof(Index));
+                        }
+                        catch (DbUpdateConcurrencyException)
+                        {
+                            ModelState.AddModelError("", "This appointment was modified by hospital staff while you were editing it. Please refresh and try again.");
+                        }
+                    }
+                }
+            }
+
+            var currentLocal = tracked.AppointmentDatetime.ToHospitalTime();
+            model.DoctorName = tracked.Doctor?.FullName;
+            model.DoctorCategory = tracked.Doctor?.Category;
+            model.CurrentDatetimeDisplay = currentLocal.ToString("dddd, MMM dd, yyyy - hh:mm tt");
+            model.Version = tracked.Version;
+
+            ViewBag.Patient = patient;
+            return View(model);
+        }
+
+        // POST: Portal/Cancel/5
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Cancel(int id)
+        {
+            var patient = await GetCurrentPatientAsync();
+            if (patient == null) return Forbid();
+
+            var appt = await _context.Appointments
+                .Include(a => a.Doctor)
+                .FirstOrDefaultAsync(a => a.Id == id && a.PatientId == patient.Id);
+
+            if (appt == null) return NotFound();
+
+            if (appt.Status != AppointmentStatus.Scheduled)
+            {
+                TempData["ErrorMessage"] = $"Cannot cancel an appointment with status '{appt.Status}'. Only scheduled visits can be cancelled.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (appt.AppointmentDatetime <= DateTime.UtcNow)
+            {
+                TempData["ErrorMessage"] = "Cannot cancel an appointment whose scheduled time has already passed.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            appt.Status = AppointmentStatus.Cancelled;
+            appt.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            var doctorName = appt.Doctor != null ? $"Dr. {appt.Doctor.FullName}" : "doctor";
+            TempData["SuccessMessage"] = $"Your appointment with {doctorName} was successfully cancelled. The time slot has been released.";
+            return RedirectToAction(nameof(Index));
         }
     }
 }

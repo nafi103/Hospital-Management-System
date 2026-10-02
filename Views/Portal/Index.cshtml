@@ -1,4 +1,5 @@
 @using HospitalManagementSystem.Models
+@using HospitalManagementSystem.Services
 @{
     ViewData["Title"] = "My Portal";
     var patient = (Patient)ViewBag.Patient;
@@ -7,88 +8,228 @@
     var next = upcoming.FirstOrDefault();
 }
 
-<div class="mb-5 border-bottom pb-4">
-    <h2 class="mb-1">Welcome, @(string.IsNullOrEmpty(patient.FullName) ? patient.Uhid : patient.FullName)</h2>
-    <p class="text-muted mb-0">UHID: <span class="fw-medium">@patient.Uhid</span></p>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4 border-bottom pb-4">
+    <div>
+        <h2 class="mb-1">Welcome, @(string.IsNullOrEmpty(patient.FullName) ? patient.Uhid : patient.FullName)</h2>
+        <p class="text-muted mb-0">UHID: <span class="fw-medium font-monospace">@patient.Uhid</span> | Blood Group: <span class="fw-medium">@(patient.BloodGroup ?? "Not recorded")</span></p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Doctors" class="btn btn-outline-primary">
+            <i class="bi bi-person-badge me-1"></i> Find Doctors
+        </a>
+        <a asp-action="Book" class="btn btn-primary shadow-sm">
+            <i class="bi bi-calendar-plus me-1"></i> Book Appointment
+        </a>
+    </div>
 </div>
+
+@await Html.PartialAsync("_ActionSuccessBanner")
 
 @if (next != null)
 {
-    <div class="pro-card mb-5 border-start border-4 border-primary">
-        <h6 class="text-muted text-uppercase mb-2">Next Appointment</h6>
-        <h4 class="mb-1">Dr. @next.Doctor.FullName</h4>
-        <p class="text-muted mb-2">@next.AppointmentDatetime.ToLocalTime().ToString("dddd, MMM dd, yyyy - hh:mm tt")</p>
-        <p class="mb-0">@next.ReasonForVisit</p>
+    var nextLocal = next.AppointmentDatetime.ToHospitalTime();
+    <div class="pro-card mb-4 border-start border-4 border-primary p-4 bg-light bg-opacity-25">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+            <div>
+                <span class="text-primary text-uppercase fw-bold small"><i class="bi bi-bell-fill me-1"></i>Next Upcoming Consultation</span>
+                <h3 class="mb-1 mt-1">Dr. @next.Doctor.FullName</h3>
+                <span class="badge bg-secondary bg-opacity-10 text-secondary border mb-2">@(string.IsNullOrEmpty(next.Doctor.Category) ? "General Medicine" : next.Doctor.Category)</span>
+            </div>
+            @if (next.Status == AppointmentStatus.InConsultation)
+            {
+                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle fs-6 px-3 py-2">
+                    <i class="bi bi-door-open me-1"></i> In Consultation
+                </span>
+            }
+            else
+            {
+                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning-subtle fs-6 px-3 py-2">
+                    <i class="bi bi-clock me-1"></i> Confirmed & Scheduled
+                </span>
+            }
+        </div>
+
+        <div class="d-flex align-items-center gap-3 text-muted mb-3 flex-wrap">
+            <span class="fw-semibold text-dark"><i class="bi bi-calendar3 me-1 text-primary"></i>@nextLocal.ToString("dddd, MMM dd, yyyy")</span>
+            <span class="fw-semibold text-primary"><i class="bi bi-clock-history me-1"></i>@nextLocal.ToString("hh:mm tt") (15 mins)</span>
+            <span><i class="bi bi-geo-alt me-1"></i>OPD Doctor Chamber</span>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(next.ReasonForVisit))
+        {
+            <p class="mb-3 text-secondary small bg-white p-2 rounded border">
+                <strong>Reason:</strong> @next.ReasonForVisit
+            </p>
+        }
+
+        @if (next.Status == AppointmentStatus.Scheduled)
+        {
+            <div class="d-flex gap-2">
+                <a asp-action="Reschedule" asp-route-id="@next.Id" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-arrow-repeat me-1"></i> Reschedule Slot
+                </a>
+                <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#cancelApptModal-@next.Id">
+                    <i class="bi bi-x-circle me-1"></i> Cancel Appointment
+                </button>
+            </div>
+        }
     </div>
 }
 else
 {
-    <div class="alert alert-info border-0 bg-info bg-opacity-10 mb-5">
-        <i class="bi bi-info-circle me-2"></i> You have no upcoming appointments.
+    <div class="pro-card p-4 text-center mb-4 border-dashed">
+        <div class="display-6 text-primary opacity-50 mb-2"><i class="bi bi-calendar2-check"></i></div>
+        <h5 class="mb-1">You have no upcoming appointments</h5>
+        <p class="text-muted small mb-3">Consult our doctors at your convenience by picking your preferred 15-minute slot.</p>
+        <a asp-action="Book" class="btn btn-primary btn-sm">
+            <i class="bi bi-calendar-plus me-1"></i> Book Your Consultation Now
+        </a>
     </div>
 }
 
 <div class="row g-4">
+    <!-- Upcoming Appointments List -->
     <div class="col-md-6">
-        <div class="pro-card h-100">
-            <h5 class="border-bottom pb-3 mb-3">Upcoming Appointments</h5>
+        <div class="pro-card h-100 p-4">
+            <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-3">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-event me-2 text-primary"></i>Upcoming Visits</h5>
+                <span class="badge bg-primary rounded-pill">@upcoming.Count</span>
+            </div>
+
             @if (upcoming.Any())
             {
-                <ul class="list-group list-group-flush">
+                <div class="list-group list-group-flush">
                     @foreach (var a in upcoming)
                     {
-                        <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
-                            <div>
-                                <p class="fw-medium mb-0">Dr. @a.Doctor.FullName</p>
-                                <small class="text-muted">@a.AppointmentDatetime.ToLocalTime().ToString("MMM dd, yyyy - hh:mm tt")</small>
+                        var aLocal = a.AppointmentDatetime.ToHospitalTime();
+                        <div class="list-group-item px-0 py-3 border-bottom">
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <div>
+                                    <h6 class="fw-bold mb-0">Dr. @a.Doctor.FullName</h6>
+                                    <small class="text-muted">@(string.IsNullOrEmpty(a.Doctor.Category) ? "General Physician" : a.Doctor.Category)</small>
+                                </div>
+                                @if (a.Status == AppointmentStatus.InConsultation)
+                                {
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle">With Doctor</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning bg-opacity-10 text-warning border border-warning-subtle">Scheduled</span>
+                                }
                             </div>
-                            @if (a.Status == AppointmentStatus.InConsultation)
+                            <div class="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
+                                <span class="small fw-medium text-dark">
+                                    <i class="bi bi-clock me-1 text-muted"></i>@aLocal.ToString("MMM dd, yyyy - hh:mm tt")
+                                </span>
+                                @if (a.Status == AppointmentStatus.Scheduled)
+                                {
+                                    <div class="btn-group btn-group-sm">
+                                        <a asp-action="Reschedule" asp-route-id="@a.Id" class="btn btn-outline-secondary" title="Reschedule">
+                                            <i class="bi bi-arrow-repeat"></i>
+                                        </a>
+                                        <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#cancelApptModal-@a.Id" title="Cancel">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(a.ReasonForVisit))
                             {
-                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle">With Doctor</span>
+                                <small class="text-muted d-block mt-1">Reason: @a.ReasonForVisit</small>
                             }
-                            else
-                            {
-                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning-subtle">Scheduled</span>
-                            }
-                        </li>
+                        </div>
                     }
-                </ul>
+                </div>
             }
             else
             {
-                <p class="text-muted mb-0">Nothing scheduled.</p>
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-calendar-check fs-2 d-block mb-2 opacity-50"></i>
+                    No upcoming appointments.
+                </div>
             }
         </div>
     </div>
+
+    <!-- Past Appointments List -->
     <div class="col-md-6">
-        <div class="pro-card h-100">
-            <h5 class="border-bottom pb-3 mb-3">Past Appointments</h5>
+        <div class="pro-card h-100 p-4">
+            <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-3">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-journal-medical me-2 text-secondary"></i>Past Consultations</h5>
+                <span class="badge bg-secondary rounded-pill">@past.Count</span>
+            </div>
+
             @if (past.Any())
             {
-                <ul class="list-group list-group-flush">
+                <div class="list-group list-group-flush">
                     @foreach (var a in past)
                     {
-                        <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
-                            <div>
-                                <p class="fw-medium mb-0">Dr. @a.Doctor.FullName</p>
-                                <small class="text-muted">@a.AppointmentDatetime.ToLocalTime().ToString("MMM dd, yyyy")</small>
+                        var aLocal = a.AppointmentDatetime.ToHospitalTime();
+                        <div class="list-group-item px-0 py-3 border-bottom">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="fw-bold mb-0">Dr. @a.Doctor.FullName</h6>
+                                    <small class="text-muted">@aLocal.ToString("MMM dd, yyyy - hh:mm tt")</small>
+                                </div>
+                                @if (a.Status == AppointmentStatus.Cancelled)
+                                {
+                                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle">Cancelled</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Completed</span>
+                                }
                             </div>
-                            @if (a.Status == AppointmentStatus.Cancelled)
+                            @if (!string.IsNullOrWhiteSpace(a.ReasonForVisit))
                             {
-                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle">Cancelled</span>
+                                <small class="text-muted d-block mt-1">Reason: @a.ReasonForVisit</small>
                             }
-                            else
-                            {
-                                <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Completed</span>
-                            }
-                        </li>
+                        </div>
                     }
-                </ul>
+                </div>
             }
             else
             {
-                <p class="text-muted mb-0">No past visits yet.</p>
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-inbox fs-2 d-block mb-2 opacity-50"></i>
+                    No past visits recorded.
+                </div>
             }
         </div>
     </div>
 </div>
+
+<!-- Cancellation Confirmation Modals for Scheduled Appointments -->
+@foreach (var a in upcoming.Where(a => a.Status == AppointmentStatus.Scheduled))
+{
+    var aLocal = a.AppointmentDatetime.ToHospitalTime();
+    <div class="modal fade" id="cancelApptModal-@a.Id" tabindex="-1" aria-labelledby="cancelModalLabel-@a.Id" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form method="post" asp-action="Cancel" asp-route-id="@a.Id">
+                    @Html.AntiForgeryToken()
+                    <div class="modal-header border-bottom-0 pb-0">
+                        <h5 class="modal-title text-danger fw-bold" id="cancelModalLabel-@a.Id">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>Cancel Appointment
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body py-3">
+                        <p class="mb-2">Are you sure you want to cancel your consultation with <strong>Dr. @a.Doctor.FullName</strong>?</p>
+                        <div class="p-3 bg-light rounded border text-muted small mb-3">
+                            <div><i class="bi bi-calendar3 me-1"></i>Date: @aLocal.ToString("dddd, MMM dd, yyyy")</div>
+                            <div><i class="bi bi-clock me-1"></i>Time: @aLocal.ToString("hh:mm tt")</div>
+                        </div>
+                        <p class="text-muted small mb-0">
+                            <i class="bi bi-info-circle me-1 text-primary"></i> Cancelling releases this slot for other patients in need. You can always book a new appointment at any time.
+                        </p>
+                    </div>
+                    <div class="modal-footer border-top-0 pt-0">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Keep Appointment</button>
+                        <button type="submit" class="btn btn-danger">Confirm Cancellation</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}

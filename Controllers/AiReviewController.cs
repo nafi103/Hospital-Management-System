@@ -151,12 +151,33 @@ namespace HospitalManagementSystem.Controllers
             if (suggestion == null) return NotFound();
 
             var now = DateTime.UtcNow;
-            var rowsAffected = await _context.AiSuggestions
-                .Where(s => s.Id == id && s.Verdict == AiSuggestionVerdict.Pending)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(s => s.Verdict, AiSuggestionVerdict.Accepted)
-                    .SetProperty(s => s.ReviewedById, userId.Value)
-                    .SetProperty(s => s.ReviewedAt, now));
+            int rowsAffected;
+            if (_context.Database.IsRelational())
+            {
+                rowsAffected = await _context.AiSuggestions
+                    .Where(s => s.Id == id && s.Verdict == AiSuggestionVerdict.Pending)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(s => s.Verdict, AiSuggestionVerdict.Accepted)
+                        .SetProperty(s => s.ReviewedById, userId.Value)
+                        .SetProperty(s => s.ReviewedAt, now));
+            }
+            else
+            {
+                var target = await _context.AiSuggestions
+                    .FirstOrDefaultAsync(s => s.Id == id && s.Verdict == AiSuggestionVerdict.Pending);
+                if (target != null)
+                {
+                    target.Verdict = AiSuggestionVerdict.Accepted;
+                    target.ReviewedById = userId.Value;
+                    target.ReviewedAt = now;
+                    await _context.SaveChangesAsync();
+                    rowsAffected = 1;
+                }
+                else
+                {
+                    rowsAffected = 0;
+                }
+            }
 
             if (rowsAffected == 0)
             {
@@ -181,12 +202,33 @@ namespace HospitalManagementSystem.Controllers
             if (suggestion == null) return NotFound();
 
             var now = DateTime.UtcNow;
-            var rowsAffected = await _context.AiSuggestions
-                .Where(s => s.Id == id && s.Verdict == AiSuggestionVerdict.Pending)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(s => s.Verdict, AiSuggestionVerdict.Rejected)
-                    .SetProperty(s => s.ReviewedById, userId.Value)
-                    .SetProperty(s => s.ReviewedAt, now));
+            int rowsAffected;
+            if (_context.Database.IsRelational())
+            {
+                rowsAffected = await _context.AiSuggestions
+                    .Where(s => s.Id == id && s.Verdict == AiSuggestionVerdict.Pending)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(s => s.Verdict, AiSuggestionVerdict.Rejected)
+                        .SetProperty(s => s.ReviewedById, userId.Value)
+                        .SetProperty(s => s.ReviewedAt, now));
+            }
+            else
+            {
+                var target = await _context.AiSuggestions
+                    .FirstOrDefaultAsync(s => s.Id == id && s.Verdict == AiSuggestionVerdict.Pending);
+                if (target != null)
+                {
+                    target.Verdict = AiSuggestionVerdict.Rejected;
+                    target.ReviewedById = userId.Value;
+                    target.ReviewedAt = now;
+                    await _context.SaveChangesAsync();
+                    rowsAffected = 1;
+                }
+                else
+                {
+                    rowsAffected = 0;
+                }
+            }
 
             if (rowsAffected == 0)
             {
@@ -218,13 +260,35 @@ namespace HospitalManagementSystem.Controllers
             if (suggestion == null) return NotFound();
 
             var now = DateTime.UtcNow;
-            var rowsAffected = await _context.AiSuggestions
-                .Where(s => s.Id == id && s.Verdict == AiSuggestionVerdict.Pending)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(s => s.Verdict, AiSuggestionVerdict.Edited)
-                    .SetProperty(s => s.EditedPayloadJson, editedPayloadJson)
-                    .SetProperty(s => s.ReviewedById, userId.Value)
-                    .SetProperty(s => s.ReviewedAt, now));
+            int rowsAffected;
+            if (_context.Database.IsRelational())
+            {
+                rowsAffected = await _context.AiSuggestions
+                    .Where(s => s.Id == id && s.Verdict == AiSuggestionVerdict.Pending)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(s => s.Verdict, AiSuggestionVerdict.Edited)
+                        .SetProperty(s => s.EditedPayloadJson, editedPayloadJson)
+                        .SetProperty(s => s.ReviewedById, userId.Value)
+                        .SetProperty(s => s.ReviewedAt, now));
+            }
+            else
+            {
+                var target = await _context.AiSuggestions
+                    .FirstOrDefaultAsync(s => s.Id == id && s.Verdict == AiSuggestionVerdict.Pending);
+                if (target != null)
+                {
+                    target.Verdict = AiSuggestionVerdict.Edited;
+                    target.EditedPayloadJson = editedPayloadJson;
+                    target.ReviewedById = userId.Value;
+                    target.ReviewedAt = now;
+                    await _context.SaveChangesAsync();
+                    rowsAffected = 1;
+                }
+                else
+                {
+                    rowsAffected = 0;
+                }
+            }
 
             if (rowsAffected == 0)
             {

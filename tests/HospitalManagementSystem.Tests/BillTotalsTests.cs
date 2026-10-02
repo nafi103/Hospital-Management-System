@@ -96,4 +96,50 @@ public class BillTotalsTests
         Assert.Equal(0m, bill.NetTotal);
         Assert.Equal(BillStatus.Paid, bill.Status);
     }
+
+    [Fact]
+    public void RecalculateTotals_MultiTransactionLedger_ClearsBalanceAndTransitionsToPaid()
+    {
+        var bill = MakeBill(itemAmounts: [1000m, 500m]);
+        bill.PaymentTransactions.Add(new PaymentTransaction { Amount = 500m, PaymentMethod = "Cash", TransactionDate = DateTime.UtcNow });
+        bill.PaymentTransactions.Add(new PaymentTransaction { Amount = 1000m, PaymentMethod = "Card", TransactionDate = DateTime.UtcNow });
+
+        bill.PaidAmount = bill.PaymentTransactions.Sum(pt => pt.Amount);
+        bill.RecalculateTotals();
+
+        Assert.Equal(1500m, bill.SubtotalAmount);
+        Assert.Equal(1500m, bill.NetTotal);
+        Assert.Equal(1500m, bill.PaidAmount);
+        Assert.Equal(BillStatus.Paid, bill.Status);
+    }
+
+    [Fact]
+    public void RecalculateTotals_MultiTransactionLedger_PartialPayment_RemainsPartiallyPaid()
+    {
+        var bill = MakeBill(itemAmounts: [1500m]);
+        bill.PaymentTransactions.Add(new PaymentTransaction { Amount = 600m, PaymentMethod = "Cash", TransactionDate = DateTime.UtcNow });
+
+        bill.PaidAmount = bill.PaymentTransactions.Sum(pt => pt.Amount);
+        bill.RecalculateTotals();
+
+        Assert.Equal(1500m, bill.NetTotal);
+        Assert.Equal(600m, bill.PaidAmount);
+        Assert.Equal(BillStatus.PartiallyPaid, bill.Status);
+    }
+
+    [Fact]
+    public void RecalculateTotals_DiscountWithPartialPayment_DerivesRemainingBalanceCorrectly()
+    {
+        var bill = MakeBill(discount: 300m, itemAmounts: [1000m]);
+        bill.PaymentTransactions.Add(new PaymentTransaction { Amount = 350m, PaymentMethod = "Cash", TransactionDate = DateTime.UtcNow });
+
+        bill.PaidAmount = bill.PaymentTransactions.Sum(pt => pt.Amount);
+        bill.RecalculateTotals();
+
+        Assert.Equal(700m, bill.NetTotal);
+        Assert.Equal(350m, bill.PaidAmount);
+        var remainingBalance = bill.NetTotal - bill.PaidAmount;
+        Assert.Equal(350m, remainingBalance);
+        Assert.Equal(BillStatus.PartiallyPaid, bill.Status);
+    }
 }

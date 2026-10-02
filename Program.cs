@@ -51,6 +51,7 @@ builder.Services.AddSingleton<ApiKeyProtector>();
 builder.Services.AddScoped<PhiScrubber>();
 builder.Services.AddScoped<AiProviderResolver>();
 builder.Services.AddScoped<IClinicalAiService, ClinicalAiService>();
+builder.Services.AddScoped<IAppointmentBookingService, DoctorScheduleService>();
 builder.Services.AddScoped<DemoDataSeeder>();
 
 builder.Services.AddHttpClient<GroqClient>();

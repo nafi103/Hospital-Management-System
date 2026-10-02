@@ -1,0 +1,173 @@
+@model HospitalManagementSystem.Models.ViewModels.RescheduleAppointmentViewModel
+@{
+    ViewData["Title"] = "Reschedule Appointment";
+    var minDate = HospitalManagementSystem.Services.HospitalClock.Today.ToString("yyyy-MM-dd");
+    var maxDate = HospitalManagementSystem.Services.HospitalClock.Today.AddDays(30).ToString("yyyy-MM-dd");
+}
+
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4 border-bottom pb-3">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-clock-history text-primary me-2"></i>Reschedule Appointment</h2>
+        <p class="text-muted mb-0">Select a new date and available time slot for your consultation with Dr. @Model.DoctorName.</p>
+    </div>
+    <div>
+        <a asp-action="Index" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Return to Appointments
+        </a>
+    </div>
+</div>
+
+<form method="post" asp-action="Reschedule" id="rescheduleForm">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="AppointmentId" />
+    <input type="hidden" asp-for="DoctorId" id="bookingDoctorIdHidden" />
+    <input type="hidden" asp-for="Version" />
+    <input type="hidden" id="excludeAppointmentId" value="@Model.AppointmentId" />
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <h6 class="alert-heading fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-2"></i>Reschedule Failed</h6>
+            <div asp-validation-summary="All" class="mb-0 small"></div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <!-- Current Appointment Reference Card -->
+            <div class="pro-card mb-4 p-4 border-start border-4 border-warning bg-light bg-opacity-25">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <span class="text-muted small text-uppercase fw-bold">Currently Scheduled For:</span>
+                        <h4 class="mb-1 text-dark">@Model.CurrentDatetimeDisplay</h4>
+                        <p class="text-muted mb-0">
+                            Dr. @Model.DoctorName <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-1">@Model.DoctorCategory</span>
+                        </p>
+                    </div>
+                    <span class="badge bg-warning bg-opacity-10 text-warning border border-warning-subtle px-3 py-2">
+                        <i class="bi bi-calendar-event me-1"></i> Needs New Slot
+                    </span>
+                </div>
+            </div>
+
+            <!-- Step 1: New Date -->
+            <div class="pro-card mb-4 p-4">
+                <h5 class="fw-bold mb-3">
+                    <span class="badge bg-primary rounded-circle me-1">1</span> Choose New Date
+                </h5>
+                <div class="row">
+                    <div class="col-md-6">
+                        <label asp-for="SelectedDate" class="form-label fw-medium">New Consultation Date</label>
+                        <input asp-for="SelectedDate" type="date" class="form-control" id="bookingDateInput"
+                               min="@minDate" max="@maxDate" value="@Model.SelectedDate" />
+                        <span asp-validation-for="SelectedDate" class="text-danger small"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: New Slot -->
+            <div class="pro-card mb-4 p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold mb-0">
+                        <span class="badge bg-primary rounded-circle me-1">2</span> Select New Available Slot
+                    </h5>
+                    <div class="small d-flex align-items-center gap-3">
+                        <span class="d-flex align-items-center gap-1">
+                            <span class="badge bg-primary p-1 rounded-circle" style="width:10px;height:10px;"> </span> Available
+                        </span>
+                        <span class="d-flex align-items-center gap-1 text-muted text-decoration-line-through">
+                            <span class="badge bg-secondary p-1 rounded-circle opacity-50" style="width:10px;height:10px;"> </span> Booked / Past
+                        </span>
+                    </div>
+                </div>
+
+                <div id="slotLoadingSpinner" class="text-center py-4 d-none">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading slots...</span>
+                    </div>
+                    <p class="text-muted small mt-2">Checking doctor's availability...</p>
+                </div>
+
+                <div id="noSlotsAlert" class="alert alert-warning d-none" role="alert">
+                    <i class="bi bi-calendar-x me-2"></i> No available time slots remaining for this date. Please pick another date.
+                </div>
+
+                <input type="hidden" asp-for="SelectedSlotTime" id="selectedSlotTimeInput" />
+                <span asp-validation-for="SelectedSlotTime" class="text-danger small d-block mb-3"></span>
+
+                <!-- Morning Shift -->
+                <div class="mb-4">
+                    <h6 class="text-muted fw-semibold d-flex align-items-center gap-2 mb-2">
+                        <i class="bi bi-sun text-warning"></i> Morning Shift (09:00 AM – 12:45 PM)
+                    </h6>
+                    <div id="morningSlotsContainer" class="p-2 border rounded bg-light bg-opacity-50">
+                        <span class="text-muted small">Loading slots...</span>
+                    </div>
+                </div>
+
+                <!-- Afternoon Shift -->
+                <div>
+                    <h6 class="text-muted fw-semibold d-flex align-items-center gap-2 mb-2">
+                        <i class="bi bi-brightness-high text-primary"></i> Afternoon Shift (01:00 PM – 05:00 PM)
+                    </h6>
+                    <div id="afternoonSlotsContainer" class="p-2 border rounded bg-light bg-opacity-50">
+                        <span class="text-muted small">Loading slots...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Update Reason (Optional) -->
+            <div class="pro-card p-4">
+                <label asp-for="ReasonForVisit" class="form-label fw-bold">
+                    <span class="badge bg-primary rounded-circle me-1">3</span> Update Reason for Consultation (Optional)
+                </label>
+                <textarea asp-for="ReasonForVisit" class="form-control" rows="2" id="reasonForVisitInput"
+                          placeholder="You may update your symptoms or reason for visit if needed..."></textarea>
+                <span asp-validation-for="ReasonForVisit" class="text-danger small"></span>
+            </div>
+        </div>
+
+        <!-- Summary & Confirmation Sidebar -->
+        <div class="col-lg-4">
+            <div class="pro-card p-4 sticky-top" style="top: 2rem;">
+                <h5 class="border-bottom pb-3 mb-3 fw-bold">
+                    <i class="bi bi-arrow-repeat text-primary me-2"></i>Reschedule Summary
+                </h5>
+
+                <div class="mb-3">
+                    <small class="text-muted d-block">Specialist:</small>
+                    <strong class="fs-6">Dr. @Model.DoctorName</strong>
+                </div>
+
+                <div class="mb-3">
+                    <small class="text-muted d-block">Currently Booked:</small>
+                    <span class="text-muted text-decoration-line-through">@Model.CurrentDatetimeDisplay</span>
+                </div>
+
+                <div class="mb-3">
+                    <small class="text-muted d-block">New Date:</small>
+                    <strong class="fs-6" id="summaryDateDisplay">@Model.SelectedDate</strong>
+                </div>
+
+                <div class="mb-3">
+                    <small class="text-muted d-block">New Time Slot:</small>
+                    <strong class="fs-6 text-primary" id="summaryTimeDisplay">Select a time slot</strong>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg w-100 mb-3 shadow-sm" id="submitBookingBtn" disabled>
+                    <i class="bi bi-check-circle me-1"></i> Confirm Reschedule
+                </button>
+
+                <a asp-action="Index" class="btn btn-outline-secondary w-100">
+                    Cancel & Keep Current Slot
+                </a>
+            </div>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/portal-booking.js" asp-append-version="true"></script>
+}
