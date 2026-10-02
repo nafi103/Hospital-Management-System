@@ -47,6 +47,9 @@ namespace HospitalManagementSystem.Models
         [Range(0.5, 50.0, ErrorMessage = "Blood Sugar must be between 0.5 and 50.0 mmol/L.")]
         public decimal? BloodSugar { get; set; }
 
+        [Range(0.5, 350.0, ErrorMessage = "Weight must be between 0.5 and 350.0 kg.")]
+        public decimal? WeightKg { get; set; }
+
         // NEWS2 scoring inputs.
         [Required]
         [Range(4, 60, ErrorMessage = "Respiratory Rate must be between 4 and 60 breaths/min.")]

@@ -161,6 +161,11 @@ namespace HospitalManagementSystem.Controllers
                 TempData["CrossLinkLabel"] = "Write prescription for this visit";
                 TempData["CrossLinkPatientId"] = record.PatientId;
                 TempData["CrossLinkDoctorId"] = record.DoctorId;
+
+                if (record.AppointmentId.HasValue)
+                {
+                    return RedirectToAction("Index", "DoctorDashboard");
+                }
                 return RedirectToAction(nameof(Index));
             }
 

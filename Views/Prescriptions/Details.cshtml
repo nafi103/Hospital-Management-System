@@ -19,21 +19,45 @@
             <a asp-action="Print" asp-route-id="@Model.Id" target="_blank" class="btn btn-outline-secondary py-2 px-3" title="Print Prescription">
                 <i class="bi bi-printer me-1"></i> Print
             </a>
-            @if (isPending)
+            @if (Model.Status == PrescriptionStatus.PendingPharmacy)
             {
                 <span class="badge bg-warning bg-opacity-10 text-warning border border-warning-subtle fs-6 py-2 px-3">
                     <i class="bi bi-hourglass-split me-1"></i> Pending Pharmacy
                 </span>
             }
-            else
+            else if (Model.Status == PrescriptionStatus.Dispensed)
             {
                 <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle fs-6 py-2 px-3">
                     <i class="bi bi-check2-all me-1"></i> Dispensed
                 </span>
             }
+            else if (Model.Status == PrescriptionStatus.Cancelled)
+            {
+                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle fs-6 py-2 px-3">
+                    <i class="bi bi-x-circle me-1"></i> Cancelled
+                </span>
+            }
+            else if (Model.Status == PrescriptionStatus.Discontinued)
+            {
+                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle fs-6 py-2 px-3">
+                    <i class="bi bi-slash-circle me-1"></i> Discontinued
+                </span>
+            }
         </div>
     </div>
 </div>
+
+@if (Model.Status == PrescriptionStatus.Cancelled || Model.Status == PrescriptionStatus.Discontinued)
+{
+    var isCancelled = Model.Status == PrescriptionStatus.Cancelled;
+    <div class="alert @(isCancelled ? "alert-danger" : "alert-secondary") border-start border-4 @(isCancelled ? "border-danger" : "border-secondary") mb-4">
+        <h6 class="fw-bold mb-1"><i class="bi @(isCancelled ? "bi-x-octagon" : "bi-slash-circle") me-1"></i> @(isCancelled ? "Prescription Cancelled" : "Medication Therapy Discontinued")</h6>
+        <div class="small">
+            <strong>Reason:</strong> @(string.IsNullOrWhiteSpace(Model.DiscontinuationReason) ? "No reason specified." : Model.DiscontinuationReason) &middot;
+            <span class="text-muted">Recorded by @(Model.DiscontinuedBy?.FullName ?? "Physician") on @(Model.DiscontinuedAt?.ToLocalTime().ToString("MMM dd, yyyy hh:mm tt"))</span>
+        </div>
+    </div>
+}
 
 <partial name="_ActionSuccessBanner" />
 
@@ -195,6 +219,31 @@
                     </form>
                 </div>
             }
+
+            @if (isPending && (User.IsInRole("Doctor") || User.IsInRole("Admin")))
+            {
+                <div class="mt-4 pt-3 border-top text-end">
+                    <form asp-action="Cancel" method="post" class="d-inline" id="cancelPrescriptionForm">
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <input type="hidden" name="reason" id="cancelReasonInput" />
+                        <button type="button" class="btn btn-outline-danger px-4" onclick="confirmCancelPrescription()">
+                            <i class="bi bi-x-circle me-1"></i> Cancel Prescription
+                        </button>
+                    </form>
+                </div>
+            }
+            else if (Model.Status == PrescriptionStatus.Dispensed && (User.IsInRole("Doctor") || User.IsInRole("Admin")))
+            {
+                <div class="mt-4 pt-3 border-top text-end">
+                    <form asp-action="Discontinue" method="post" class="d-inline" id="discontinuePrescriptionForm">
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <input type="hidden" name="reason" id="discontinueReasonInput" />
+                        <button type="button" class="btn btn-outline-warning text-dark px-4" onclick="confirmDiscontinuePrescription()">
+                            <i class="bi bi-slash-circle me-1"></i> Discontinue Therapy
+                        </button>
+                    </form>
+                </div>
+            }
         </div>
     </div>
 
@@ -265,6 +314,54 @@
             }).then((result) => {
                 if (result.isConfirmed) {
                     document.getElementById('dispenseForm').submit();
+                }
+            });
+        }
+
+        function confirmCancelPrescription() {
+            Swal.fire({
+                title: 'Cancel Prescription?',
+                text: 'Provide a reason for cancelling this prescription before pharmacy dispense:',
+                input: 'text',
+                inputPlaceholder: 'e.g. Dosage error, therapy reconsidered...',
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'You must provide a cancellation reason.';
+                    }
+                },
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, cancel prescription'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    document.getElementById('cancelReasonInput').value = result.value;
+                    document.getElementById('cancelPrescriptionForm').submit();
+                }
+            });
+        }
+
+        function confirmDiscontinuePrescription() {
+            Swal.fire({
+                title: 'Discontinue Therapy?',
+                text: 'Provide a reason for discontinuing this dispensed medication (e.g. adverse event, therapy change):',
+                input: 'text',
+                inputPlaceholder: 'e.g. Patient developed rash/adverse reaction...',
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'You must provide a discontinuation reason.';
+                    }
+                },
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ffc107',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, discontinue therapy'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    document.getElementById('discontinueReasonInput').value = result.value;
+                    document.getElementById('discontinuePrescriptionForm').submit();
                 }
             });
         }

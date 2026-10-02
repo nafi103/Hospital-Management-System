@@ -121,6 +121,18 @@ namespace HospitalManagementSystem.Models
                 .HasForeignKey(r => r.DoctorId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            modelBuilder.Entity<Prescription>()
+                .HasOne(p => p.Appointment)
+                .WithMany()
+                .HasForeignKey(p => p.AppointmentId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<Prescription>()
+                .HasOne(p => p.DiscontinuedBy)
+                .WithMany()
+                .HasForeignKey(p => p.DiscontinuedById)
+                .OnDelete(DeleteBehavior.Restrict);
+
             modelBuilder.Entity<PatientAllergy>()
                 .HasOne(a => a.RecordedBy)
                 .WithMany()

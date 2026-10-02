@@ -27,8 +27,10 @@ namespace HospitalManagementSystem.Models
 
     public enum PrescriptionStatus
     {
-        PendingPharmacy,
-        Dispensed
+        PendingPharmacy = 0,
+        Dispensed = 1,
+        Cancelled = 2,
+        Discontinued = 3
     }
 
     public enum BillStatus

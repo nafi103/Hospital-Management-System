@@ -250,11 +250,26 @@ namespace HospitalManagementSystem.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [Authorize(Roles = "Doctor")]
-        public async Task<IActionResult> Create([Bind("PatientId,DoctorId,Notes,ChiefComplaints,Diagnosis,SafetyOverrideReason")] Prescription prescription, List<PrescriptionItem> PrescriptionItems)
+        public async Task<IActionResult> Create([Bind("PatientId,DoctorId,AppointmentId,Notes,ChiefComplaints,Diagnosis,SafetyOverrideReason")] Prescription prescription, List<PrescriptionItem> PrescriptionItems)
         {
             ModelState.Remove("Patient");
             ModelState.Remove("Doctor");
             ModelState.Remove("PrescriptionItems");
+
+            // Deduplication safety check: each medicine can only be prescribed once per prescription
+            if (PrescriptionItems != null && PrescriptionItems.Count > 0)
+            {
+                var duplicateIds = PrescriptionItems
+                    .GroupBy(i => i.MedicineId)
+                    .Where(g => g.Count() > 1)
+                    .Select(g => g.Key)
+                    .ToList();
+
+                if (duplicateIds.Count > 0)
+                {
+                    ModelState.AddModelError("", "Duplicate medicine items detected. Each medicine may only be prescribed once per prescription.");
+                }
+            }
 
             if (ModelState.IsValid && PrescriptionItems != null && PrescriptionItems.Count > 0)
             {
@@ -301,6 +316,11 @@ namespace HospitalManagementSystem.Controllers
                     TempData["CrossLinkLabel"] = "Add medical record for this visit";
                     TempData["CrossLinkPatientId"] = prescription.PatientId;
                     TempData["CrossLinkDoctorId"] = prescription.DoctorId;
+
+                    if (prescription.AppointmentId.HasValue)
+                    {
+                        return RedirectToAction("Index", "DoctorDashboard");
+                    }
                     return RedirectToAction(nameof(Index));
                 }
             }
@@ -338,6 +358,8 @@ namespace HospitalManagementSystem.Controllers
                 .Include(p => p.Patient)
                 .Include(p => p.Doctor)
                 .Include(p => p.DispensedBy)
+                .Include(p => p.DiscontinuedBy)
+                .Include(p => p.Appointment)
                 .Include(p => p.PrescriptionItems)
                     .ThenInclude(pi => pi.Medicine)
                 .FirstOrDefaultAsync(m => m.Id == id);
@@ -430,6 +452,14 @@ namespace HospitalManagementSystem.Controllers
                         if (existing.Status == PrescriptionStatus.Dispensed)
                         {
                             TempData["ErrorMessage"] = "This prescription has already been dispensed.";
+                        }
+                        else if (existing.Status == PrescriptionStatus.Cancelled)
+                        {
+                            TempData["ErrorMessage"] = "This prescription was cancelled by the physician and cannot be dispensed.";
+                        }
+                        else if (existing.Status == PrescriptionStatus.Discontinued)
+                        {
+                            TempData["ErrorMessage"] = "This prescription was discontinued and cannot be dispensed.";
                         }
                         else
                         {
@@ -538,6 +568,69 @@ namespace HospitalManagementSystem.Controllers
                 TempData["ErrorMessage"] = "An error occurred while dispensing medications.";
                 return RedirectToAction(nameof(Details), new { id });
             }
+        }
+
+        // POST: Prescriptions/Cancel/5
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Doctor,Admin")]
+        public async Task<IActionResult> Cancel(int id, string? reason)
+        {
+            var userIdClaim = User.FindFirst("UserId")?.Value;
+            int.TryParse(userIdClaim, out int currentUserId);
+
+            var prescription = await _context.Prescriptions.FindAsync(id);
+            if (prescription == null) return NotFound();
+
+            if (User.IsInRole("Doctor") && prescription.DoctorId != currentUserId)
+            {
+                return Forbid();
+            }
+
+            if (prescription.Status != PrescriptionStatus.PendingPharmacy)
+            {
+                TempData["ErrorMessage"] = $"Cannot cancel a prescription with status '{prescription.Status}'. Only pending prescriptions can be cancelled.";
+                return RedirectToAction(nameof(Details), new { id });
+            }
+
+            prescription.Status = PrescriptionStatus.Cancelled;
+            prescription.DiscontinuationReason = string.IsNullOrWhiteSpace(reason) ? "Cancelled by physician" : reason;
+            prescription.DiscontinuedById = currentUserId;
+            prescription.DiscontinuedAt = DateTime.UtcNow;
+            prescription.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            TempData["SuccessMessage"] = "Prescription has been cancelled and will not be dispensed.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        // POST: Prescriptions/Discontinue/5
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Doctor,Admin")]
+        public async Task<IActionResult> Discontinue(int id, string? reason)
+        {
+            var userIdClaim = User.FindFirst("UserId")?.Value;
+            int.TryParse(userIdClaim, out int currentUserId);
+
+            var prescription = await _context.Prescriptions.FindAsync(id);
+            if (prescription == null) return NotFound();
+
+            if (prescription.Status != PrescriptionStatus.Dispensed)
+            {
+                TempData["ErrorMessage"] = $"Only dispensed prescriptions can be discontinued. Current status: '{prescription.Status}'.";
+                return RedirectToAction(nameof(Details), new { id });
+            }
+
+            prescription.Status = PrescriptionStatus.Discontinued;
+            prescription.DiscontinuationReason = string.IsNullOrWhiteSpace(reason) ? "Discontinued by physician" : reason;
+            prescription.DiscontinuedById = currentUserId;
+            prescription.DiscontinuedAt = DateTime.UtcNow;
+            prescription.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            TempData["SuccessMessage"] = "Medication therapy discontinued. It will no longer trigger duplicate active therapy warnings.";
+            return RedirectToAction(nameof(Details), new { id });
         }
     }
 }

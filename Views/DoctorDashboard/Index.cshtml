@@ -6,18 +6,29 @@
     ViewData["Title"] = "Doctor's Desk";
     var latestAiByPatient = ViewBag.LatestAiSuggestionByPatient as Dictionary<int, AiSuggestion>;
     var vitalsByAppointment = ViewBag.VitalsByAppointment as Dictionary<int, PatientVital>;
+    var allergiesByPatient = ViewBag.AllergiesByPatient as Dictionary<int, List<PatientAllergy>>;
     var dashboardUrl = Url.Action("Index", "DoctorDashboard");
 }
 
 <div class="mb-4 border-bottom pb-3">
     <h2 class="mb-1">Doctor's Desk</h2>
-    <p class="text-muted mb-0">Patients currently in consultation.</p>
+    <p class="text-muted mb-0">Patients currently in consultation queue.</p>
 </div>
+
+<partial name="_ActionSuccessBanner" />
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
 
 <div id="empty-state-message" class="pro-card text-center py-5" style="@(!Model.Any() ? "" : "display:none;")">
     <i class="bi bi-cup-hot text-muted fs-1 mb-3 d-block"></i>
     <h4 class="fw-bold text-muted mb-2">No Active Consultations</h4>
-    <p class="text-muted mb-0">Waiting for the receptionist to send in the next patient.</p>
+    <p class="text-muted mb-0">Waiting for the receptionist or assistant to send in the next patient.</p>
 </div>
 
 <div class="row g-4" id="active-consultations-container">
@@ -29,59 +40,120 @@
         PatientVital? vitals = null;
         vitalsByAppointment?.TryGetValue(item.Id, out vitals);
 
-        // The arrival-triggered AI generation isn't tracked as an explicit "in
-        // progress" flag - only its eventual result (an AiSuggestion row, whatever its
-        // verdict) is. So on a fresh page load we infer "probably still generating"
-        // from how recently the patient was sent in, comfortably covering the
-        // retry+fallback chain's worst case; anyone with the dashboard already open
-        // gets the real answer live over SignalR regardless of this guess.
+        List<PatientAllergy>? allergies = null;
+        allergiesByPatient?.TryGetValue(item.PatientId, out allergies);
+
         var stillLikelyGenerating = latest == null && (DateTime.UtcNow - item.UpdatedAt) < TimeSpan.FromSeconds(30);
+        var isStale = (DateTime.UtcNow - item.UpdatedAt).TotalHours >= 2;
+
+        News2Calculator.Result? news2 = null;
+        if (vitals != null && item.Patient != null)
+        {
+            news2 = News2Calculator.TryCalculate(
+                item.Patient.IsChild,
+                vitals.RespiratoryRate,
+                vitals.Spo2,
+                vitals.OnSupplementalOxygen,
+                vitals.Temperature,
+                vitals.SystolicBp,
+                vitals.HeartRate,
+                vitals.Consciousness);
+        }
 
         <div class="col-12" id="consultation-card-@item.Id" data-patient-id="@item.PatientId">
-            <div class="pro-card h-100 border-start border-4 border-primary">
+            <div class="pro-card h-100 border-start border-4 @(isStale ? "border-warning" : "border-primary") shadow-sm">
                 <div class="row g-0">
                     <div class="col-md-7 pe-md-4 mb-4 mb-md-0">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <span class="badge bg-primary">In Consultation</span>
+                            <div class="d-flex gap-2 align-items-center">
+                                <span class="badge bg-primary">In Consultation</span>
+                                @if (isStale)
+                                {
+                                    <span class="badge bg-warning text-dark"><i class="bi bi-clock-history me-1"></i>Waiting &gt;2 hrs</span>
+                                }
+                            </div>
                             <small class="text-muted"><i class="bi bi-clock"></i> Sent in @item.UpdatedAt.ToHospitalTime().ToString("hh:mm tt")</small>
                         </div>
 
-                        <h4 class="fw-bold text-primary mb-1">@item.Patient?.FullName</h4>
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <h4 class="fw-bold text-primary mb-0">@item.Patient?.FullName</h4>
+                            @if (item.Patient?.IsChild == true)
+                            {
+                                <span class="badge bg-warning text-dark"><i class="bi bi-balloon me-1"></i>Child</span>
+                            }
+                        </div>
                         <p class="text-muted mb-2"><i class="bi bi-person-badge"></i> UHID: @item.Patient?.Uhid</p>
 
+                        <!-- Known Allergies Badges -->
+                        @if (allergies != null && allergies.Any())
+                        {
+                            <div class="mb-3">
+                                @foreach (var al in allergies)
+                                {
+                                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle me-1">
+                                        <i class="bi bi-shield-exclamation me-1"></i>@al.Substance (@al.Severity)
+                                    </span>
+                                }
+                            </div>
+                        }
+
+                        <!-- Vitals & NEWS2 -->
                         @if (vitals != null)
                         {
                             var triageClass = vitals.TriagePriority == TriagePriority.Emergency ? "danger" : vitals.TriagePriority == TriagePriority.Urgent ? "warning" : "success";
-                            <div class="mb-3">
-                                <span class="badge bg-@triageClass bg-opacity-10 text-@triageClass border border-@(triageClass)-subtle mb-2">
-                                    <i class="bi bi-clipboard2-pulse me-1"></i> Triage: @vitals.TriagePriority
-                                </span>
+                            <div class="mb-3 bg-light p-2 rounded border">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="badge bg-@triageClass bg-opacity-10 text-@triageClass border border-@(triageClass)-subtle">
+                                        <i class="bi bi-clipboard2-pulse me-1"></i> Triage: @vitals.TriagePriority
+                                    </span>
+                                    @if (news2.HasValue)
+                                    {
+                                        <span class="badge bg-danger text-white">NEWS2: @news2.Value.Score</span>
+                                    }
+                                </div>
                                 <div class="small text-muted">
-                                    BP @vitals.SystolicBp/@vitals.DiastolicBp &middot; HR @vitals.HeartRate &middot; SpO2 @vitals.Spo2% &middot; Temp @vitals.Temperature&deg;C &middot; RR @vitals.RespiratoryRate
+                                    BP: <strong>@vitals.SystolicBp/@vitals.DiastolicBp</strong> &middot; HR: <strong>@vitals.HeartRate</strong> &middot; SpO2: <strong>@vitals.Spo2%</strong> &middot; Temp: <strong>@vitals.Temperature&deg;C</strong> &middot; RR: <strong>@vitals.RespiratoryRate</strong>
+                                    @if (vitals.WeightKg.HasValue)
+                                    {
+                                        <span> &middot; Wt: <strong>@vitals.WeightKg kg</strong></span>
+                                    }
                                 </div>
                             </div>
                         }
-                        else
-                        {
-                            <p class="mb-3"></p>
-                        }
 
                         <div class="bg-light p-3 rounded mb-4">
-                            <h6 class="fw-bold mb-2 text-muted">Reason for Visit:</h6>
+                            <h6 class="fw-bold mb-1 text-muted small text-uppercase">Reason for Visit:</h6>
                             <p class="mb-0">@(string.IsNullOrEmpty(item.ReasonForVisit) ? "No reason specified." : item.ReasonForVisit)</p>
                         </div>
 
+                        <!-- LAUNCH CLINICAL COCKPIT BUTTON -->
                         <div class="d-grid gap-2 mb-3">
-                            <a asp-controller="MedicalRecords" asp-action="Create" asp-route-patientId="@item.PatientId" asp-route-doctorId="@item.DoctorId" asp-route-appointmentId="@item.Id" class="btn btn-outline-primary text-start">
-                                <i class="bi bi-file-medical me-2"></i> Add Medical Record
-                            </a>
-                            <a asp-controller="Prescriptions" asp-action="Create" asp-route-patientId="@item.PatientId" asp-route-doctorId="@item.DoctorId" class="btn btn-outline-primary text-start">
-                                <i class="bi bi-capsule me-2"></i> Write Prescription
+                            <a asp-action="Cockpit" asp-route-id="@item.Id" class="btn btn-primary btn-lg text-start py-3 shadow-sm">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <i class="bi bi-person-workspace fs-4 me-2"></i>
+                                        <strong class="fs-5">Launch Clinical Cockpit</strong>
+                                    </div>
+                                    <i class="bi bi-arrow-right fs-4"></i>
+                                </div>
+                                <small class="d-block text-white-50 ps-4">Unified encounter notes, allergies, vitals &amp; e-prescribing</small>
                             </a>
                         </div>
 
-                        <div class="d-flex justify-content-start pt-3 border-top">
-                            <form asp-action="MarkCompleted" asp-route-id="@item.Id" method="post" style="display:inline;">
+                        <!-- Action controls -->
+                        <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                            <div class="d-flex gap-2">
+                                <form asp-action="ReturnToWaitingRoom" asp-route-id="@item.Id" method="post" class="d-inline" onsubmit="return confirm('Return this patient to the waiting room queue?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Send back to waiting room queue">
+                                        <i class="bi bi-arrow-return-left me-1"></i> Return to Queue
+                                    </button>
+                                </form>
+                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="cancelWalkout(@item.Id)" title="Cancel consultation due to patient walkout">
+                                    <i class="bi bi-x-circle me-1"></i> Walkout / Cancel
+                                </button>
+                            </div>
+
+                            <form asp-action="MarkCompleted" asp-route-id="@item.Id" method="post" class="d-inline">
                                 <button type="submit" class="btn btn-success px-4" title="Finish Consultation">
                                     <i class="bi bi-check2-circle me-1"></i> Mark Completed
                                 </button>
@@ -114,3 +186,34 @@
         </div>
     }
 </div>
+
+<form id="cancelWalkoutForm" asp-action="CancelConsultation" method="post" style="display:none;">
+    <input type="hidden" name="id" id="cancelAppointmentIdInput" />
+    <input type="hidden" name="reason" id="cancelReasonInput" />
+</form>
+
+@section Scripts {
+    <script>
+        function cancelWalkout(appointmentId) {
+            Swal.fire({
+                title: 'Patient Walkout / Cancel?',
+                text: 'Record reason for cancelling consultation:',
+                input: 'text',
+                inputPlaceholder: 'e.g. Patient left chamber, declined examination...',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Cancel Consultation',
+                inputValidator: (val) => {
+                    if (!val || !val.trim()) return 'Please provide a cancellation reason.';
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $('#cancelAppointmentIdInput').val(appointmentId);
+                    $('#cancelReasonInput').val(result.value);
+                    $('#cancelWalkoutForm').submit();
+                }
+            });
+        }
+    </script>
+}

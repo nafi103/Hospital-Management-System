@@ -52,10 +52,22 @@
                                         <i class="bi bi-hourglass-split me-1"></i> Pending Dispense
                                     </span>
                                 }
-                                else
+                                else if (item.Status == HospitalManagementSystem.Models.PrescriptionStatus.Dispensed)
                                 {
                                     <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">
                                         <i class="bi bi-check2-all me-1"></i> Dispensed
+                                    </span>
+                                }
+                                else if (item.Status == HospitalManagementSystem.Models.PrescriptionStatus.Cancelled)
+                                {
+                                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle">
+                                        <i class="bi bi-x-circle me-1"></i> Cancelled
+                                    </span>
+                                }
+                                else if (item.Status == HospitalManagementSystem.Models.PrescriptionStatus.Discontinued)
+                                {
+                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle">
+                                        <i class="bi bi-slash-circle me-1"></i> Discontinued
                                     </span>
                                 }
                             </td>

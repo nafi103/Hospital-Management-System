@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace HospitalManagementSystem.Models
 {
     [Index(nameof(CreatedAt))]
+    [Index(nameof(AppointmentId))]
     public class Prescription
     {
         [Key]
@@ -18,6 +19,10 @@ namespace HospitalManagementSystem.Models
         public int DoctorId { get; set; }
         [ForeignKey("DoctorId")]
         public User? Doctor { get; set; }
+
+        public int? AppointmentId { get; set; }
+        [ForeignKey("AppointmentId")]
+        public Appointment? Appointment { get; set; }
 
         public string? Notes { get; set; }
         
@@ -31,6 +36,12 @@ namespace HospitalManagementSystem.Models
         [ForeignKey("DispensedById")]
         public User? DispensedBy { get; set; }
         public DateTime? DispensedAt { get; set; }
+
+        public string? DiscontinuationReason { get; set; }
+        public DateTime? DiscontinuedAt { get; set; }
+        public int? DiscontinuedById { get; set; }
+        [ForeignKey("DiscontinuedById")]
+        public User? DiscontinuedBy { get; set; }
 
         // Populated only when PrescriptionSafetyChecker raised at least one warning and the
         // prescribing doctor explicitly acknowledged it - both null on an ordinary,

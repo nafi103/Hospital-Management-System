@@ -1,0 +1,684 @@
+@model HospitalManagementSystem.Models.ViewModels.ClinicalCockpitViewModel
+@using HospitalManagementSystem.Models
+@using HospitalManagementSystem.Services
+
+@{
+    ViewData["Title"] = $"Clinical Cockpit - {Model.Patient.FullName}";
+    var dashboardUrl = Url.Action("Index", "DoctorDashboard");
+    var hasAllergies = Model.Allergies != null && Model.Allergies.Any();
+    var hasVitals = Model.LatestVitals != null;
+    var isChild = Model.Patient.IsChild;
+    var news2 = Model.News2Result;
+}
+
+@section Styles {
+    <style>
+        .cockpit-header {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            color: #f8fafc;
+            border-radius: 12px;
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .vitals-pill {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            padding: 0.35rem 0.75rem;
+            font-size: 0.85rem;
+        }
+        .allergy-badge-danger {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #f87171;
+            font-weight: 600;
+        }
+        .hover-border-primary:hover {
+            border-color: var(--accent) !important;
+        }
+        .transition-all {
+            transition: all 0.2s ease-in-out;
+        }
+    </style>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a asp-action="Index" class="text-decoration-none text-muted mb-1 d-inline-block small">
+            <i class="bi bi-arrow-left"></i> Back to Doctor's Desk
+        </a>
+        <h3 class="mb-0 fw-bold text-primary">
+            <i class="bi bi-person-workspace me-2"></i>Clinical Cockpit
+        </h3>
+    </div>
+    <div class="d-flex gap-2">
+        <form asp-action="ReturnToWaitingRoom" asp-route-id="@Model.Appointment.Id" method="post" class="d-inline" onsubmit="return confirm('Return this patient to the waiting room queue?');">
+            <button type="submit" class="btn btn-outline-warning btn-sm">
+                <i class="bi bi-arrow-return-left me-1"></i> Return to Queue
+            </button>
+        </form>
+        <button type="button" class="btn btn-outline-danger btn-sm" onclick="cancelWalkout(@Model.Appointment.Id)">
+            <i class="bi bi-x-circle me-1"></i> Patient Walkout / Cancel
+        </button>
+    </div>
+</div>
+
+<partial name="_ActionSuccessBanner" />
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<!-- OMNIPRESENT PATIENT SAFETY HEADER BANNER -->
+<div class="cockpit-header">
+    <div class="row align-items-center g-3">
+        <!-- Patient Demographics -->
+        <div class="col-lg-4 col-md-6 border-end-lg border-secondary">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <h4 class="fw-bold mb-0 text-white">@Model.Patient.FullName</h4>
+                @if (isChild)
+                {
+                    <span class="badge bg-warning text-dark"><i class="bi bi-balloon me-1"></i>Child</span>
+                }
+            </div>
+            <div class="text-light opacity-75 small mb-2">
+                <span><i class="bi bi-person-badge me-1"></i>UHID: <strong>@Model.Patient.Uhid</strong></span> &middot;
+                <span>Age: <strong>@Model.AgeDisplay</strong></span> &middot;
+                <span>Gender: @Model.Patient.Gender</span> &middot;
+                <span>Blood: <strong class="text-danger">@Model.Patient.BloodGroup</strong></span>
+            </div>
+            @if (isChild && Model.Patient.GuardianPatient != null)
+            {
+                <div class="small text-info">
+                    <i class="bi bi-shield-lock me-1"></i>Guardian: @Model.Patient.GuardianPatient.FullName (@(Model.Patient.GuardianRelationship ?? "Parent"))
+                </div>
+            }
+        </div>
+
+        <!-- Allergies Banner -->
+        <div class="col-lg-4 col-md-6 border-end-lg border-secondary">
+            <div class="small text-uppercase tracking-wider opacity-75 mb-1 fw-bold text-white-50">
+                <i class="bi bi-shield-exclamation me-1"></i>Known Allergies
+            </div>
+            @if (hasAllergies)
+            {
+                <div class="d-flex flex-wrap gap-1">
+                    @foreach (var allergy in Model.Allergies)
+                    {
+                        var isSevere = allergy.Severity == AllergySeverity.LifeThreatening || allergy.Severity == AllergySeverity.Severe;
+                        <span class="badge @(isSevere ? "allergy-badge-danger" : "bg-warning bg-opacity-25 text-warning border border-warning") py-1 px-2" title="@allergy.ReactionType">
+                            <i class="bi @(isSevere ? "bi-exclamation-octagon-fill" : "bi-exclamation-triangle") me-1"></i>
+                            @allergy.Substance (@allergy.Severity)
+                        </span>
+                    }
+                </div>
+            }
+            else
+            {
+                <span class="badge bg-success bg-opacity-25 text-success border border-success py-1 px-2">
+                    <i class="bi bi-check-circle me-1"></i>No Known Drug Allergies (NKDA)
+                </span>
+            }
+
+            <!-- Active Meds Drawer Toggle -->
+            <div class="mt-2">
+                <button class="btn btn-sm btn-outline-light py-0 px-2" type="button" data-bs-toggle="collapse" data-bs-target="#activeMedsCollapse">
+                    <i class="bi bi-capsule me-1"></i>Active Meds (@Model.ActiveMedications.Count)
+                </button>
+            </div>
+        </div>
+
+        <!-- Vitals & NEWS2 Deterioration Strip -->
+        <div class="col-lg-4 col-12">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="small text-uppercase tracking-wider opacity-75 fw-bold text-white-50">
+                    <i class="bi bi-heart-pulse me-1"></i>Vitals &amp; Triage
+                </span>
+                @if (news2.HasValue)
+                {
+                    var nColor = news2.Value.Priority == TriagePriority.Emergency ? "bg-danger" : (news2.Value.Priority == TriagePriority.Urgent ? "bg-warning text-dark" : "bg-success");
+                    <span class="badge @nColor fs-6">
+                        NEWS2: @news2.Value.Score (@news2.Value.Priority Risk)
+                    </span>
+                }
+                else if (isChild)
+                {
+                    <span class="badge bg-info bg-opacity-25 text-info border border-info">
+                        Pediatric Protocol
+                    </span>
+                }
+            </div>
+
+            @if (hasVitals)
+            {
+                var v = Model.LatestVitals!;
+                <div class="d-flex flex-wrap gap-1">
+                    <span class="vitals-pill">BP: <strong>@v.SystolicBp/@v.DiastolicBp</strong></span>
+                    <span class="vitals-pill">HR: <strong>@v.HeartRate</strong> bpm</span>
+                    <span class="vitals-pill">SpO2: <strong>@v.Spo2%</strong></span>
+                    <span class="vitals-pill">Temp: <strong>@v.Temperature&deg;C</strong></span>
+                    <span class="vitals-pill">RR: <strong>@v.RespiratoryRate</strong></span>
+                    @if (v.WeightKg.HasValue)
+                    {
+                        <span class="vitals-pill bg-primary bg-opacity-25 border-primary text-info">
+                            <i class="bi bi-speedometer2 me-1"></i>Wt: <strong>@v.WeightKg kg</strong>
+                        </span>
+                    }
+                    @if (v.OnSupplementalOxygen)
+                    {
+                        <span class="vitals-pill text-warning"><i class="bi bi-lungs me-1"></i>On O2</span>
+                    }
+                </div>
+            }
+            else
+            {
+                <span class="text-white-50 small">No triage vitals recorded for this visit.</span>
+            }
+        </div>
+    </div>
+
+    <!-- Active Medications Collapsible Drawer -->
+    <div class="collapse mt-3 pt-3 border-top border-secondary" id="activeMedsCollapse">
+        <h6 class="text-white-50 small fw-bold text-uppercase mb-2">Active Prescribed Regimens (Dispensed Last 30 Days)</h6>
+        @if (Model.ActiveMedications.Any())
+        {
+            <div class="table-responsive">
+                <table class="table table-sm table-dark table-striped mb-0 small">
+                    <thead>
+                        <tr>
+                            <th>Medication</th>
+                            <th>Generic</th>
+                            <th>Dispensed Date</th>
+                            <th>Duration</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var med in Model.ActiveMedications)
+                        {
+                            <tr>
+                                <td class="fw-bold">@med.MedicineName</td>
+                                <td class="text-white-50">@med.GenericName</td>
+                                <td>@med.PrescribedOrDispensedAt.ToLocalTime().ToString("MMM dd, yyyy")</td>
+                                <td>@(med.DurationDays.HasValue ? $"{med.DurationDays} days" : "Ongoing")</td>
+                                <td class="text-end">
+                                    <form asp-controller="Prescriptions" asp-action="Discontinue" asp-route-id="@med.PrescriptionId" method="post" class="d-inline" onsubmit="return confirmDiscontinueActiveMed(this, '@med.MedicineName');">
+                                        <input type="hidden" name="reason" value="Discontinued during consultation" />
+                                        <button type="submit" class="btn btn-outline-warning btn-sm py-0 px-2">
+                                            <i class="bi bi-slash-circle me-1"></i>Discontinue
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="text-white-50 small">No active dispensed medications recorded for this patient.</div>
+        }
+    </div>
+</div>
+
+<!-- MAIN COCKPIT FORM -->
+<form asp-action="CompleteConsultation" method="post" id="cockpitForm">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="AppointmentId" value="@Model.Appointment.Id" />
+    <input type="hidden" name="PatientId" value="@Model.Patient.Id" />
+    <input type="hidden" name="SafetyOverrideReason" id="SafetyOverrideReasonInput" />
+
+    <div class="row g-4">
+        <!-- LEFT COLUMN: CLINICAL DOCUMENTATION -->
+        <div class="col-lg-5">
+            <div class="pro-card h-100 shadow-sm">
+                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                    <h5 class="card-title text-primary mb-0">
+                        <i class="bi bi-journal-medical me-2"></i>Clinical Encounter Notes
+                    </h5>
+                    @if (Model.LatestAiCaseSummary != null)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-info" id="btnInsertAiSummary" title="Auto-populate diagnosis and complaints from AI summary">
+                            <i class="bi bi-magic me-1"></i>Insert AI Summary
+                        </button>
+                    }
+                </div>
+
+                <div class="bg-light p-3 rounded mb-3">
+                    <label class="text-muted small fw-bold text-uppercase d-block mb-1">Reason for Visit (From Queue):</label>
+                    <p class="mb-0 fw-medium text-dark">@(string.IsNullOrWhiteSpace(Model.Appointment.ReasonForVisit) ? "No presenting complaint specified." : Model.Appointment.ReasonForVisit)</p>
+                </div>
+
+                @if (Model.LatestAiCaseSummary != null)
+                {
+                    <div class="alert alert-info border-start border-4 border-info py-2 px-3 mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="small fw-bold text-info"><i class="bi bi-robot me-1"></i>AI Case Summary Review</span>
+                            <span class="badge bg-info bg-opacity-25 text-info">@Model.LatestAiCaseSummary.Verdict</span>
+                        </div>
+                        <div class="small text-muted" id="aiSummaryTextContainer" style="max-height: 140px; overflow-y: auto;">
+                            @{
+                                var vdAi = new ViewDataDictionary(ViewData) { ["ReturnUrl"] = Url.Action("Cockpit", "DoctorDashboard", new { id = Model.Appointment.Id }) };
+                            }
+                            <partial name="_SuggestionCardBody" model="Model.LatestAiCaseSummary" view-data="vdAi" />
+                        </div>
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-muted text-uppercase">Chief Complaints</label>
+                    <textarea name="ChiefComplaint" id="chiefComplaintInput" class="form-control" rows="2" placeholder="e.g. High fever for 3 days, dry cough, sore throat...">@Model.ChiefComplaint</textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-muted text-uppercase">Clinical Diagnosis <span class="text-danger">*</span></label>
+                    <textarea name="Diagnosis" id="diagnosisInput" class="form-control fw-bold" rows="3" placeholder="Enter clinical assessment / diagnosis (Required)..." required>@Model.Diagnosis</textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-muted text-uppercase">Treatment Plan &amp; Advice</label>
+                    <textarea name="Treatment" id="treatmentInput" class="form-control" rows="4" placeholder="Clinical advice, dietary precautions, follow-up instructions...">@Model.Treatment</textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT COLUMN: PHARMACOTHERAPY & PRESCRIPTION -->
+        <div class="col-lg-7">
+            <div class="pro-card h-100 shadow-sm">
+                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                    <h5 class="card-title text-primary mb-0">
+                        <i class="bi bi-capsule me-2"></i>Prescription &amp; Formulary
+                    </h5>
+                    <button type="button" class="btn btn-sm btn-primary" id="btnAddMedicineRow">
+                        <i class="bi bi-plus-circle me-1"></i>Add Medication
+                    </button>
+                </div>
+
+                <!-- Prescribed Medicines Container -->
+                <div id="medicinesListContainer" class="d-flex flex-column gap-3 mb-3">
+                    <!-- Dynamic medicine rows appended here -->
+                </div>
+
+                <div id="emptyMedicinesNotice" class="text-center py-5 text-muted bg-light rounded border border-dashed mb-3">
+                    <i class="bi bi-capsule fs-2 d-block mb-2 text-primary opacity-50"></i>
+                    <h6 class="fw-bold mb-1">No Medications Prescribed Yet</h6>
+                    <p class="small mb-0">Click "Add Medication" to prescribe items from the hospital formulary, or complete consultation with notes only.</p>
+                </div>
+
+                <!-- Real-Time Safety Warnings Container -->
+                <div id="safetyWarningsAlertBox" class="alert alert-warning border-start border-4 border-warning mb-3 d-none">
+                    <h6 class="fw-bold mb-2"><i class="bi bi-shield-exclamation me-1"></i>Clinical Safety Review Required</h6>
+                    <ul id="safetyWarningsList" class="small ps-3 mb-2"></ul>
+                    <div class="mt-2 pt-2 border-top">
+                        <label class="form-label small fw-bold text-dark">Physician Override Rationale <span class="text-danger">*</span></label>
+                        <input type="text" id="safetyOverrideReasonField" class="form-control form-control-sm" placeholder="Explain clinical reason for overriding warnings..." />
+                    </div>
+                </div>
+
+                <!-- ACTION FOOTER -->
+                <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                    <button type="button" class="btn btn-outline-secondary" id="btnCompleteNotesOnly">
+                        <i class="bi bi-file-earmark-check me-1"></i>Complete Notes Only (No Rx)
+                    </button>
+                    <button type="submit" class="btn btn-success btn-lg px-4" id="btnSubmitEncounter">
+                        <i class="bi bi-check2-circle me-1"></i>Complete Consultation &amp; Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- HIDDEN MEDICINE ROW TEMPLATE -->
+<script type="text/template" id="medicineRowTemplate">
+    <div class="medicine-row bg-white border rounded-3 p-3 shadow-sm transition-all hover-border-primary" data-index="{index}">
+        <div class="row g-2 align-items-center mb-2">
+            <div class="col-md-7 position-relative">
+                <input type="hidden" name="PrescriptionItems[{index}].MedicineId" class="medicine-id-input" required />
+                <div class="input-group">
+                    <span class="input-group-text bg-light"><i class="bi bi-search text-muted"></i></span>
+                    <input type="text" class="form-control medicine-search-input fw-bold" placeholder="Type medicine or generic name..." autocomplete="off" required />
+                </div>
+                <div class="list-group position-absolute w-100 shadow mt-1 medicine-search-results" style="z-index: 1050; display: none; max-height: 220px; overflow-y: auto;"></div>
+            </div>
+            <div class="col-md-4">
+                <span class="stock-badge badge bg-light text-secondary border border-secondary-subtle py-2 px-2 d-none"></span>
+            </div>
+            <div class="col-md-1 text-end">
+                <button type="button" class="btn btn-sm btn-outline-danger rounded-circle remove-row-btn" title="Remove">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="row g-2 align-items-center mb-2">
+            <div class="col-md-2">
+                <label class="form-label small text-muted mb-0">Qty</label>
+                <input type="number" name="PrescriptionItems[{index}].Quantity" class="form-control form-control-sm text-center qty-input" min="1" value="10" required />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label small text-muted mb-0">Dose (Morn + Aft + Eve)</label>
+                <div class="input-group input-group-sm">
+                    <input type="number" step="0.5" min="0" name="PrescriptionItems[{index}].DoseMorning" class="form-control text-center px-1" value="1" />
+                    <span class="input-group-text px-1">+</span>
+                    <input type="number" step="0.5" min="0" name="PrescriptionItems[{index}].DoseAfternoon" class="form-control text-center px-1" value="0" />
+                    <span class="input-group-text px-1">+</span>
+                    <input type="number" step="0.5" min="0" name="PrescriptionItems[{index}].DoseEvening" class="form-control text-center px-1" value="1" />
+                    <select name="PrescriptionItems[{index}].DoseUnit" class="form-select" style="max-width: 90px;">
+                        <option value="Tablet" selected>Tab</option>
+                        <option value="Capsule">Cap</option>
+                        <option value="Ml">ml</option>
+                        <option value="Drops">Drops</option>
+                        <option value="Puff">Puff</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small text-muted mb-0">Days</label>
+                <input type="number" name="PrescriptionItems[{index}].DurationDays" class="form-control form-control-sm text-center" min="1" value="5" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small text-muted mb-0">Route</label>
+                <select name="PrescriptionItems[{index}].Route" class="form-select form-select-sm">
+                    <option value="Oral" selected>Oral</option>
+                    <option value="IV">IV</option>
+                    <option value="IM">IM</option>
+                    <option value="Topical">Topical</option>
+                    <option value="Inhalation">Inhalation</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row g-2">
+            <div class="col-12">
+                <input type="text" name="PrescriptionItems[{index}].Instructions" class="form-control form-control-sm" placeholder="Instructions (e.g., Take after meals. Avoid dairy products...)" />
+            </div>
+        </div>
+    </div>
+</script>
+
+<!-- CANCEL / WALKOUT MODAL -->
+<form id="cancelWalkoutForm" asp-action="CancelConsultation" method="post" style="display:none;">
+    <input type="hidden" name="id" id="cancelAppointmentIdInput" />
+    <input type="hidden" name="reason" id="cancelReasonInput" />
+</form>
+
+@section Scripts {
+    <script>
+        // Formulary dataset for fast client autocomplete
+        var allMedicines = [
+            @foreach (var m in Model.FormularyMedicines)
+            {
+                <text>{ id: @m.Id, name: '@Html.Raw(m.Name.Replace("'", "\\'"))', generic: '@Html.Raw(m.GenericName.Replace("'", "\\'"))', display: '@Html.Raw(m.DisplayName.Replace("'", "\\'"))', stock: @m.StockQuantity },</text>
+            }
+        ];
+
+        var rowIndex = 0;
+
+        function refreshEmptyState() {
+            var rowCount = $('#medicinesListContainer .medicine-row').length;
+            if (rowCount === 0) {
+                $('#emptyMedicinesNotice').removeClass('d-none');
+            } else {
+                $('#emptyMedicinesNotice').addClass('d-none');
+            }
+        }
+
+        function reindexRows() {
+            $('#medicinesListContainer .medicine-row').each(function(i) {
+                $(this).attr('data-index', i);
+                $(this).find('input, select').each(function() {
+                    var name = $(this).attr('name');
+                    if (name) {
+                        name = name.replace(/\[\d+\]/, '[' + i + ']');
+                        $(this).attr('name', name);
+                    }
+                });
+            });
+        }
+
+        function getSelectedMedicineIds() {
+            var ids = [];
+            $('#medicinesListContainer .medicine-id-input').each(function() {
+                var val = $(this).val();
+                if (val) ids.push(parseInt(val));
+            });
+            return ids;
+        }
+
+        $('#btnAddMedicineRow').click(function() {
+            var template = $('#medicineRowTemplate').html().replace(/{index}/g, rowIndex);
+            var $row = $(template);
+            $row.hide();
+            $('#medicinesListContainer').append($row);
+            $row.slideDown(200);
+            rowIndex++;
+            refreshEmptyState();
+        });
+
+        $(document).on('click', '.remove-row-btn', function() {
+            var $row = $(this).closest('.medicine-row');
+            $row.slideUp(150, function() {
+                $(this).remove();
+                reindexRows();
+                refreshEmptyState();
+                checkRealTimeSafety();
+            });
+        });
+
+        // Autocomplete search
+        $(document).on('input', '.medicine-search-input', function() {
+            var query = $(this).val().toLowerCase().trim();
+            var $container = $(this).closest('.medicine-row').find('.medicine-search-results');
+            var $row = $(this).closest('.medicine-row');
+
+            if (!query) {
+                $container.hide().empty();
+                return;
+            }
+
+            var selectedIds = getSelectedMedicineIds();
+
+            var matches = allMedicines.filter(function(m) {
+                return m.name.toLowerCase().indexOf(query) !== -1 || m.generic.toLowerCase().indexOf(query) !== -1;
+            });
+
+            $container.empty();
+            if (matches.length === 0) {
+                $container.append('<div class="list-group-item text-muted small py-2 text-center">No formulary match found</div>');
+            } else {
+                matches.slice(0, 10).forEach(function(m) {
+                    var isAlreadySelected = selectedIds.includes(m.id);
+                    var stockBadge = m.stock > 0
+                        ? '<span class="badge bg-light text-secondary border">Stock: ' + m.stock + '</span>'
+                        : '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">Out of Stock</span>';
+
+                    var $item = $('<a href="#" class="list-group-item list-group-item-action py-2 d-flex justify-content-between align-items-center"></a>')
+                        .html('<div><strong>' + m.name + '</strong> <small class="text-muted">(' + m.generic + ')</small></div> ' + stockBadge)
+                        .click(function(e) {
+                            e.preventDefault();
+                            if (isAlreadySelected) {
+                                Swal.fire({
+                                    icon: 'warning',
+                                    title: 'Medicine Already Added',
+                                    text: m.name + ' is already present in this prescription. Please adjust its dose or quantity instead.'
+                                });
+                                $container.hide();
+                                return;
+                            }
+
+                            $row.find('.medicine-id-input').val(m.id);
+                            $row.find('.medicine-search-input').val(m.name);
+                            var $badge = $row.find('.stock-badge');
+                            $badge.html('<i class="bi bi-box-seam me-1"></i>Stock: ' + m.stock).removeClass('d-none');
+                            if (m.stock <= 0) {
+                                $badge.addClass('bg-danger text-white').removeClass('bg-light text-secondary');
+                            } else {
+                                $badge.removeClass('bg-danger text-white').addClass('bg-light text-secondary');
+                            }
+                            $container.hide();
+                            checkRealTimeSafety();
+                        });
+
+                    $container.append($item);
+                });
+            }
+            $container.show();
+        });
+
+        // Hide results dropdown on click outside
+        $(document).click(function(e) {
+            if (!$(e.target).closest('.medicine-row').length) {
+                $('.medicine-search-results').hide();
+            }
+        });
+
+        // Real-Time Safety Check via fetch
+        function checkRealTimeSafety() {
+            var items = [];
+            $('#medicinesListContainer .medicine-row').each(function() {
+                var medId = $(this).find('.medicine-id-input').val();
+                var qty = $(this).find('.qty-input').val();
+                var unit = $(this).find('select[name$=".DoseUnit"]').val();
+                if (medId) {
+                    items.push({
+                        medicineId: parseInt(medId),
+                        quantity: parseInt(qty) || 1,
+                        doseUnit: unit || "Tablet"
+                    });
+                }
+            });
+
+            if (items.length === 0) {
+                $('#safetyWarningsAlertBox').addClass('d-none');
+                return;
+            }
+
+            var token = $('input[name="__RequestVerificationToken"]').val();
+
+            $.ajax({
+                url: '@Url.Action("CheckSafety", "Prescriptions")',
+                type: 'POST',
+                data: {
+                    patientId: @Model.Patient.Id,
+                    itemsJson: JSON.stringify(items),
+                    __RequestVerificationToken: token
+                },
+                success: function(response) {
+                    if (response && response.warnings && response.warnings.length > 0) {
+                        var $list = $('#safetyWarningsList').empty();
+                        response.warnings.forEach(function(w) {
+                            var isCritical = w.severity === "Critical";
+                            var colorClass = isCritical ? "text-danger fw-bold" : "text-dark";
+                            $list.append('<li class="' + colorClass + '"><strong>' + w.category + ':</strong> ' + w.message + '</li>');
+                        });
+                        $('#safetyWarningsAlertBox').removeClass('d-none');
+                    } else {
+                        $('#safetyWarningsAlertBox').addClass('d-none');
+                    }
+                }
+            });
+        }
+
+        // Insert AI Summary into Documentation
+        $('#btnInsertAiSummary').click(function() {
+            var aiText = $('#aiSummaryTextContainer').text().trim();
+            if (!aiText) return;
+
+            var currentDiagnosis = $('#diagnosisInput').val().trim();
+            var currentComplaint = $('#chiefComplaintInput').val().trim();
+
+            if (!currentComplaint) {
+                $('#chiefComplaintInput').val('@Model.Appointment.ReasonForVisit');
+            }
+
+            if (!currentDiagnosis) {
+                $('#diagnosisInput').val(aiText);
+            } else {
+                $('#diagnosisInput').val(currentDiagnosis + "\n[AI Summary]: " + aiText);
+            }
+
+            Swal.fire({
+                icon: 'success',
+                title: 'AI Summary Inserted',
+                text: 'Clinical findings have been inserted into your diagnosis field.',
+                timer: 1500,
+                showConfirmButton: false
+            });
+        });
+
+        // Complete Notes Only (Clears empty medicine rows and submits)
+        $('#btnCompleteNotesOnly').click(function() {
+            $('#medicinesListContainer').empty();
+            refreshEmptyState();
+            $('#btnSubmitEncounter').click();
+        });
+
+        // Form Submit & Double-Click Prevention
+        $('#cockpitForm').on('submit', function(e) {
+            var hasWarnings = !$('#safetyWarningsAlertBox').hasClass('d-none');
+            if (hasWarnings) {
+                var overrideVal = $('#safetyOverrideReasonField').val().trim();
+                if (!overrideVal) {
+                    e.preventDefault();
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Override Reason Required',
+                        text: 'Safety warnings were identified for this prescription. You must provide a clinical rationale in the box to proceed.'
+                    });
+                    $('#safetyOverrideReasonField').focus();
+                    return false;
+                }
+                $('#SafetyOverrideReasonInput').val(overrideVal);
+            }
+
+            // Disable submit button immediately to prevent double-click race
+            $('#btnSubmitEncounter').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Saving Encounter...');
+        });
+
+        function confirmDiscontinueActiveMed(form, medName) {
+            Swal.fire({
+                title: 'Discontinue ' + medName + '?',
+                text: 'This will halt active therapy and exclude it from future drug interaction warnings.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ffc107',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Yes, discontinue'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+            return false;
+        }
+
+        function cancelWalkout(appointmentId) {
+            Swal.fire({
+                title: 'Patient Walkout / Cancel?',
+                text: 'Record reason for cancelling consultation:',
+                input: 'text',
+                inputPlaceholder: 'e.g. Patient left chamber, declined examination...',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Cancel Consultation',
+                inputValidator: (val) => {
+                    if (!val || !val.trim()) return 'Please provide a cancellation reason.';
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $('#cancelAppointmentIdInput').val(appointmentId);
+                    $('#cancelReasonInput').val(result.value);
+                    $('#cancelWalkoutForm').submit();
+                }
+            });
+        }
+    </script>
+}
