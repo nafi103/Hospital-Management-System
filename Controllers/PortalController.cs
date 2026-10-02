@@ -31,19 +31,110 @@ namespace HospitalManagementSystem.Controllers
             _bookingService = bookingService;
         }
 
-        private async Task<Patient?> GetCurrentPatientAsync()
+        private async Task<(Patient? ActivePatient, Patient? PrimaryPatient, List<Patient> Dependents, bool IsIdorForbidden)> ResolvePatientContextAsync(int? requestedPatientId = null)
         {
             var userIdClaim = User.FindFirst("UserId")?.Value;
             if (!int.TryParse(userIdClaim, out int userId))
             {
-                return null;
+                return (null, null, new List<Patient>(), false);
             }
-            return await _context.Patients.FirstOrDefaultAsync(p => p.UserId == userId);
+
+            var primaryPatient = await _context.Patients
+                .Include(p => p.User)
+                .FirstOrDefaultAsync(p => p.UserId == userId);
+
+            if (primaryPatient == null)
+            {
+                return (null, null, new List<Patient>(), false);
+            }
+
+            var dependents = await _context.Patients
+                .Where(p => p.GuardianPatientId == primaryPatient.Id)
+                .OrderBy(p => p.FullName)
+                .ToListAsync();
+
+            var allowedIds = new HashSet<int>(dependents.Select(d => d.Id)) { primaryPatient.Id };
+
+            Patient? activePatient = null;
+
+            if (requestedPatientId.HasValue)
+            {
+                if (!allowedIds.Contains(requestedPatientId.Value))
+                {
+                    // IDOR violation: user requested access to an unlinked patient!
+                    return (null, primaryPatient, dependents, true);
+                }
+
+                activePatient = requestedPatientId.Value == primaryPatient.Id
+                    ? primaryPatient
+                    : dependents.FirstOrDefault(d => d.Id == requestedPatientId.Value);
+
+                SetProfileCookie(activePatient!.Id);
+            }
+            else if (Request.Cookies.TryGetValue("Portal_ActivePatientId", out var cookieVal) &&
+                     int.TryParse(cookieVal, out var cookiePatientId) &&
+                     allowedIds.Contains(cookiePatientId))
+            {
+                activePatient = cookiePatientId == primaryPatient.Id
+                    ? primaryPatient
+                    : dependents.FirstOrDefault(d => d.Id == cookiePatientId);
+            }
+            else
+            {
+                activePatient = primaryPatient;
+            }
+
+            ViewBag.Patient = activePatient;
+            ViewBag.PrimaryPatient = primaryPatient;
+            ViewBag.Dependents = dependents;
+            ViewBag.IsViewingDependent = (activePatient?.Id != primaryPatient.Id);
+
+            return (activePatient, primaryPatient, dependents, false);
         }
 
-        public async Task<IActionResult> Index()
+        private void SetProfileCookie(int patientId)
         {
-            var patient = await GetCurrentPatientAsync();
+            try
+            {
+                Response.Cookies.Append("Portal_ActivePatientId", patientId.ToString(), new Microsoft.AspNetCore.Http.CookieOptions
+                {
+                    HttpOnly = true,
+                    SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax,
+                    Secure = Request.IsHttps,
+                    Expires = DateTimeOffset.UtcNow.AddDays(30)
+                });
+            }
+            catch
+            {
+                // Fallback for mock contexts that do not implement response cookies
+            }
+        }
+
+        // POST: Portal/SwitchProfile
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SwitchProfile(int patientId, string? returnUrl = null)
+        {
+            var (active, primary, dependents, isForbidden) = await ResolvePatientContextAsync(patientId);
+            if (isForbidden || active == null)
+            {
+                return Forbid();
+            }
+
+            SetProfileCookie(active.Id);
+
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
+
+            return RedirectToAction(nameof(Index));
+        }
+
+        public async Task<IActionResult> Index(int? patientId = null)
+        {
+            var (patient, primary, dependents, isForbidden) = await ResolvePatientContextAsync(patientId);
+            if (isForbidden) return Forbid();
             if (patient == null) return Forbid();
 
             var now = DateTime.UtcNow;
@@ -53,7 +144,6 @@ namespace HospitalManagementSystem.Controllers
                 .OrderBy(a => a.AppointmentDatetime)
                 .ToListAsync();
 
-            ViewBag.Patient = patient;
             ViewBag.Upcoming = appointments
                 .Where(a => a.AppointmentDatetime >= now && a.Status != AppointmentStatus.Cancelled)
                 .OrderBy(a => a.AppointmentDatetime)
@@ -66,9 +156,10 @@ namespace HospitalManagementSystem.Controllers
             return View();
         }
 
-        public async Task<IActionResult> Records()
+        public async Task<IActionResult> Records(int? patientId = null)
         {
-            var patient = await GetCurrentPatientAsync();
+            var (patient, _, _, isForbidden) = await ResolvePatientContextAsync(patientId);
+            if (isForbidden) return Forbid();
             if (patient == null) return Forbid();
 
             var records = await _context.MedicalRecords
@@ -77,13 +168,13 @@ namespace HospitalManagementSystem.Controllers
                 .OrderByDescending(r => r.RecordedAt)
                 .ToListAsync();
 
-            ViewBag.Patient = patient;
             return View(records);
         }
 
-        public async Task<IActionResult> Prescriptions()
+        public async Task<IActionResult> Prescriptions(int? patientId = null)
         {
-            var patient = await GetCurrentPatientAsync();
+            var (patient, _, _, isForbidden) = await ResolvePatientContextAsync(patientId);
+            if (isForbidden) return Forbid();
             if (patient == null) return Forbid();
 
             var prescriptions = await _context.Prescriptions
@@ -94,13 +185,13 @@ namespace HospitalManagementSystem.Controllers
                 .OrderByDescending(p => p.CreatedAt)
                 .ToListAsync();
 
-            ViewBag.Patient = patient;
             return View(prescriptions);
         }
 
-        public async Task<IActionResult> Bills()
+        public async Task<IActionResult> Bills(int? patientId = null)
         {
-            var patient = await GetCurrentPatientAsync();
+            var (patient, _, _, isForbidden) = await ResolvePatientContextAsync(patientId);
+            if (isForbidden) return Forbid();
             if (patient == null) return Forbid();
 
             var bills = await _context.Bills
@@ -109,14 +200,14 @@ namespace HospitalManagementSystem.Controllers
                 .OrderByDescending(b => b.CreatedAt)
                 .ToListAsync();
 
-            ViewBag.Patient = patient;
             return View(bills);
         }
 
         // GET: Portal/Doctors
-        public async Task<IActionResult> Doctors(string? search, string? category)
+        public async Task<IActionResult> Doctors(string? search, string? category, int? patientId = null)
         {
-            var patient = await GetCurrentPatientAsync();
+            var (patient, _, _, isForbidden) = await ResolvePatientContextAsync(patientId);
+            if (isForbidden) return Forbid();
             if (patient == null) return Forbid();
 
             var doctors = await _bookingService.GetDoctorDirectoryAsync(search, category);
@@ -130,7 +221,6 @@ namespace HospitalManagementSystem.Controllers
                 .OrderBy(c => c)
                 .ToListAsync();
 
-            ViewBag.Patient = patient;
             ViewBag.Categories = categories;
             ViewBag.CurrentSearch = search;
             ViewBag.CurrentCategory = category;
@@ -153,9 +243,10 @@ namespace HospitalManagementSystem.Controllers
         }
 
         // GET: Portal/Book
-        public async Task<IActionResult> Book(int? doctorId, string? date)
+        public async Task<IActionResult> Book(int? doctorId, string? date, int? patientId = null)
         {
-            var patient = await GetCurrentPatientAsync();
+            var (patient, _, _, isForbidden) = await ResolvePatientContextAsync(patientId);
+            if (isForbidden) return Forbid();
             if (patient == null) return Forbid();
 
             var doctors = await _context.Users
@@ -187,10 +278,10 @@ namespace HospitalManagementSystem.Controllers
                 DoctorName = selectedDoc?.FullName,
                 DoctorCategory = selectedDoc?.Category,
                 SelectedDate = targetDate,
-                AvailableDoctors = doctorItems
+                AvailableDoctors = doctorItems,
+                PatientId = patient.Id
             };
 
-            ViewBag.Patient = patient;
             return View(model);
         }
 
@@ -199,8 +290,8 @@ namespace HospitalManagementSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Book(BookAppointmentViewModel model)
         {
-            var patient = await GetCurrentPatientAsync();
-            if (patient == null) return Forbid();
+            var (patient, primaryPatient, dependents, isForbidden) = await ResolvePatientContextAsync(model.PatientId);
+            if (isForbidden || patient == null) return Forbid();
 
             if (!DateTime.TryParse(model.SelectedSlotTime, null, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var slotStartUtc))
             {
@@ -226,7 +317,10 @@ namespace HospitalManagementSystem.Controllers
                     var patientConflict = await _bookingService.CheckPatientCollisionAsync(patient.Id, slotStartUtc, slotEndUtc);
                     if (patientConflict)
                     {
-                        ModelState.AddModelError("SelectedSlotTime", "You already have another active appointment scheduled during this time interval.");
+                        var errorMsg = patient.Id != primaryPatient?.Id
+                            ? $"{patient.FullName} already has another active appointment scheduled during this time interval."
+                            : "You already have another active appointment scheduled during this time interval.";
+                        ModelState.AddModelError("SelectedSlotTime", errorMsg);
                     }
 
                     if (ModelState.IsValid)
@@ -248,7 +342,8 @@ namespace HospitalManagementSystem.Controllers
 
                         var doctor = await _context.Users.FindAsync(model.DoctorId);
                         var localTime = slotStartUtc.ToHospitalTime();
-                        TempData["SuccessMessage"] = $"Appointment booked successfully with Dr. {doctor?.FullName} on {localTime:dddd, MMM dd} at {localTime:hh:mm tt}!";
+                        var targetName = patient.Id != primaryPatient?.Id ? $" for {patient.FullName}" : "";
+                        TempData["SuccessMessage"] = $"Appointment booked successfully{targetName} with Dr. {doctor?.FullName} on {localTime:dddd, MMM dd} at {localTime:hh:mm tt}!";
                         return RedirectToAction(nameof(Index));
                     }
                 }
@@ -270,8 +365,8 @@ namespace HospitalManagementSystem.Controllers
             var selectedDoctor = doctors.FirstOrDefault(d => d.Id == model.DoctorId);
             model.DoctorName = selectedDoctor?.FullName;
             model.DoctorCategory = selectedDoctor?.Category;
+            model.PatientId = patient.Id;
 
-            ViewBag.Patient = patient;
             return View(model);
         }
 
@@ -280,12 +375,14 @@ namespace HospitalManagementSystem.Controllers
         {
             if (id == null) return NotFound();
 
-            var patient = await GetCurrentPatientAsync();
-            if (patient == null) return Forbid();
+            var (activePatient, primaryPatient, dependents, isForbidden) = await ResolvePatientContextAsync();
+            if (isForbidden || primaryPatient == null) return Forbid();
+
+            var allowedPatientIds = dependents.Select(d => d.Id).Append(primaryPatient.Id).ToList();
 
             var appt = await _context.Appointments
                 .Include(a => a.Doctor)
-                .FirstOrDefaultAsync(a => a.Id == id && a.PatientId == patient.Id);
+                .FirstOrDefaultAsync(a => a.Id == id && allowedPatientIds.Contains(a.PatientId));
 
             if (appt == null) return NotFound();
 
@@ -306,10 +403,10 @@ namespace HospitalManagementSystem.Controllers
                 CurrentDatetimeDisplay = localTime.ToString("dddd, MMM dd, yyyy - hh:mm tt"),
                 SelectedDate = localTime.ToString("yyyy-MM-dd"),
                 ReasonForVisit = appt.ReasonForVisit,
-                Version = appt.Version
+                Version = appt.Version,
+                PatientId = appt.PatientId
             };
 
-            ViewBag.Patient = patient;
             return View(model);
         }
 
@@ -318,12 +415,14 @@ namespace HospitalManagementSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Reschedule(RescheduleAppointmentViewModel model)
         {
-            var patient = await GetCurrentPatientAsync();
-            if (patient == null) return Forbid();
+            var (activePatient, primaryPatient, dependents, isForbidden) = await ResolvePatientContextAsync();
+            if (isForbidden || primaryPatient == null) return Forbid();
+
+            var allowedPatientIds = dependents.Select(d => d.Id).Append(primaryPatient.Id).ToList();
 
             var tracked = await _context.Appointments
                 .Include(a => a.Doctor)
-                .FirstOrDefaultAsync(a => a.Id == model.AppointmentId && a.PatientId == patient.Id);
+                .FirstOrDefaultAsync(a => a.Id == model.AppointmentId && allowedPatientIds.Contains(a.PatientId));
 
             if (tracked == null) return NotFound();
 
@@ -353,10 +452,10 @@ namespace HospitalManagementSystem.Controllers
                         ModelState.AddModelError("SelectedSlotTime", "This time slot is no longer available. Please select another slot.");
                     }
 
-                    var patientConflict = await _bookingService.CheckPatientCollisionAsync(patient.Id, slotStartUtc, slotEndUtc, tracked.Id);
+                    var patientConflict = await _bookingService.CheckPatientCollisionAsync(tracked.PatientId, slotStartUtc, slotEndUtc, tracked.Id);
                     if (patientConflict)
                     {
-                        ModelState.AddModelError("SelectedSlotTime", "You already have another active appointment scheduled during this time interval.");
+                        ModelState.AddModelError("SelectedSlotTime", "Another active appointment is already scheduled during this time interval.");
                     }
 
                     if (model.Version > 0 && _context.Database.IsRelational())
@@ -401,8 +500,8 @@ namespace HospitalManagementSystem.Controllers
             model.DoctorCategory = tracked.Doctor?.Category;
             model.CurrentDatetimeDisplay = currentLocal.ToString("dddd, MMM dd, yyyy - hh:mm tt");
             model.Version = tracked.Version;
+            model.PatientId = tracked.PatientId;
 
-            ViewBag.Patient = patient;
             return View(model);
         }
 
@@ -411,12 +510,14 @@ namespace HospitalManagementSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Cancel(int id)
         {
-            var patient = await GetCurrentPatientAsync();
-            if (patient == null) return Forbid();
+            var (activePatient, primaryPatient, dependents, isForbidden) = await ResolvePatientContextAsync();
+            if (isForbidden || primaryPatient == null) return Forbid();
+
+            var allowedPatientIds = dependents.Select(d => d.Id).Append(primaryPatient.Id).ToList();
 
             var appt = await _context.Appointments
                 .Include(a => a.Doctor)
-                .FirstOrDefaultAsync(a => a.Id == id && a.PatientId == patient.Id);
+                .FirstOrDefaultAsync(a => a.Id == id && allowedPatientIds.Contains(a.PatientId));
 
             if (appt == null) return NotFound();
 
@@ -438,7 +539,7 @@ namespace HospitalManagementSystem.Controllers
             await _context.SaveChangesAsync();
 
             var doctorName = appt.Doctor != null ? $"Dr. {appt.Doctor.FullName}" : "doctor";
-            TempData["SuccessMessage"] = $"Your appointment with {doctorName} was successfully cancelled. The time slot has been released.";
+            TempData["SuccessMessage"] = $"The appointment with {doctorName} was successfully cancelled. The time slot has been released.";
             return RedirectToAction(nameof(Index));
         }
     }

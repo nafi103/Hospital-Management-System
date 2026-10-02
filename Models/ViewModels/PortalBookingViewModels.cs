@@ -56,6 +56,7 @@ namespace HospitalManagementSystem.Models.ViewModels
         [Display(Name = "Reason for Visit")]
         public string ReasonForVisit { get; set; } = string.Empty;
 
+        public int? PatientId { get; set; }
         public List<SelectListItem>? AvailableDoctors { get; set; }
     }
 
@@ -82,5 +83,6 @@ namespace HospitalManagementSystem.Models.ViewModels
         public string? ReasonForVisit { get; set; }
 
         public uint Version { get; set; }
+        public int? PatientId { get; set; }
     }
 }

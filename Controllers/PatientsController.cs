@@ -143,7 +143,11 @@ namespace HospitalManagementSystem.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [Authorize(Roles = "Assistant,Admin,Receptionist")]
-        public async Task<IActionResult> Create([Bind("IsChild,FullName,ContactInfo,DateOfBirth,Gender,BloodGroup,EmergencyContactName,EmergencyContactPhone")] Patient patient, bool issuePortalLogin = false)
+        public async Task<IActionResult> Create(
+            [Bind("IsChild,FullName,ContactInfo,DateOfBirth,Gender,BloodGroup,EmergencyContactName,EmergencyContactPhone")] Patient patient,
+            string? guardianUhid = null,
+            string? guardianRelationship = null,
+            bool issuePortalLogin = false)
         {
             // Remove properties that are auto-generated from ModelState validation
             ModelState.Remove("Uhid");
@@ -154,6 +158,36 @@ namespace HospitalManagementSystem.Controllers
             
             if (patient.IsChild)
             {
+                if (!string.IsNullOrWhiteSpace(guardianUhid))
+                {
+                    var trimmedUhid = guardianUhid.Trim();
+                    var guardian = await _context.Patients.FirstOrDefaultAsync(p => p.Uhid == trimmedUhid);
+                    if (guardian == null)
+                    {
+                        ModelState.AddModelError("GuardianUhid", $"Guardian patient with UHID '{trimmedUhid}' was not found.");
+                    }
+                    else
+                    {
+                        patient.GuardianPatientId = guardian.Id;
+                        patient.GuardianRelationship = !string.IsNullOrWhiteSpace(guardianRelationship) ? guardianRelationship.Trim() : "Guardian";
+
+                        // UX convenience: Auto-fill emergency contact details from guardian if blank
+                        if (string.IsNullOrWhiteSpace(patient.EmergencyContactName))
+                        {
+                            patient.EmergencyContactName = guardian.FullName;
+                            ModelState.Remove("EmergencyContactName");
+                        }
+                        if (!patient.EmergencyContactPhone.HasValue)
+                        {
+                            patient.EmergencyContactPhone = guardian.ContactInfo ?? guardian.EmergencyContactPhone;
+                            if (patient.EmergencyContactPhone.HasValue)
+                            {
+                                ModelState.Remove("EmergencyContactPhone");
+                            }
+                        }
+                    }
+                }
+
                 if (string.IsNullOrWhiteSpace(patient.EmergencyContactName)) ModelState.AddModelError("EmergencyContactName", "Guardian Name is required for minors.");
                 if (!patient.EmergencyContactPhone.HasValue) ModelState.AddModelError("EmergencyContactPhone", "Guardian Phone is required for minors.");
                 
@@ -261,10 +295,13 @@ namespace HospitalManagementSystem.Controllers
 
                 return RedirectAfterPatientSave();
             }
+
+            ViewBag.GuardianUhid = guardianUhid;
+            ViewBag.GuardianRelationship = guardianRelationship;
             return View(patient);
         }
         // GET: Patients/Edit/5
-        [Authorize(Roles = "Assistant,Admin")]
+        [Authorize(Roles = "Assistant,Admin,Receptionist")]
         public async Task<IActionResult> Edit(int? id)
         {
             if (id == null) return NotFound();
@@ -282,16 +319,24 @@ namespace HospitalManagementSystem.Controllers
                 if (!hasCareRelationship) return Forbid();
             }
 
-            var patient = await _context.Patients.FindAsync(id);
+            var patient = await _context.Patients
+                .Include(p => p.GuardianPatient)
+                .FirstOrDefaultAsync(p => p.Id == id);
             if (patient == null) return NotFound();
             
+            ViewBag.GuardianUhid = patient.GuardianPatient?.Uhid;
+            ViewBag.GuardianRelationship = patient.GuardianRelationship;
             return View(patient);
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [Authorize(Roles = "Assistant,Admin")]
-        public async Task<IActionResult> Edit(int id, [Bind("Id,Uhid,IsChild,FullName,ContactInfo,DateOfBirth,Gender,BloodGroup,EmergencyContactName,EmergencyContactPhone,CreatedAt")] Patient patient)
+        [Authorize(Roles = "Assistant,Admin,Receptionist")]
+        public async Task<IActionResult> Edit(
+            int id,
+            [Bind("Id,Uhid,IsChild,FullName,ContactInfo,DateOfBirth,Gender,BloodGroup,EmergencyContactName,EmergencyContactPhone,CreatedAt")] Patient patient,
+            string? guardianUhid = null,
+            string? guardianRelationship = null)
         {
             if (id != patient.Id) return NotFound();
 
@@ -320,6 +365,30 @@ namespace HospitalManagementSystem.Controllers
 
             if (patient.IsChild)
             {
+                if (!string.IsNullOrWhiteSpace(guardianUhid))
+                {
+                    var trimmedUhid = guardianUhid.Trim();
+                    var guardian = await _context.Patients.FirstOrDefaultAsync(p => p.Uhid == trimmedUhid);
+                    if (guardian == null)
+                    {
+                        ModelState.AddModelError("GuardianUhid", $"Guardian patient with UHID '{trimmedUhid}' was not found.");
+                    }
+                    else if (guardian.Id == id)
+                    {
+                        ModelState.AddModelError("GuardianUhid", "A patient cannot be their own guardian.");
+                    }
+                    else
+                    {
+                        patient.GuardianPatientId = guardian.Id;
+                        patient.GuardianRelationship = !string.IsNullOrWhiteSpace(guardianRelationship) ? guardianRelationship.Trim() : "Guardian";
+                    }
+                }
+                else
+                {
+                    patient.GuardianPatientId = null;
+                    patient.GuardianRelationship = null;
+                }
+
                 if (string.IsNullOrWhiteSpace(patient.EmergencyContactName)) ModelState.AddModelError("EmergencyContactName", "Guardian Name is required for minors.");
                 if (!patient.EmergencyContactPhone.HasValue) ModelState.AddModelError("EmergencyContactPhone", "Guardian Phone is required for minors.");
                 
@@ -329,6 +398,9 @@ namespace HospitalManagementSystem.Controllers
             }
             else
             {
+                patient.GuardianPatientId = null;
+                patient.GuardianRelationship = null;
+
                 if (string.IsNullOrWhiteSpace(patient.FullName)) ModelState.AddModelError("FullName", "Patient Name is required for adults.");
                 if (string.IsNullOrWhiteSpace(patient.EmergencyContactName)) ModelState.AddModelError("EmergencyContactName", "Emergency Contact Name is required.");
                 if (!patient.EmergencyContactPhone.HasValue) ModelState.AddModelError("EmergencyContactPhone", "Emergency Contact Phone is required.");
@@ -354,6 +426,9 @@ namespace HospitalManagementSystem.Controllers
                 }
                 return RedirectAfterPatientSave();
             }
+
+            ViewBag.GuardianUhid = guardianUhid;
+            ViewBag.GuardianRelationship = guardianRelationship;
             return View(patient);
         }
 

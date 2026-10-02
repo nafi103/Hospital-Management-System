@@ -5,9 +5,11 @@
     var patient = (Patient)ViewBag.Patient;
 }
 
+@await Html.PartialAsync("_PortalDependentBanner")
+
 <div class="mb-4 border-bottom pb-3">
-    <h2 class="mb-1">My Medical Records</h2>
-    <p class="text-muted mb-0">Visit history for UHID: <span class="fw-medium">@patient.Uhid</span></p>
+    <h2 class="mb-1">@(ViewBag.IsViewingDependent == true ? $"{patient.FullName}'s Medical Records" : "My Medical Records")</h2>
+    <p class="text-muted mb-0">Visit history for UHID: <span class="fw-medium font-monospace">@patient.Uhid</span></p>
 </div>
 
 @if (Model != null && Model.Any())

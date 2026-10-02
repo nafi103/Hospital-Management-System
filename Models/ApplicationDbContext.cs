@@ -160,6 +160,16 @@ namespace HospitalManagementSystem.Models
                 .HasIndex(p => p.UserId)
                 .IsUnique();
 
+            // Self-referencing link for dependent / family accounts (pediatric care)
+            modelBuilder.Entity<Patient>()
+                .HasOne(p => p.GuardianPatient)
+                .WithMany(g => g.Dependents)
+                .HasForeignKey(p => p.GuardianPatientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Patient>()
+                .HasIndex(p => p.GuardianPatientId);
+
             // Seed Data
             modelBuilder.Entity<Role>().HasData(
                 new Role { Id = 1, RoleName = "Admin", Permissions = "All", CreatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc), UpdatedAt = new System.DateTime(2024, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) },

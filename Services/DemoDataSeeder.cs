@@ -273,6 +273,22 @@ namespace HospitalManagementSystem.Services
             }
 
             await _context.SaveChangesAsync();
+
+            // Link pediatric dependents to guardian family accounts
+            if (result.TryGetValue("baby1", out var baby1Patient) && result.TryGetValue("rahim", out var rahimPatient))
+            {
+                baby1Patient.GuardianPatientId = rahimPatient.Id;
+                baby1Patient.GuardianRelationship = "Father";
+                baby1Patient.FullName = "Ayan Uddin";
+            }
+            if (result.TryGetValue("baby2", out var baby2Patient) && result.TryGetValue("fatema", out var fatemaPatient))
+            {
+                baby2Patient.GuardianPatientId = fatemaPatient.Id;
+                baby2Patient.GuardianRelationship = "Mother";
+                baby2Patient.FullName = "Zara Begum";
+            }
+
+            await _context.SaveChangesAsync();
             return result;
         }
 

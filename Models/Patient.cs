@@ -42,6 +42,15 @@ namespace HospitalManagementSystem.Models
         public int? UserId { get; set; }
         public User? User { get; set; }
 
+        // Self-referential link for pediatric dependents and family account management
+        public int? GuardianPatientId { get; set; }
+        public Patient? GuardianPatient { get; set; }
+
+        [MaxLength(50)]
+        public string? GuardianRelationship { get; set; }
+
+        public List<Patient> Dependents { get; set; } = new List<Patient>();
+
         public List<Admission> Admissions { get; set; } = new List<Admission>();
         public List<PatientAllergy> Allergies { get; set; } = new List<PatientAllergy>();
     }

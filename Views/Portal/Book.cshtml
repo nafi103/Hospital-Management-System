@@ -5,6 +5,8 @@
     var maxDate = HospitalManagementSystem.Services.HospitalClock.Today.AddDays(30).ToString("yyyy-MM-dd");
 }
 
+@await Html.PartialAsync("_PortalDependentBanner")
+
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4 border-bottom pb-3">
     <div>
         <h2 class="mb-1"><i class="bi bi-calendar-plus text-primary me-2"></i>Book Doctor Consultation</h2>
@@ -22,6 +24,7 @@
 
 <form method="post" asp-action="Book" id="bookAppointmentForm">
     @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="PatientId" />
 
     @if (!ViewData.ModelState.IsValid)
     {

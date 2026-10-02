@@ -32,6 +32,36 @@
                     <label class="form-check-label fw-medium text-primary" for="IsChildToggle">Registering a Minor/Child?</label>
                 </div>
 
+                <div id="guardianSection" class="p-3 mb-4 rounded-3 border border-primary-subtle bg-light" style="display: none;">
+                    <div class="d-flex align-items-center gap-2 mb-2 text-primary">
+                        <i class="bi bi-people-fill fs-5"></i>
+                        <h6 class="mb-0 fw-bold">Family / Guardian Account Linking (Optional)</h6>
+                    </div>
+                    <p class="text-muted small mb-3">
+                        Specify a registered parent or guardian's UHID to securely link accounts. The guardian will automatically be able to manage this child's appointments, medical records, and billing through their Patient Portal.
+                    </p>
+                    <div class="row g-3">
+                        <div class="col-md-7">
+                            <label class="form-label fw-medium small">Guardian UHID</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white"><i class="bi bi-person-badge text-muted"></i></span>
+                                <input type="text" name="guardianUhid" class="form-control font-monospace" placeholder="e.g. PT-202610-0100" value="@ViewBag.GuardianUhid" />
+                            </div>
+                            <span class="text-danger small">@Html.ValidationMessage("GuardianUhid")</span>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label fw-medium small">Relationship</label>
+                            <select name="guardianRelationship" class="form-select">
+                                <option value="Mother" selected="@(ViewBag.GuardianRelationship == "Mother")">Mother</option>
+                                <option value="Father" selected="@(ViewBag.GuardianRelationship == "Father")">Father</option>
+                                <option value="Legal Guardian" selected="@(ViewBag.GuardianRelationship == "Legal Guardian")">Legal Guardian</option>
+                                <option value="Grandparent" selected="@(ViewBag.GuardianRelationship == "Grandparent")">Grandparent</option>
+                                <option value="Other" selected="@(ViewBag.GuardianRelationship == "Other")">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
                 <h5 class="card-title text-primary mb-4 border-bottom pb-2">Personal Information</h5>
                 
                 <div class="row g-4 mb-4">
@@ -137,6 +167,7 @@
             function toggleChildMode() {
                 var isChild = $('#IsChildToggle').is(':checked');
                 if (isChild) {
+                    $('#guardianSection').show();
                     $('#lblFullName').html('Child\'s Name <span class="text-muted fs-6 fw-normal">(Optional)</span>');
                     $('#contactInfoDiv').hide();
                     $('#lblEmergencyName').html('Guardian Name <span class="text-danger">*</span>');
@@ -144,6 +175,7 @@
                     $('#IssuePortalLoginToggle').prop('checked', false);
                     $('#portalLoginDiv').hide();
                 } else {
+                    $('#guardianSection').hide();
                     $('#lblFullName').html('Patient Name <span class="text-danger">*</span>');
                     $('#contactInfoDiv').show();
                     $('#lblContactInfo').html('Phone Number <span class="text-danger">*</span>');

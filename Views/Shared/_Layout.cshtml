@@ -178,6 +178,67 @@
                         </button>
                         @if (User.Identity.IsAuthenticated)
                         {
+                            @if (User.IsInRole("Patient") && ViewBag.Dependents is List<HospitalManagementSystem.Models.Patient> dependents && dependents.Any())
+                            {
+                                var activePatient = ViewBag.Patient as HospitalManagementSystem.Models.Patient;
+                                var primaryPatient = ViewBag.PrimaryPatient as HospitalManagementSystem.Models.Patient;
+                                var isChildActive = activePatient?.Id != primaryPatient?.Id;
+
+                                <div class="dropdown me-1">
+                                    <button class="btn btn-sm @(isChildActive ? "btn-info text-dark" : "btn-outline-primary") dropdown-toggle d-flex align-items-center gap-1 shadow-xs fw-medium" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="bi @(isChildActive ? "bi-person-heart" : "bi-people-fill")"></i>
+                                        <span>@(isChildActive ? activePatient?.FullName : "My Profile")</span>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 py-2" style="min-width: 250px;">
+                                        <li class="dropdown-header text-uppercase fs-7 fw-bold text-muted px-3">Primary Account</li>
+                                        <li>
+                                            <form asp-controller="Portal" asp-action="SwitchProfile" method="post" class="m-0">
+                                                <input type="hidden" name="patientId" value="@primaryPatient?.Id" />
+                                                <button type="submit" class="dropdown-item py-2 px-3 d-flex align-items-center justify-content-between @(!isChildActive ? "active fw-bold" : "")">
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <i class="bi bi-person-fill"></i>
+                                                        <div>
+                                                            <div>@primaryPatient?.FullName (You)</div>
+                                                            <small class="text-muted d-block font-monospace">@primaryPatient?.Uhid</small>
+                                                        </div>
+                                                    </div>
+                                                    @if (!isChildActive)
+                                                    {
+                                                        <i class="bi bi-check-lg text-primary ms-2"></i>
+                                                    }
+                                                </button>
+                                            </form>
+                                        </li>
+                                        <li><hr class="dropdown-divider my-2"></li>
+                                        <li class="dropdown-header text-uppercase fs-7 fw-bold text-muted px-3">Dependents & Children</li>
+                                        @foreach (var dep in dependents)
+                                        {
+                                            var isThisActive = activePatient?.Id == dep.Id;
+                                            <li>
+                                                <form asp-controller="Portal" asp-action="SwitchProfile" method="post" class="m-0">
+                                                    <input type="hidden" name="patientId" value="@dep.Id" />
+                                                    <button type="submit" class="dropdown-item py-2 px-3 d-flex align-items-center justify-content-between @(isThisActive ? "active fw-bold" : "")">
+                                                        <div class="d-flex align-items-center gap-2">
+                                                            <i class="bi bi-person-heart text-info"></i>
+                                                            <div>
+                                                                <div>@dep.FullName</div>
+                                                                <small class="text-muted d-block">
+                                                                    <span class="font-monospace">@dep.Uhid</span> • @(dep.GuardianRelationship ?? "Child")
+                                                                </small>
+                                                            </div>
+                                                        </div>
+                                                        @if (isThisActive)
+                                                        {
+                                                            <i class="bi bi-check-lg text-primary ms-2"></i>
+                                                        }
+                                                    </button>
+                                                </form>
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+
                             <div class="d-flex align-items-center text-muted gap-2">
                                 <i class="bi bi-person-circle fs-5"></i>
                                 <span class="fw-medium">@User.Identity.Name</span>

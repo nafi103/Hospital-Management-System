@@ -8,6 +8,8 @@
     var next = upcoming.FirstOrDefault();
 }
 
+@await Html.PartialAsync("_PortalDependentBanner")
+
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4 border-bottom pb-4">
     <div>
         <h2 class="mb-1">Welcome, @(string.IsNullOrEmpty(patient.FullName) ? patient.Uhid : patient.FullName)</h2>

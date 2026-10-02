@@ -1,0 +1,36 @@
+@{
+    var isViewingDependent = ViewBag.IsViewingDependent as bool? == true;
+    var activeDependent = ViewBag.Patient as HospitalManagementSystem.Models.Patient;
+    var primaryGuardian = ViewBag.PrimaryPatient as HospitalManagementSystem.Models.Patient;
+}
+
+@if (isViewingDependent && activeDependent != null && primaryGuardian != null)
+{
+    <div class="alert alert-info border-0 shadow-sm rounded-3 mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3 bg-info bg-opacity-10 text-dark">
+        <div class="d-flex align-items-center gap-3">
+            <div class="bg-info bg-opacity-25 rounded-circle p-2 d-flex align-items-center justify-content-center text-info" style="width: 44px; height: 44px;">
+                <i class="bi bi-person-heart fs-4"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6">
+                    Managing Healthcare Profile: <span class="text-primary">@activeDependent.FullName</span>
+                    <span class="badge bg-info text-dark ms-2">@(activeDependent.GuardianRelationship ?? "Dependent Child")</span>
+                </div>
+                <div class="text-muted small">
+                    UHID: <span class="font-monospace fw-semibold">@activeDependent.Uhid</span> |
+                    Blood Group: <span class="fw-semibold">@(string.IsNullOrEmpty(activeDependent.BloodGroup) ? "Unknown" : activeDependent.BloodGroup)</span> |
+                    All appointments, records, and prescriptions below are scoped to this profile.
+                </div>
+            </div>
+        </div>
+        <div>
+            <form asp-controller="Portal" asp-action="SwitchProfile" method="post" class="m-0">
+                <input type="hidden" name="patientId" value="@primaryGuardian.Id" />
+                <button type="submit" class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1 shadow-xs">
+                    <i class="bi bi-arrow-left-right"></i>
+                    <span>Switch to @primaryGuardian.FullName (You)</span>
+                </button>
+            </form>
+        </div>
+    </div>
+}
