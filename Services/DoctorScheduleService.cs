@@ -55,6 +55,15 @@ namespace HospitalManagementSystem.Services
                 .Select(a => new { a.AppointmentDatetime, a.EndTime })
                 .ToListAsync(ct);
 
+            var bookedOperations = await _context.Operations
+                .AsNoTracking()
+                .Where(o => o.SurgeonId == doctorId
+                         && o.Status != OperationStatus.Completed
+                         && o.OperationDatetime < dayEndUtc
+                         && o.OperationDatetime.AddHours(2) > dayStartUtc)
+                .Select(o => new { o.OperationDatetime, EndTime = o.OperationDatetime.AddHours(2) })
+                .ToListAsync(ct);
+
             var morningSlots = new List<AvailableSlotDto>();
             var afternoonSlots = new List<AvailableSlotDto>();
             var nowUtc = DateTime.UtcNow;
@@ -86,10 +95,17 @@ namespace HospitalManagementSystem.Services
                     {
                         // Overlapping conflict check: (AppointmentDatetime < slotEndUtc && EndTime > slotStartUtc)
                         var conflict = booked.Any(b => b.AppointmentDatetime < slotEndUtc && b.EndTime > slotStartUtc);
+                        var surgeryConflict = bookedOperations.Any(o => o.OperationDatetime < slotEndUtc && o.EndTime > slotStartUtc);
+
                         if (conflict)
                         {
                             isAvailable = false;
                             reason = "Booked";
+                        }
+                        else if (surgeryConflict)
+                        {
+                            isAvailable = false;
+                            reason = "In Surgery";
                         }
                     }
 
@@ -151,7 +167,19 @@ namespace HospitalManagementSystem.Services
                 query = query.Where(a => a.Id != excludeAppointmentId.Value);
             }
 
-            return await query.AnyAsync(ct);
+            if (await query.AnyAsync(ct))
+            {
+                return true;
+            }
+
+            // Cross-check surgical operations: prevent booking an outpatient clinic slot while scheduled in OT
+            return await _context.Operations
+                .AsNoTracking()
+                .Where(o => o.SurgeonId == doctorId
+                         && o.Status != OperationStatus.Completed
+                         && o.OperationDatetime < endUtc
+                         && o.OperationDatetime.AddHours(2) > startUtc)
+                .AnyAsync(ct);
         }
 
         public async Task<bool> CheckPatientCollisionAsync(

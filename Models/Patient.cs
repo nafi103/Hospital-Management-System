@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace HospitalManagementSystem.Models
@@ -15,6 +16,9 @@ namespace HospitalManagementSystem.Models
         public string Uhid { get; set; }
         
         public bool IsChild { get; set; }
+
+        [NotMapped]
+        public bool IsPediatric => IsChild || (DateOfBirth != default && DateOfBirth.AddYears(18) > (HospitalManagementSystem.Services.HospitalClock.Now));
         
         public string? FullName { get; set; }
         

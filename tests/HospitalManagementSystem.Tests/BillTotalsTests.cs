@@ -142,4 +142,48 @@ public class BillTotalsTests
         Assert.Equal(350m, remainingBalance);
         Assert.Equal(BillStatus.PartiallyPaid, bill.Status);
     }
+
+    [Fact]
+    public void RecalculateTotals_NullBillItems_ThrowsInvalidOperationException()
+    {
+        var bill = new Bill
+        {
+            BillItems = null!
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => bill.RecalculateTotals());
+        Assert.Contains("BillItems navigation collection must be loaded", ex.Message);
+    }
+
+    [Fact]
+    public void RecalculateTotals_ZeroSubtotalBill_DoesNotTransitionToPaid()
+    {
+        var bill = new Bill
+        {
+            DiscountAmount = 0m,
+            PaidAmount = 0m,
+            BillItems = new List<BillItem>()
+        };
+
+        bill.RecalculateTotals();
+
+        Assert.Equal(0m, bill.SubtotalAmount);
+        Assert.Equal(0m, bill.NetTotal);
+        Assert.Equal(BillStatus.Unpaid, bill.Status);
+    }
+
+    [Fact]
+    public void RecalculateTotals_AutomaticallyDerivesPaidAmountFromPaymentTransactions()
+    {
+        var bill = MakeBill(itemAmounts: [500m]);
+        bill.PaymentTransactions.Add(new PaymentTransaction { Amount = 200m, PaymentMethod = "Cash", TransactionDate = DateTime.UtcNow });
+        bill.PaymentTransactions.Add(new PaymentTransaction { Amount = 300m, PaymentMethod = "bKash", TransactionDate = DateTime.UtcNow });
+
+        // Notice we do NOT manually set bill.PaidAmount; RecalculateTotals must recompute it from ledger
+        bill.RecalculateTotals();
+
+        Assert.Equal(500m, bill.PaidAmount);
+        Assert.Equal(BillStatus.Paid, bill.Status);
+    }
 }
+

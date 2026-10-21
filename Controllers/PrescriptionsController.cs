@@ -243,7 +243,7 @@ namespace HospitalManagementSystem.Controllers
 
             var activeMedications = await GetActiveMedicationsAsync(patientId);
 
-            return PrescriptionSafetyChecker.Check(patient.IsChild, allergies, items, allMedicines, activeMedications);
+            return PrescriptionSafetyChecker.Check(patient.IsPediatric, allergies, items, allMedicines, activeMedications);
         }
 
         // POST: Prescriptions/Create

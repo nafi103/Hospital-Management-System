@@ -178,6 +178,7 @@ namespace HospitalManagementSystem.Services
         {
             var rawBuffer = new StringBuilder();
             var sentLength = 0;
+            var holdBackMargin = Math.Max(maxPseudonymLength, 32);
 
             await foreach (var chunk in chunks.WithCancellation(ct))
             {
@@ -189,7 +190,24 @@ namespace HospitalManagementSystem.Services
                 rawBuffer.Append(chunk.Text);
 
                 var fullyRehydrated = _scrubber.Rehydrate(rawBuffer.ToString(), scrubbed.Map);
-                var safeLength = Math.Min(fullyRehydrated.Length, Math.Max(sentLength, fullyRehydrated.Length - maxPseudonymLength));
+                var safeLength = Math.Min(fullyRehydrated.Length, Math.Max(sentLength, fullyRehydrated.Length - holdBackMargin));
+
+                // Stateful lookahead buffer: hold back incomplete bracket sequences ('[' or '[[')
+                // so split tokens (e.g. [PATIENT_NAME] or [[rec:12]]) never leak across chunk boundaries
+                if (safeLength > sentLength)
+                {
+                    var candidate = fullyRehydrated[..safeLength];
+                    var lastOpenBracket = candidate.LastIndexOf('[');
+                    if (lastOpenBracket >= sentLength)
+                    {
+                        var lastCloseBracket = candidate.LastIndexOf(']');
+                        if (lastCloseBracket < lastOpenBracket)
+                        {
+                            safeLength = lastOpenBracket;
+                        }
+                    }
+                }
+
                 if (safeLength > sentLength)
                 {
                     var delta = fullyRehydrated[sentLength..safeLength];

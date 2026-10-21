@@ -49,6 +49,15 @@ namespace HospitalManagementSystem.Models
                 .Property(a => a.Version)
                 .IsRowVersion();
 
+            // Filtered unique index: prevents concurrent INSERT collisions and double-booking for the same doctor and slot.
+            // PostgreSQL xmin only guards concurrent UPDATE/DELETE on existing rows; brand-new concurrent bookings
+            // execute simultaneous INSERTs. Filtering on Status <> 2 (Cancelled) allows re-booking cancelled slots.
+            modelBuilder.Entity<Appointment>()
+                .HasIndex(a => new { a.DoctorId, a.AppointmentDatetime })
+                .HasDatabaseName("ix_appointments_doctor_slot_active")
+                .IsUnique()
+                .HasFilter("\"Status\" <> 2");
+
             modelBuilder.Entity<BedTransfer>()
                 .HasOne(bt => bt.Bed)
                 .WithMany(b => b.BedTransfers)
@@ -102,6 +111,13 @@ namespace HospitalManagementSystem.Models
                 .WithMany(b => b.PaymentTransactions)
                 .HasForeignKey(pt => pt.BillId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Filtered unique index: guarantees ledger idempotency for payment gateway transactions (bKash/card)
+            modelBuilder.Entity<PaymentTransaction>()
+                .HasIndex(pt => pt.TransactionId)
+                .HasDatabaseName("ix_payment_transactions_transaction_id")
+                .IsUnique()
+                .HasFilter("\"TransactionId\" IS NOT NULL");
 
             modelBuilder.Entity<PatientVital>()
                 .HasOne(v => v.RecordedBy)

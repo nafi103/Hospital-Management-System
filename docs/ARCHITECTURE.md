@@ -1,7 +1,6 @@
 # Architecture
 
-Three diagrams: the overall layering, the AI spine's actual request/response sequence, and the
-authorization model. All three are traced from the running code, not idealized.
+Layering, the AI spine's actual request/response sequence, the authorization model, financial transaction flow, and clinical scheduling guarantees — all traced from the running code.
 
 ## 1. Layers
 
@@ -10,8 +9,8 @@ flowchart TB
     Browser["Browser<br/>(Razor views, Bootstrap, vanilla JS)"]
 
     subgraph App["ASP.NET Core 10 MVC"]
-        Controllers["Controllers<br/>(one per resource: Patients, Appointments, Bills, Reports, ...)"]
-        Services["Services<br/>(PhiScrubber, AiProviderResolver, ClinicalAiService,<br/>News2Calculator, ApiKeyProtector, DemoDataSeeder)"]
+        Controllers["Controllers<br/>(Patients, Appointments, DoctorDashboard, Bills, Bkash, Portal, ...)"]
+        Services["Services<br/>(PhiScrubber, AiProviderResolver, ClinicalAiService, PrescriptionSafetyChecker,<br/>News2Calculator, DoctorScheduleService, BkashPaymentService, ApiKeyProtector, DemoDataSeeder)"]
         Hubs["SignalR Hubs<br/>(NotificationHub, AiStreamHub)"]
     end
 
@@ -19,6 +18,7 @@ flowchart TB
     DB[("PostgreSQL 18")]
 
     AiProviders["External AI providers<br/>(Gemini / Groq / Anthropic)"]
+    BkashGateway["External Payment Gateway<br/>(bKash Tokenized Checkout API)"]
 
     Browser -- "HTTP (forms, fetch)" --> Controllers
     Browser <-- "WebSocket (live updates, AI token stream)" --> Hubs
@@ -28,13 +28,15 @@ flowchart TB
     Hubs --> Services
     EFCore --> DB
     Services -- "scrubbed text only" --> AiProviders
+    Services -- "REST (tokenized checkout)" --> BkashGateway
 ```
 
 Every controller talks to `ApplicationDbContext` directly for straightforward CRUD — there is no
 repository layer, which is a deliberate scope decision, not an oversight: with one DbContext and no
 second data source, a repository would only add indirection. The `Services/` layer exists for logic
-that either has real business rules (`News2Calculator`, `PhiScrubber`), coordinates multiple
-concerns (`ClinicalAiService`), or is cross-cutting (`ApiKeyProtector`, `DemoDataSeeder`).
+that either has real business rules (`News2Calculator`, `PhiScrubber`, `PrescriptionSafetyChecker`),
+coordinates external vendor APIs (`ClinicalAiService`, `BkashPaymentService`), handles scheduling algorithms
+(`DoctorScheduleService`), or is cross-cutting (`ApiKeyProtector`, `DemoDataSeeder`, `HospitalClock`).
 
 ## 2. The AI spine — end-to-end sequence
 
@@ -52,6 +54,7 @@ sequenceDiagram
     participant Hub as AiStreamHub
     participant Ctrl as AiReviewController
     participant Svc as ClinicalAiService
+    participant Cache as IMemoryCache
     participant Scrub as PhiScrubber
     participant Resolver as AiProviderResolver
     participant Provider as AI Provider (Gemini/Groq/Anthropic)
@@ -62,9 +65,16 @@ sequenceDiagram
     Browser->>Ctrl: POST GenerateCaseSummary(patientId, streamId)
     Ctrl->>Svc: GenerateCaseSummaryAsync(patientId, userId, streamId)
 
-    Svc->>DB: Load patient + last 10 MedicalRecords
-    Svc->>Scrub: Scrub(recordText, patient)
-    Scrub-->>Svc: pseudonymized text + reversal map
+    Svc->>DB: Load patient + last 10 MedicalRecords + PatientAllergies + latest PatientVital + active Prescriptions
+    Svc->>Cache: Check composite timestamp key (counts + latest UpdatedAt/CreatedAt ticks)
+    alt Cache Hit
+        Cache-->>Svc: cached ScrubResult (scrubbed text + reversal map)
+    else Cache Miss
+        Svc->>Scrub: Scrub(aggregated clinical profile, patient)
+        Scrub-->>Svc: pseudonymized text + reversal map
+        Svc->>Cache: Store ScrubResult with composite key
+    end
+
     Svc->>Resolver: GetOrderedProvidersAsync()
     Resolver->>DB: Load enabled AiProviderSettings (by Priority)
     Resolver-->>Svc: ordered [(provider, decrypted key, model)]
@@ -90,10 +100,11 @@ sequenceDiagram
 Two details worth being able to explain unprompted:
 
 - **Rehydration runs over the full raw buffer every time**, not a truncated prefix — a pseudonym
-  occurrence can straddle a streaming chunk boundary, and `Replace` needs every character of a
+  occurrence or citation tag can straddle a streaming chunk boundary, and `Replace` needs every character of a
   match to recognize it. What's withheld from the browser instead is a trailing margin of output
-  characters sized to the longest pseudonym in play, so a match that's still incomplete can never
-  cause already-sent text to be silently wrong.
+  characters sized to the longest pseudonym in play, reinforced with a **stateful lookahead buffer** that
+  detects and holds back unclosed bracket sequences (`[` or `[[`). This guarantees that incomplete pseudonyms
+  (`[PATIENT_NAME]`) or citation anchors (`[[rec:12]]`) are never emitted prematurely across chunk boundaries.
 - **Provider fallback is a priority-ordered list, not a hardcoded pair.** `AiProviderResolver`
   reads `AiProviderSettings` (admin-managed, encrypted keys) in priority order; the first provider
   gets one retry on a transient failure, every other provider in the chain gets one attempt before
@@ -103,11 +114,11 @@ Two details worth being able to explain unprompted:
 This whole sequence — scrub, resolve providers, stream, rehydrate, persist as a Pending
 `AiSuggestion` — is factored into one shared private method (`RunProviderStreamAsync`) that both
 `GenerateCaseSummaryAsync` and `GeneratePatientInstructionsAsync` call. The two callers differ only
-in what context they build beforehand (a patient's medical records vs. one prescription's
-medicines) and what they do with the finished text afterward (citation validation and a
-`MedicalRecord`-scoped payload vs. a plain narrative with no citations, targeting a `Prescription`
-via `AiSuggestion.TargetEntityId`). Adding a third AI feature means writing a third caller, not
-reimplementing the streaming/fallback logic again.
+in what context they build beforehand (a patient's comprehensive clinical profile vs. one
+prescription's medicines) and what they do with the finished text afterward (citation validation
+and a `MedicalRecord`-scoped payload vs. a plain narrative with no citations, targeting a
+`Prescription` via `AiSuggestion.TargetEntityId`). Adding a third AI feature means writing a third
+caller, not reimplementing the streaming/fallback logic again.
 
 ## 3. Authorization model
 
@@ -122,14 +133,14 @@ flowchart TD
     Auth -- "Yes" --> RoleCheck{"[Authorize(Roles=...)]<br/>on class AND action?"}
     RoleCheck -- "Both must match -<br/>ASP.NET Core ANDs them" --> RoleOk{"Role in every<br/>attribute's list?"}
     RoleOk -- "No" --> Denied["302 -> /Auth/AccessDenied"]
-    RoleOk -- "Yes" --> Identity{"Controller needs the<br/>caller's own identity?<br/>(Portal, Vitals, ...)"}
+    RoleOk -- "Yes" --> Identity{"Controller needs the<br/>caller's own identity?<br/>(Portal, Vitals, Cockpit, ...)"}
 
     Identity -- "No" --> Serve
-    Identity -- "Yes" --> Resolve["Resolve Patient via<br/>UserId claim - never a route id"]
+    Identity -- "Yes" --> Resolve["Resolve Patient/Doctor via<br/>UserId claim - never a route id"]
     Resolve --> Serve
 ```
 
-Three things this diagram is standing in for:
+Key principles of the authorization implementation:
 
 - **The fallback policy inverts the framework default.** ASP.NET Core is opt-in by default — a
   controller with no `[Authorize]` is anonymous. `Program.cs` sets a global `FallbackPolicy` of
@@ -139,26 +150,25 @@ Three things this diagram is standing in for:
 - **Stacked `[Authorize(Roles=...)]` attributes are ANDed, not overridden.** A class-level
   attribute of `Doctor,Pharmacist,Admin` and a method-level attribute adding `Patient` do **not**
   combine into a wider set — the method's attribute is evaluated in addition to the class's, so
-  `Patient` is still excluded unless the class-level attribute itself is widened. This surfaced as
-  a real bug while building the patient portal (`PrescriptionsController.Print` kept 302-ing a
-  patient trying to print their own prescription) and is now the reason narrowing happens with
+  `Patient` is still excluded unless the class-level attribute itself is widened. Narrowing happens with
   *extra* per-action attributes added to an already-wide class attribute, never the reverse.
 - **Role membership is necessary but not sufficient for patient-scoped data.** `[Authorize(Roles =
-  "Patient")]` proves the caller is *a* patient, not *which* patient. `PortalController` (and
-  `VitalsController`'s appointment lookups) resolve the actual `Patient` row from the `UserId`
-  claim set at login (`AuthController.SignInUserAsync`) on every single action, and every query is
-  then scoped to that patient's own `Id`. A route or query-string `id` is never trusted for
-  ownership — see the IDOR walkthrough in
-  [DEFENSE-NOTES.md](DEFENSE-NOTES.md#anticipated-questions).
+  "Patient")]` proves the caller is *a* patient, not *which* patient. `PortalController` resolves
+  the caller's primary `Patient` row and any linked dependents from the `UserId` claim set at login
+  (`AuthController.SignInUserAsync`). Allowed access is strictly bounded to `[primaryPatient.Id, ...dependents.Select(d => d.Id)]`.
+  A route or query-string `id` is never trusted for ownership.
+- **Role-tailored clinical dashboards:**
+  - `DoctorDashboardController` & Clinical Cockpit: Restricted to `Doctor`. Enforces that active consultations belong strictly to the authenticated clinician (`DoctorId == doctorId`), preventing clinicians from intercepting each other's active chamber consultations.
+  - `ReceptionController`: Restricted to `Receptionist`, aggregating hospital-wide daily queue counts, bed occupancy, active admissions, and unpaid billing balances.
 - **SignalR Hubs enforce strict identity isolation and role gating.**
-  - `AiStreamHub`: Annotated with `[Authorize(Roles = "Doctor")]`. Clients can only join a stream group when the doctor's authenticated identity matches the clinician initiating the AI streaming pipeline. This completely blocks unauthenticated or unauthorized users from intercepting live rehydrated PHI tokens over WebSockets.
+  - `AiStreamHub`: Annotated with `[Authorize(Roles = "Doctor")]`. Clients can only join a stream group when the doctor's authenticated identity matches the clinician initiating the AI streaming pipeline.
   - `NotificationHub`: Enforces `[Authorize]`. On connection, callers are strictly assigned to their personal user group `user_{userId}` derived from authentication claims, preventing users from arbitrarily subscribing to other users' private notification channels.
 
-## 4. Financial Integrity & Optimistic Concurrency
+## 4. Financial Integrity & Payment Gateway
 
 ```mermaid
 flowchart LR
-    Payment["Cashier / Patient Payment"] --> ConcurrencyCheck{"PostgreSQL xmin<br/>Concurrency Check"}
+    Payment["Cashier / Patient Payment<br/>(Cash or bKash Online)"] --> ConcurrencyCheck{"PostgreSQL xmin<br/>Concurrency Check"}
     ConcurrencyCheck -- "Conflict Detected" --> ConcurrencyException["DbUpdateConcurrencyException<br/>(Transaction Rolled Back)"]
     ConcurrencyCheck -- "Token Match" --> BalanceVerify{"Dynamic Balance Check<br/>(NetTotal - Sum(Tx))"}
     BalanceVerify -- "Exceeds Balance" --> OverpayAbort["Reject Over-Payment<br/>(Transaction Rolled Back)"]
@@ -166,15 +176,24 @@ flowchart LR
     LedgerInsert --> BillUpdate["Update Bill.PaidAmount<br/>& Recalculate Totals"]
 ```
 
-- **Immutable `PaymentTransaction` Ledger:** Financial payments are never recorded as simple in-place mutations on `Bill.PaidAmount`. Every collection writes an immutable `PaymentTransaction` row (recording the transaction timestamp, payment method, cashier `UserId`, and amount). The bill's `PaidAmount` and status (`Paid`, `PartiallyPaid`, `Unpaid`) are derived atomically from the sum of all recorded transactions, preserving an unalterable audit trail.
-- **PostgreSQL `xmin` Concurrency Tokens:** `Bill` and `Appointment` entities utilize PostgreSQL's internal `xmin` system column mapped via EF Core's `IsRowVersion()`. If two cashiers record payments simultaneously or two receptionists attempt to book the same doctor's slot, the second commit fails with a `DbUpdateConcurrencyException`, triggering an immediate transaction rollback and alerting the user before any balance or schedule corruption occurs.
+- **Immutable `PaymentTransaction` Ledger:** Financial payments are never recorded as simple in-place mutations on `Bill.PaidAmount`. Every collection writes an unalterable `PaymentTransaction` row (recording the transaction timestamp, payment method, cashier or gateway transaction reference, cashier `UserId`, and amount). The bill's `PaidAmount` and status (`Paid`, `PartiallyPaid`, `Unpaid`) are derived atomically from the sum of all recorded transactions, preserving an unalterable audit trail.
+- **Online Checkout with bKash:** `BkashPaymentService` integrates with bKash Tokenized Checkout APIs:
+  - Grants and caches the OAuth ID token in `IMemoryCache` for high-throughput efficiency.
+  - Initiates payment creation with dynamic callback and invoice correlation (`MerchantInvoiceNumber = billId`).
+  - Verifies payment status on callback, executes capture, and inserts a `PaymentTransaction` with `PaymentMethod = "bKash"` and the bKash `TrxID`.
+  - IDOR-protected in `BkashController`: ensures only the billing patient or their authorized guardian (or admin) can initiate payment.
+- **PostgreSQL `xmin` Concurrency Tokens:** `Bill` and `Appointment` entities utilize PostgreSQL's internal `xmin` system column mapped via EF Core's `IsRowVersion()`. If two cashiers record payments simultaneously, or a cashier and an online patient pay concurrently, the second commit fails with a `DbUpdateConcurrencyException`, triggering an immediate transaction rollback and alerting the user before any balance corruption occurs.
 
-## 5. Clinical Safety Net & Referential Integrity
+## 5. Clinical Safety Net & Scheduling Concurrency
 
+- **Doctor Scheduling Engine & Slot Collision Prevention:**
+  - `DoctorScheduleService` computes available 15-minute consultation slots between 09:00 AM and 05:00 PM (17:00), taking doctor shift availability, past appointments, and hospital operational timezone (`HospitalClock`, Asia/Dhaka UTC+6) into account.
+  - Concurrency conflict checks verify both doctor schedule collisions (`CheckDoctorCollisionAsync`) and patient double-booking collisions (`CheckPatientCollisionAsync`). The PostgreSQL `xmin` concurrency token on `Appointment` prevents race conditions when two patients or receptionists claim the same slot simultaneously.
 - **Preventing Clinical History Data Loss (Restrict Deletions):**
   - `PrescriptionItem.Medicine` is configured with `DeleteBehavior.Restrict` in EF Core and enforced with pre-flight checks in `MedicinesController.DeleteConfirmed`. A formulary medicine cannot be deleted if historical prescription records reference it, eliminating cascade deletion hazards that could silently purge historic patient charts.
-  - Inpatient admissions linked to billing invoices cannot be deleted (`_context.Bills.AnyAsync(b => b.AdmissionId == id)`), preventing unhandled foreign key `500 Internal Server Error` crashes and protecting accounting audit trails.
+  - Inpatient admissions linked to billing invoices cannot be deleted (`_context.Bills.AnyAsync(b => b.AdmissionId == id)`), preventing unhandled foreign key crashes and protecting accounting audit trails.
 - **AI Context Expansion & Dynamic Cache Invalidation:**
   - The clinical AI case summary pipeline aggregates comprehensive patient context: recent medical records, active allergies, latest vitals (including NEWS2 priority score), and active prescriptions.
-  - Dynamic cache invalidation computes a composite hash from the latest `UpdatedAt` timestamps across all four clinical domains, ensuring clinician edits immediately invalidate cached prompts without redundant database queries.
+  - Dynamic cache invalidation computes a composite hash from the latest `UpdatedAt` timestamps and entity counts across all four clinical domains, ensuring clinician edits immediately invalidate cached prompts without redundant database queries.
   - Review verdicts (`Accept`, `Reject`, `Edit`) execute atomic database transitions via `ExecuteUpdateAsync` conditioned on `s.Verdict == AiSuggestionVerdict.Pending`, preventing terminal decision race conditions.
+

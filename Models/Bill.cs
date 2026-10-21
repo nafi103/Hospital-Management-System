@@ -41,10 +41,21 @@ namespace HospitalManagementSystem.Models
 
         public void RecalculateTotals()
         {
-            SubtotalAmount = BillItems?.Sum(i => i.Amount) ?? 0;
+            if (BillItems == null)
+            {
+                throw new InvalidOperationException("BillItems navigation collection must be loaded before recalculating totals.");
+            }
+
+            if (PaymentTransactions != null && PaymentTransactions.Count > 0)
+            {
+                PaidAmount = PaymentTransactions.Sum(t => t.Amount);
+            }
+
+            SubtotalAmount = BillItems.Sum(i => i.Amount);
             NetTotal = Math.Max(0, SubtotalAmount - DiscountAmount);
             
-            if (NetTotal == 0 || PaidAmount >= NetTotal)
+            // Only transition to Paid when the invoice has billable items and the balance is settled
+            if (SubtotalAmount > 0 && (NetTotal == 0 || PaidAmount >= NetTotal))
                 Status = BillStatus.Paid;
             else if (PaidAmount > 0)
                 Status = BillStatus.PartiallyPaid;

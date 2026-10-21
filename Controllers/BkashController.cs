@@ -159,6 +159,7 @@ namespace HospitalManagementSystem.Controllers
             }
 
             var bill = await _context.Bills
+                .Include(b => b.BillItems)
                 .Include(b => b.PaymentTransactions)
                 .FirstOrDefaultAsync(b => b.Id == billId);
 
@@ -242,6 +243,13 @@ namespace HospitalManagementSystem.Controllers
                 await transaction.RollbackAsync();
                 _logger.LogWarning("Concurrency conflict occurred when updating Bill #{BillId} via bKash callback", bill.Id);
                 TempData["ErrorMessage"] = "Another transaction occurred concurrently on this bill. Please review your updated balance.";
+                return RedirectToAction("Bills", "Portal");
+            }
+            catch (DbUpdateException ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogInformation(ex, "Unique constraint conflict on bKash callback for TrxID {TrxId} on Bill #{BillId} - treating as idempotent success", trxId, bill.Id);
+                TempData["SuccessMessage"] = $"Payment via bKash was already recorded. Transaction ID: {trxId}";
                 return RedirectToAction("Bills", "Portal");
             }
             catch (Exception ex)

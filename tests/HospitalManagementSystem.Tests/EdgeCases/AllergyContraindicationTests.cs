@@ -145,5 +145,87 @@ namespace HospitalManagementSystem.Tests.EdgeCases
             Assert.Contains("Active dispensed medication Pen-VK 250mg", warning.Message);
             Assert.Contains("Prescription #105", warning.Message);
         }
+
+        [Fact]
+        public void Check_PenicillinAllergy_FlagsAmoxicillinCrossReactivity()
+        {
+            // Patient has a documented allergy to "Penicillin"
+            var allergies = new List<SafetyCheckAllergy>
+            {
+                new("Penicillin", "Penicillin", AllergySeverity.Severe)
+            };
+
+            // Doctor prescribes Augmentin (Amoxicillin and Clavulanic Acid)
+            var warnings = PrescriptionSafetyChecker.Check(
+                patientIsChild: false,
+                allergies: allergies,
+                items: new[] { new SafetyCheckItem(AmoxClav.Id, 14, DoseUnit.Tablet) },
+                allMedicines: Formulary);
+
+            var warning = Assert.Single(warnings, w => w.Category == "Allergy Conflict");
+            Assert.Equal(SafetyWarningSeverity.Critical, warning.Severity);
+            Assert.Contains("Augmentin", warning.Message);
+        }
+
+        [Fact]
+        public void Check_SulfaAllergy_DoesNotFlagMorphineSulfate()
+        {
+            // Patient has a documented allergy to "Sulfa" (sulfonamide antibiotic)
+            var allergies = new List<SafetyCheckAllergy>
+            {
+                new("Sulfa", null, AllergySeverity.Severe)
+            };
+
+            // Formulary includes Morphine Sulfate (chemical salt, NOT a sulfonamide antibiotic)
+            var morphineSulfate = new MedicineInfo(50, "Morphine Sulfate 10mg", "Morphine Sulfate", "10mg", 100);
+            var medicines = new List<MedicineInfo>(Formulary) { morphineSulfate };
+
+            var warnings = PrescriptionSafetyChecker.Check(
+                patientIsChild: false,
+                allergies: allergies,
+                items: new[] { new SafetyCheckItem(morphineSulfate.Id, 10, DoseUnit.Tablet) },
+                allMedicines: medicines);
+
+            // Should NOT trigger a false positive allergy warning
+            Assert.DoesNotContain(warnings, w => w.Category == "Allergy Conflict");
+        }
+
+        [Fact]
+        public void Check_SulfaAllergy_DoesNotFlagSalbutamolSulfate()
+        {
+            var allergies = new List<SafetyCheckAllergy>
+            {
+                new("Sulfa", null, AllergySeverity.Severe)
+            };
+
+            var salbutamolSulfate = new MedicineInfo(51, "Ventolin 2mg", "Salbutamol Sulfate", "2mg", 100);
+            var medicines = new List<MedicineInfo>(Formulary) { salbutamolSulfate };
+
+            var warnings = PrescriptionSafetyChecker.Check(
+                patientIsChild: false,
+                allergies: allergies,
+                items: new[] { new SafetyCheckItem(salbutamolSulfate.Id, 10, DoseUnit.Tablet) },
+                allMedicines: medicines);
+
+            Assert.DoesNotContain(warnings, w => w.Category == "Allergy Conflict");
+        }
+
+        [Fact]
+        public void Check_PotentPediatricDrug_FlagsLowerThreshold()
+        {
+            // Potent drug (Morphine Sulfate 10mg) prescribed to a child (10mg < 500mg adult threshold)
+            var morphineSulfate = new MedicineInfo(50, "Morphine Sulfate 10mg", "Morphine Sulfate", "10mg", 100);
+            var medicines = new List<MedicineInfo>(Formulary) { morphineSulfate };
+
+            var warnings = PrescriptionSafetyChecker.Check(
+                patientIsChild: true,
+                allergies: [],
+                items: new[] { new SafetyCheckItem(morphineSulfate.Id, 10, DoseUnit.Tablet) },
+                allMedicines: medicines);
+
+            var warning = Assert.Single(warnings, w => w.Category == "Pediatric Dose");
+            Assert.Equal(SafetyWarningSeverity.Warning, warning.Severity);
+            Assert.Contains("potent/narrow-index pediatric medication", warning.Message);
+        }
     }
 }

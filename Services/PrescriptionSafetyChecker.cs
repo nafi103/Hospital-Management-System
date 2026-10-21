@@ -136,31 +136,169 @@ namespace HospitalManagementSystem.Services
 
         private static bool IsAllergyConflict(SafetyCheckAllergy allergy, string genericName, string medicineName)
         {
-            if (!string.IsNullOrEmpty(allergy.AllergenGenericName) &&
-                string.Equals(allergy.AllergenGenericName, genericName, StringComparison.OrdinalIgnoreCase))
+            var gen = genericName?.Trim() ?? "";
+            var med = medicineName?.Trim() ?? "";
+            var allergenGen = allergy.AllergenGenericName?.Trim() ?? "";
+            var substance = allergy.Substance?.Trim() ?? "";
+
+            // 1. Direct normalized generic equality
+            if (!string.IsNullOrEmpty(allergenGen) &&
+                string.Equals(allergenGen, gen, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
 
-            if (!string.IsNullOrWhiteSpace(allergy.Substance))
+            // 2. Class-level Cross-Reactivity: Penicillins / Beta-Lactams
+            // Catches Penicillin allergy -> Amoxicillin, Ampicillin, Flucloxacillin, Augmentin, etc.
+            if (IsPenicillinClass(allergenGen) || IsPenicillinClass(substance))
             {
-                var substance = allergy.Substance.Trim();
-                if (!string.IsNullOrEmpty(genericName) && (
-                    genericName.Contains(substance, StringComparison.OrdinalIgnoreCase) ||
-                    substance.Contains(genericName, StringComparison.OrdinalIgnoreCase)))
+                if (IsPenicillinClass(gen) || IsPenicillinClass(med))
+                {
+                    return true;
+                }
+            }
+
+            // 3. Sulfonamides ("Sulfa") with chemical salt disambiguation
+            // "Sulfa" matches Sulfamethoxazole/Trimethoprim (Bactrim), but strictly excludes chemical salts like Sulfate/Sulphate (Morphine Sulfate, Salbutamol Sulfate, Ferrous Sulfate)
+            if (IsSulfaAllergy(allergenGen) || IsSulfaAllergy(substance))
+            {
+                if (IsSulfaMedication(gen, med))
+                {
+                    return true;
+                }
+                if (IsChemicalSulfateSaltOnly(gen, med))
+                {
+                    return false;
+                }
+            }
+
+            // 4. Quinolone / Fluoroquinolone class cross-reactivity
+            if (IsQuinoloneClass(allergenGen) || IsQuinoloneClass(substance))
+            {
+                if (IsQuinoloneClass(gen) || IsQuinoloneClass(med))
+                {
+                    return true;
+                }
+            }
+
+            // 5. Cephalosporin class cross-reactivity
+            if (IsCephalosporinClass(allergenGen) || IsCephalosporinClass(substance))
+            {
+                if (IsCephalosporinClass(gen) || IsCephalosporinClass(med))
+                {
+                    return true;
+                }
+            }
+
+            // 6. Macrolide class cross-reactivity
+            if (IsMacrolideClass(allergenGen) || IsMacrolideClass(substance))
+            {
+                if (IsMacrolideClass(gen) || IsMacrolideClass(med))
+                {
+                    return true;
+                }
+            }
+
+            // 7. General bidirectional substring/token matching with chemical salt exclusion
+            if (!string.IsNullOrWhiteSpace(substance))
+            {
+                // Disambiguate chemical salts from sulfa
+                if (substance.Equals("Sulfa", StringComparison.OrdinalIgnoreCase) && IsChemicalSulfateSaltOnly(gen, med))
+                {
+                    return false;
+                }
+
+                if (!string.IsNullOrEmpty(gen) && (
+                    gen.Contains(substance, StringComparison.OrdinalIgnoreCase) ||
+                    substance.Contains(gen, StringComparison.OrdinalIgnoreCase)))
                 {
                     return true;
                 }
 
-                if (!string.IsNullOrEmpty(medicineName) && (
-                    medicineName.Contains(substance, StringComparison.OrdinalIgnoreCase) ||
-                    substance.Contains(medicineName, StringComparison.OrdinalIgnoreCase)))
+                if (!string.IsNullOrEmpty(med) && (
+                    med.Contains(substance, StringComparison.OrdinalIgnoreCase) ||
+                    substance.Contains(med, StringComparison.OrdinalIgnoreCase)))
                 {
                     return true;
                 }
             }
 
             return false;
+        }
+
+        private static bool IsPenicillinClass(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            var t = text.ToLowerInvariant();
+            if (t.Contains("penicillin") || t.Contains("beta-lactam") || t.Contains("augmentin") || t.Contains("amoxil") || t.Contains("pen-vk"))
+                return true;
+
+            var words = System.Text.RegularExpressions.Regex.Split(t, @"[^a-z0-9]+");
+            return words.Any(w => w.EndsWith("cillin") || w.Equals("amox", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool IsSulfaAllergy(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            var t = text.ToLowerInvariant();
+            return t.Contains("sulfa") || t.Contains("sulpha") || t.Contains("sulfonamide");
+        }
+
+        private static bool IsSulfaMedication(string genericName, string medicineName)
+        {
+            var combined = $"{genericName} {medicineName}".ToLowerInvariant();
+            if (combined.Contains("bactrim") || combined.Contains("septra") || combined.Contains("cotrimoxazole") || combined.Contains("co-trimoxazole"))
+                return true;
+
+            var words = System.Text.RegularExpressions.Regex.Split(combined, @"[^a-z0-9]+");
+            return words.Any(w => (w.StartsWith("sulfa") || w.StartsWith("sulpha")) 
+                               && !w.StartsWith("sulfat") && !w.StartsWith("sulphat"));
+        }
+
+        private static bool IsChemicalSulfateSaltOnly(string genericName, string medicineName)
+        {
+            var combined = $"{genericName} {medicineName}".ToLowerInvariant();
+            bool hasSulfateSalt = combined.Contains("sulfate") || combined.Contains("sulphate");
+            return hasSulfateSalt && !IsSulfaMedication(genericName, medicineName);
+        }
+
+        private static bool IsQuinoloneClass(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            var t = text.ToLowerInvariant();
+            if (t.Contains("quinolone") || t.Contains("fluoroquinolone")) return true;
+            var words = System.Text.RegularExpressions.Regex.Split(t, @"[^a-z0-9]+");
+            return words.Any(w => w.EndsWith("floxacin"));
+        }
+
+        private static bool IsCephalosporinClass(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            var t = text.ToLowerInvariant();
+            if (t.Contains("cephalosporin")) return true;
+            var words = System.Text.RegularExpressions.Regex.Split(t, @"[^a-z0-9]+");
+            return words.Any(w => w.StartsWith("cef") || w.StartsWith("ceph"));
+        }
+
+        private static bool IsMacrolideClass(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            var t = text.ToLowerInvariant();
+            if (t.Contains("macrolide")) return true;
+            var words = System.Text.RegularExpressions.Regex.Split(t, @"[^a-z0-9]+");
+            return words.Any(w => w.EndsWith("thromycin"));
+        }
+
+        private static bool IsPotentPediatricDrug(string genericName, string medicineName)
+        {
+            var combined = $"{genericName} {medicineName}".ToLowerInvariant();
+            return combined.Contains("digoxin") ||
+                   combined.Contains("warfarin") ||
+                   combined.Contains("morphine") ||
+                   combined.Contains("prednisolone") ||
+                   combined.Contains("methotrexate") ||
+                   combined.Contains("phenytoin") ||
+                   combined.Contains("theophylline");
         }
 
         private static void CheckStock(
@@ -194,12 +332,8 @@ namespace HospitalManagementSystem.Services
             }
         }
 
-        // Heuristic, not a dosing calculation: flags a solid oral dose form (tablet/capsule)
-        // at 500mg or more for a patient flagged IsChild. It cannot know the child's actual
-        // weight or age in months, so it can neither confirm nor rule out an overdose - it
-        // only tells the doctor "look at this one before dispensing." A false negative is
-        // possible for a smaller child on a lower-strength tablet; a false positive is
-        // possible for an older, larger child for whom the adult strength is appropriate.
+        // Heuristic, not a dosing calculation: flags solid oral dose forms (tablet/capsule)
+        // at 500mg or more for a pediatric patient, or potent/narrow-therapeutic-index drugs at lower thresholds.
         private static void CheckPediatricStrength(
             List<(SafetyCheckItem Item, MedicineInfo Medicine)> resolvedItems,
             List<SafetyWarning> warnings)
@@ -213,13 +347,19 @@ namespace HospitalManagementSystem.Services
                     continue;
                 }
 
-                if (TryParseLeadingMilligrams(medicine.Strength, out var mg) && mg >= adultStrengthThresholdMg)
+                bool isPotent = IsPotentPediatricDrug(medicine.GenericName, medicine.Name);
+                int thresholdMg = isPotent ? 5 : adultStrengthThresholdMg;
+
+                if (TryParseLeadingMilligrams(medicine.Strength, out var mg) && mg >= thresholdMg)
                 {
+                    var reason = isPotent
+                        ? "is a potent/narrow-index pediatric medication"
+                        : "is an adult-strength solid dose";
+
                     warnings.Add(new SafetyWarning(
                         "Pediatric Dose",
                         SafetyWarningSeverity.Warning,
-                        $"{medicine.Name} ({medicine.Strength}) is an adult-strength solid dose - " +
-                        "confirm this is appropriate for a child before dispensing."));
+                        $"{medicine.Name} ({medicine.Strength}) {reason} - confirm this is appropriate for a child before dispensing."));
                 }
             }
         }
