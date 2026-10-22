@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using HospitalManagementSystem.Models;
+using HospitalManagementSystem.Services;
 
 namespace HospitalManagementSystem.Controllers
 {
@@ -14,10 +15,12 @@ namespace HospitalManagementSystem.Controllers
     public class BillsController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly ILedgerIntegrityService _ledgerService;
 
-        public BillsController(ApplicationDbContext context)
+        public BillsController(ApplicationDbContext context, ILedgerIntegrityService? ledgerService = null)
         {
             _context = context;
+            _ledgerService = ledgerService ?? new LedgerIntegrityService(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<LedgerIntegrityService>.Instance);
         }
 
         // GET: Bills
@@ -79,6 +82,22 @@ namespace HospitalManagementSystem.Controllers
                             Department = DepartmentType.Pharmacy,
                             Description = $"Prescription #{pres.Id} - {pres.CreatedAt.ToString("MMM dd, yyyy")}",
                             Amount = presTotal
+                        });
+                    }
+
+                    // Auto-calculate operation charges
+                    var admissionOps = await _context.Operations
+                        .Include(o => o.Surgeon)
+                        .Where(o => o.PatientId == admission.PatientId && o.OperationDatetime >= admission.AdmissionDate)
+                        .ToListAsync();
+
+                    foreach (var op in admissionOps)
+                    {
+                        bill.BillItems.Add(new BillItem
+                        {
+                            Department = DepartmentType.Operation,
+                            Description = $"Surgical Procedure ({op.OtRoom}) - Dr. {op.Surgeon?.FullName ?? "Surgeon"}",
+                            Amount = 15000.00m
                         });
                     }
                 }
@@ -294,6 +313,7 @@ namespace HospitalManagementSystem.Controllers
                     Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim()
                 };
 
+                await _ledgerService.StampTransactionAsync(tx);
                 _context.PaymentTransactions.Add(tx);
 
                 // Derive bill.PaidAmount from all recorded ledger transactions

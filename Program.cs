@@ -54,6 +54,9 @@ builder.Services.AddScoped<AiProviderResolver>();
 builder.Services.AddScoped<IClinicalAiService, ClinicalAiService>();
 builder.Services.AddScoped<IAppointmentBookingService, DoctorScheduleService>();
 builder.Services.AddScoped<DemoDataSeeder>();
+builder.Services.AddScoped<ILedgerIntegrityService, LedgerIntegrityService>();
+builder.Services.AddScoped<IPrescriptionSecurityService, PrescriptionSecurityService>();
+builder.Services.AddScoped<IAcuityQueueService, AcuityQueueService>();
 
 builder.Services.AddHttpClient<GroqClient>();
 builder.Services.AddHttpClient<IBkashPaymentService, BkashPaymentService>();

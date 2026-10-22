@@ -179,6 +179,57 @@
             {
                 <span class="text-white-50 small">No triage vitals recorded for this visit.</span>
             }
+
+            @if (ViewBag.DeltaNews2 != null)
+            {
+                var delta = (HospitalManagementSystem.Services.DeltaNews2Result)ViewBag.DeltaNews2;
+                var longVitals = ViewBag.LongitudinalVitals as List<HospitalManagementSystem.Models.PatientVital>;
+                <div class="mt-2 pt-2 border-top border-secondary">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small text-white-50" style="font-size: 0.75rem;">
+                            <i class="bi bi-graph-up me-1"></i>&Delta;NEWS2 Radar (12h)
+                        </span>
+                        @if (delta.IsRapidDeterioration)
+                        {
+                            <span class="badge bg-danger animate-pulse" title="@delta.Message">
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>&Delta;+@delta.Delta ACUTE DETERIORATION
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary bg-opacity-50 text-light" style="font-size: 0.7rem;">
+                                &Delta;@(delta.Delta > 0 ? $"+{delta.Delta}" : delta.Delta.ToString()) (Stable)
+                            </span>
+                        }
+                    </div>
+                    @if (longVitals != null && longVitals.Count > 1)
+                    {
+                        var chrono = longVitals.OrderBy(x => x.CreatedAt).ToList();
+                        var points = new List<string>();
+                        for (int i = 0; i < chrono.Count; i++)
+                        {
+                            var s = HospitalManagementSystem.Services.News2Calculator.Calculate(
+                                chrono[i].RespiratoryRate, chrono[i].Spo2, chrono[i].OnSupplementalOxygen,
+                                chrono[i].Temperature, chrono[i].SystolicBp, chrono[i].HeartRate, chrono[i].Consciousness).Score;
+                            double px = 5 + (110.0 * i / Math.Max(1, chrono.Count - 1));
+                            double py = 20 - Math.Min(16, (s * 1.6));
+                            points.Add($"{px.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)},{py.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}");
+                        }
+                        var polylineStr = string.Join(" ", points);
+                        <div class="d-flex align-items-center gap-2">
+                            <svg width="120" height="24" class="overflow-visible" style="background: rgba(255,255,255,0.05); border-radius: 4px;">
+                                <polyline fill="none" stroke="@(delta.IsRapidDeterioration ? "#ff4d4f" : "#52c41a")" stroke-width="2" points="@polylineStr" />
+                                @foreach (var pt in points)
+                                {
+                                    var xy = pt.Split(',');
+                                    <circle cx="@xy[0]" cy="@xy[1]" r="2.5" fill="@(delta.IsRapidDeterioration ? "#ff4d4f" : "#52c41a")" />
+                                }
+                            </svg>
+                            <span class="text-white-50" style="font-size: 0.7rem;">@chrono.Count observations</span>
+                        </div>
+                    }
+                </div>
+            }
         </div>
     </div>
 

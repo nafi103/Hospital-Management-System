@@ -63,6 +63,7 @@ namespace HospitalManagementSystem.Services
 
             Console.WriteLine("Seeding patients...");
             var medicines = await _context.Medicines.ToDictionaryAsync(m => m.Name, m => m);
+            await SeedMedicineBatchesAsync(medicines);
             var patients = await SeedPatientsAsync(roleIds["Patient"]);
 
             Console.WriteLine("Seeding medical records...");
@@ -79,6 +80,9 @@ namespace HospitalManagementSystem.Services
 
             Console.WriteLine("Seeding bills...");
             await SeedBillsAsync(admissions, admin.Id);
+
+            Console.WriteLine("Seeding surgical theatre operations...");
+            await SeedOperationsAsync(patients, drOne.Id, drTwo.Id);
 
             Console.WriteLine("Seeding today's appointment queue...");
             var todaysAppointments = await SeedAppointmentsAsync(patients, drOne.Id, drTwo.Id);
@@ -151,6 +155,7 @@ namespace HospitalManagementSystem.Services
             await db.ExecuteSqlRawAsync("DELETE FROM \"Prescriptions\"");
             await db.ExecuteSqlRawAsync("DELETE FROM \"BillItems\"");
             await db.ExecuteSqlRawAsync("DELETE FROM \"Bills\"");
+            await db.ExecuteSqlRawAsync("DELETE FROM \"Operations\"");
             await db.ExecuteSqlRawAsync("DELETE FROM \"BedTransfers\"");
             await db.ExecuteSqlRawAsync("DELETE FROM \"Admissions\"");
             await db.ExecuteSqlRawAsync("DELETE FROM \"Appointments\"");
@@ -555,18 +560,60 @@ namespace HospitalManagementSystem.Services
             // Paid: the two straightforward discharged admissions.
             var abdulHistorical = admissionsByPatient["abdul"].First(a => a.DischargeDate.HasValue);
             var abdulBill = await BuildBillAsync(abdulHistorical, paidAmount: 0);
-            abdulBill.PaidAmount = abdulBill.NetTotal;
-            abdulBill.RecalculateTotals();
 
             var rupaHistorical = admissionsByPatient["rupa"].First(a => a.DischargeDate.HasValue);
             var rupaBill = await BuildBillAsync(rupaHistorical, paidAmount: 0, discount: 200m);
-            rupaBill.PaidAmount = rupaBill.NetTotal;
-            rupaBill.RecalculateTotals();
 
             // Partially paid: the third discharged admission, still owes a balance.
             var mizanHistorical = admissionsByPatient["mizan"].First(a => a.DischargeDate.HasValue);
             var mizanBill = await BuildBillAsync(mizanHistorical, paidAmount: 0);
-            mizanBill.PaidAmount = Math.Round(mizanBill.NetTotal * 0.4m, 2);
+
+            // Seed cryptographic hash-chained PaymentTransaction ledger records
+            string prevHash = LedgerIntegrityService.GenesisHash;
+
+            var abdulTx = new PaymentTransaction
+            {
+                Bill = abdulBill,
+                Amount = abdulBill.NetTotal,
+                PaymentMethod = "Cash",
+                TransactionId = "CASH-" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant(),
+                TransactionDate = now.AddHours(-4),
+                Notes = "Discharge settlement (Cash)",
+                PreviousHash = prevHash
+            };
+            abdulTx.RowHash = abdulTx.ComputeCurrentHash(prevHash);
+            prevHash = abdulTx.RowHash;
+            abdulBill.PaymentTransactions.Add(abdulTx);
+            abdulBill.RecalculateTotals();
+
+            var rupaTx = new PaymentTransaction
+            {
+                Bill = rupaBill,
+                Amount = rupaBill.NetTotal,
+                PaymentMethod = "bKash",
+                TransactionId = "TRX" + Guid.NewGuid().ToString("N")[..10].ToUpperInvariant(),
+                TransactionDate = now.AddHours(-2),
+                Notes = "Online checkout via bKash",
+                PreviousHash = prevHash
+            };
+            rupaTx.RowHash = rupaTx.ComputeCurrentHash(prevHash);
+            prevHash = rupaTx.RowHash;
+            rupaBill.PaymentTransactions.Add(rupaTx);
+            rupaBill.RecalculateTotals();
+
+            var mizanAmount = Math.Round(mizanBill.NetTotal * 0.4m, 2);
+            var mizanTx = new PaymentTransaction
+            {
+                Bill = mizanBill,
+                Amount = mizanAmount,
+                PaymentMethod = "Card",
+                TransactionId = "POS-" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant(),
+                TransactionDate = now.AddMinutes(-45),
+                Notes = "Interim deposit (POS Card)",
+                PreviousHash = prevHash
+            };
+            mizanTx.RowHash = mizanTx.ComputeCurrentHash(prevHash);
+            mizanBill.PaymentTransactions.Add(mizanTx);
             mizanBill.RecalculateTotals();
 
             // Unpaid: three currently-active admissions, mid-stay.
@@ -908,6 +955,113 @@ namespace HospitalManagementSystem.Services
                 _context.AiSuggestions.Add(suggestion);
             }
 
+            await _context.SaveChangesAsync();
+        }
+
+        private async Task SeedMedicineBatchesAsync(Dictionary<string, Medicine> medicines)
+        {
+            if (await _context.MedicineBatches.AnyAsync()) return;
+
+            var now = DateTime.UtcNow;
+            var batches = new List<MedicineBatch>();
+
+            if (medicines.TryGetValue("Napa 500mg", out var napa))
+            {
+                batches.Add(new MedicineBatch
+                {
+                    MedicineId = napa.Id,
+                    BatchNumber = "NAP-2025-A1",
+                    ExpiryDate = now.AddMonths(3),
+                    InitialQuantity = 400,
+                    QuantityRemaining = 400,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+                batches.Add(new MedicineBatch
+                {
+                    MedicineId = napa.Id,
+                    BatchNumber = "NAP-2026-B2",
+                    ExpiryDate = now.AddMonths(18),
+                    InitialQuantity = 600,
+                    QuantityRemaining = 600,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+            }
+
+            if (medicines.TryGetValue("Zithromax 500mg", out var zith))
+            {
+                // Near-expiry batch (18 days left) to test and showcase Admin Expiry alerts
+                batches.Add(new MedicineBatch
+                {
+                    MedicineId = zith.Id,
+                    BatchNumber = "ZTH-2026-EXP",
+                    ExpiryDate = now.AddDays(18),
+                    InitialQuantity = 50,
+                    QuantityRemaining = 20,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+                // Fresh batch (24 months shelf life)
+                batches.Add(new MedicineBatch
+                {
+                    MedicineId = zith.Id,
+                    BatchNumber = "ZTH-2028-C3",
+                    ExpiryDate = now.AddMonths(24),
+                    InitialQuantity = 100,
+                    QuantityRemaining = 30,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+            }
+
+            if (medicines.TryGetValue("Seclo 20mg", out var seclo))
+            {
+                batches.Add(new MedicineBatch
+                {
+                    MedicineId = seclo.Id,
+                    BatchNumber = "SCL-2026-D4",
+                    ExpiryDate = now.AddMonths(12),
+                    InitialQuantity = 600,
+                    QuantityRemaining = 600,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+            }
+
+            _context.MedicineBatches.AddRange(batches);
+            await _context.SaveChangesAsync();
+        }
+
+        private async Task SeedOperationsAsync(Dictionary<string, Patient> patients, int drOneId, int drTwoId)
+        {
+            var now = DateTime.UtcNow;
+
+            var op1 = new Operation
+            {
+                PatientId = patients["mizan"].Id,
+                SurgeonId = drOneId,
+                OtRoom = "OT-1 (General Surgery)",
+                OperationDatetime = now.AddDays(1).Date.AddHours(10), // Tomorrow 10:00 UTC
+                Status = OperationStatus.Scheduled,
+                PreparationChecklist = "NPO (Fasting 8h) Confirmed; Anesthesia Pre-Op Clearance Obtained; Blood Reserved [Recovery Bed: ICU-01 (ICU)]",
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            var op2 = new Operation
+            {
+                PatientId = patients["fatema"].Id,
+                SurgeonId = drTwoId,
+                OtRoom = "OT-2 (Orthopedic & Trauma)",
+                OperationDatetime = now.AddHours(-2),
+                Status = OperationStatus.Recovery,
+                PreparationChecklist = "OR protocol executed; Patient extubated smoothly; Post-op vitals stable [Recovery Bed: CABIN-05 (Cabin)]",
+                CreatedAt = now.AddHours(-3),
+                UpdatedAt = now.AddMinutes(-30)
+            };
+
+            _context.Operations.AddRange(op1, op2);
             await _context.SaveChangesAsync();
         }
 

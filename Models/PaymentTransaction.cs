@@ -36,5 +36,25 @@ namespace HospitalManagementSystem.Models
 
         [StringLength(255)]
         public string? Notes { get; set; }
+
+        [StringLength(64)]
+        public string? PreviousHash { get; set; }
+
+        [StringLength(64)]
+        public string? RowHash { get; set; }
+
+        public static string ComputeSha256(string? previousHash, int billId, decimal amount, string paymentMethod, string? transactionId, int? processedById, DateTime transactionDate)
+        {
+            var raw = FormattableString.Invariant($"{previousHash ?? "GENESIS"}|{billId}|{amount:0.00}|{paymentMethod}|{transactionId ?? ""}|{processedById ?? 0}|{transactionDate:O}");
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            var bytes = System.Text.Encoding.UTF8.GetBytes(raw);
+            var hashBytes = sha.ComputeHash(bytes);
+            return Convert.ToHexStringLower(hashBytes);
+        }
+
+        public string ComputeCurrentHash(string? prevHash = null)
+        {
+            return ComputeSha256(prevHash ?? PreviousHash, BillId, Amount, PaymentMethod, TransactionId, ProcessedById, TransactionDate);
+        }
     }
 }

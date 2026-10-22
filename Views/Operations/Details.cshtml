@@ -1,0 +1,170 @@
+@model HospitalManagementSystem.Models.Operation
+
+@{
+    ViewData["Title"] = $"Operation Details - #{Model.Id}";
+    var admission = ViewBag.LinkedAdmission as HospitalManagementSystem.Models.Admission;
+    var activeTransfer = admission?.BedTransfers?.OrderByDescending(bt => bt.StartDate).FirstOrDefault();
+
+    var statusBadgeClass = Model.Status switch
+    {
+        HospitalManagementSystem.Models.OperationStatus.Scheduled => "bg-primary",
+        HospitalManagementSystem.Models.OperationStatus.InSurgery => "bg-danger",
+        HospitalManagementSystem.Models.OperationStatus.Recovery => "bg-warning text-dark",
+        HospitalManagementSystem.Models.OperationStatus.Completed => "bg-success",
+        _ => "bg-secondary"
+    };
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <h2 class="mb-0 fw-bold">Operation #@Model.Id</h2>
+            <span class="badge @statusBadgeClass px-3 py-2 fs-6">@Model.Status</span>
+        </div>
+        <p class="text-muted mb-0">Scheduled for @Model.OperationDatetime.ToString("dddd, MMMM dd, yyyy - hh:mm tt") UTC in @Model.OtRoom</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Index" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Back to Schedule
+        </a>
+    </div>
+</div>
+
+<partial name="_ActionSuccessBanner" />
+
+<div class="row g-4">
+    <!-- Left Column: Patient & Surgical Details -->
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0 rounded-3 mb-4">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h5 class="card-title mb-0 fw-bold text-primary"><i class="bi bi-file-earmark-medical me-2"></i>Surgical Encounter Overview</h5>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-3">
+                    <div class="col-sm-6">
+                        <label class="text-muted small text-uppercase fw-semibold d-block">Patient</label>
+                        <div class="fs-5 fw-bold text-dark">@Model.Patient?.FullName</div>
+                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle">UHID: @Model.Patient?.Uhid</span>
+                        @if (!string.IsNullOrEmpty(Model.Patient?.BloodGroup))
+                        {
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle ms-1">@Model.Patient.BloodGroup</span>
+                        }
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="text-muted small text-uppercase fw-semibold d-block">Lead Surgeon</label>
+                        <div class="fs-5 fw-bold text-dark">Dr. @Model.Surgeon?.FullName</div>
+                        <span class="text-muted small">Specialty: @(Model.Surgeon?.Category ?? "General Surgery")</span>
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="text-muted small text-uppercase fw-semibold d-block">Operating Theatre (OT)</label>
+                        <div class="fw-bold fs-6">
+                            <i class="bi bi-door-open text-primary me-1"></i>@Model.OtRoom
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="text-muted small text-uppercase fw-semibold d-block">Surgical Window</label>
+                        <div class="fw-bold fs-6">
+                            @Model.OperationDatetime.ToString("hh:mm tt") - @Model.OperationDatetime.AddHours(2).ToString("hh:mm tt") UTC
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4" />
+
+                <h6 class="fw-bold text-dark mb-2"><i class="bi bi-card-checklist text-success me-2"></i>Preparation Checklist & Protocol</h6>
+                <div class="p-3 bg-light rounded-3 border">
+                    <p class="mb-0 text-secondary font-monospace small">@Model.PreparationChecklist</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Post-Op Inpatient Bed & Transfer Info -->
+        <div class="card shadow-sm border-0 rounded-3">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h5 class="card-title mb-0 fw-bold text-success"><i class="bi bi-hospital me-2"></i>Earmarked Post-Op Recovery Bed</h5>
+            </div>
+            <div class="card-body p-4">
+                @if (activeTransfer != null && activeTransfer.Bed != null)
+                {
+                    <div class="d-flex align-items-center justify-content-between p-3 bg-success bg-opacity-10 rounded-3 border border-success-subtle">
+                        <div>
+                            <div class="fw-bold fs-5 text-success">
+                                <i class="bi bi-check-circle-fill me-2"></i>Bed @activeTransfer.Bed.BedNumber
+                            </div>
+                            <div class="text-muted small">Category: <strong>@activeTransfer.Bed.Category</strong> | Daily Rate: ৳@activeTransfer.Bed.DailyRate.ToString("N0")</div>
+                            <div class="text-muted small">Earmarked Start: @activeTransfer.StartDate.ToString("MMM dd, yyyy hh:mm tt") UTC</div>
+                        </div>
+                        <span class="badge bg-success px-3 py-2">Reserved for Patient</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="p-3 bg-light rounded-3 text-muted">
+                        No active bed transfer linked. The patient may be scheduled for outpatient day surgery or transferred directly upon admission.
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Procedure Status Workflow Controls -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 rounded-3 mb-4">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h5 class="card-title mb-0 fw-bold text-dark"><i class="bi bi-arrow-repeat me-2"></i>Procedure Status Workflow</h5>
+            </div>
+            <div class="card-body p-4">
+                <p class="small text-muted mb-3">Update theatre operational status as the surgical team transitions the patient.</p>
+
+                <div class="d-grid gap-2">
+                    @if (Model.Status == HospitalManagementSystem.Models.OperationStatus.Scheduled)
+                    {
+                        <form asp-action="UpdateStatus" asp-route-id="@Model.Id" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="status" value="@HospitalManagementSystem.Models.OperationStatus.InSurgery" />
+                            <button type="submit" class="btn btn-danger w-100 py-2">
+                                <i class="bi bi-play-circle me-1"></i> Start Surgery (Move to InSurgery)
+                            </button>
+                        </form>
+                    }
+                    @if (Model.Status == HospitalManagementSystem.Models.OperationStatus.InSurgery)
+                    {
+                        <form asp-action="UpdateStatus" asp-route-id="@Model.Id" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="status" value="@HospitalManagementSystem.Models.OperationStatus.Recovery" />
+                            <button type="submit" class="btn btn-warning w-100 py-2 text-dark">
+                                <i class="bi bi-heart-pulse me-1"></i> Transfer to Recovery Room
+                            </button>
+                        </form>
+                    }
+                    @if (Model.Status == HospitalManagementSystem.Models.OperationStatus.Recovery)
+                    {
+                        <form asp-action="UpdateStatus" asp-route-id="@Model.Id" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="status" value="@HospitalManagementSystem.Models.OperationStatus.Completed" />
+                            <button type="submit" class="btn btn-success w-100 py-2">
+                                <i class="bi bi-check2-circle me-1"></i> Complete Surgery & Discharge from OT
+                            </button>
+                        </form>
+                    }
+                    @if (Model.Status == HospitalManagementSystem.Models.OperationStatus.Completed)
+                    {
+                        <div class="alert alert-success mb-0 small">
+                            <i class="bi bi-check-all me-1"></i> Surgical procedure completed successfully.
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0 rounded-3">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h6 class="card-title mb-0 fw-bold text-dark"><i class="bi bi-clock-history me-2"></i>Audit Timestamps</h6>
+            </div>
+            <div class="card-body p-3 small text-muted">
+                <div class="mb-2"><strong>Created At:</strong> @Model.CreatedAt.ToString("MMM dd, yyyy hh:mm tt") UTC</div>
+                <div><strong>Last Updated:</strong> @Model.UpdatedAt.ToString("MMM dd, yyyy hh:mm tt") UTC</div>
+            </div>
+        </div>
+    </div>
+</div>

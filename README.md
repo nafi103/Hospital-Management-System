@@ -19,16 +19,16 @@ Receptionist, and Patient.**
 | Payments | bKash Payment Gateway (Tokenized Checkout API v1.2.0-beta sandbox, OAuth token caching, online billing) |
 | Operational Clock | HospitalClock (Asia/Dhaka UTC+6 operational timezone, 15-minute appointment slot calculations) |
 | Secrets | ASP.NET Data Protection (encrypted AI provider keys at rest), .NET user-secrets (local dev connection string/API keys) |
-| Testing | xUnit (284 tests across unit algorithms, integration concurrency, security access control, and portal workflows) |
+| Testing | xUnit (309 tests across cryptographic chains, graph algorithms, multi-resource scheduling, FEFO inventory, concurrency, and security) |
 
 ## Features by role
 
-- **Receptionist** — front-desk operational overview dashboard (`/Reception`), patient registration (with optional portal login issuance), appointment booking with any doctor, admissions and bed assignment (with automatic bed-charge calculation across transfers), billing and payment collection.
-- **Assistant** — a single doctor's chamber queue, vitals recording with automatic NEWS2 triage scoring and physiological range validation, sending patients in to the consultation room with real-time SignalR notifications.
-- **Doctor** — a scoped consultation queue (own patients only) and an integrated **Clinical Cockpit** (`/DoctorDashboard/Cockpit`), an AI-generated pre-visit case summary (synthesizing medical records, active allergies, latest vitals + NEWS2 score, and active prescriptions with citation markers and cache invalidation) with Accept/Edit/Reject review, medical records, and prescriptions — with a deterministic safety net on every prescription (duplicate therapy, allergy conflict, stock substitution, pediatric dose) and an AI-generated Bangla patient instruction sheet, gated behind the same Accept-before-print review.
-- **Pharmacist** — the prescription queue and inventory, dispensing against stock with atomic inventory decrement.
-- **Patient** — a self-service portal: own appointments, records, prescriptions, and bills. Direct doctor appointment self-booking and rescheduling with 15-minute slot calendar (`/Portal/Book`), doctor directory (`/Portal/Doctors`), bKash online bill payment (`/Bkash/Pay`), and pediatric dependent family account management (switching between primary patient and children). Never another patient's (guaranteed by claims-based IDOR isolation).
-- **Admin** — staff and role management, AI provider configuration, and a reporting dashboard (revenue, occupancy, appointment volume, triage mix, AI governance, prescription safety net, top medicines).
+- **Receptionist** — front-desk operational overview dashboard (`/Reception`), patient registration (with optional portal login issuance), appointment booking with any doctor, admissions and bed assignment (with automatic bed-charge calculation across transfers), surgical operation scheduling (`/Operations`), billing and payment collection.
+- **Assistant** — a single doctor's chamber queue, vitals recording with automatic NEWS2 triage scoring and physiological range validation, live acuity-weighted dynamic queue re-ranking with starvation prevention, sending patients in to the consultation room with real-time SignalR notifications.
+- **Doctor** — a scoped consultation queue (own patients only) with live Estimated Wait Times (EWT), an integrated **Clinical Cockpit** (`/DoctorDashboard/Cockpit`) featuring an inline SVG $\Delta\text{NEWS2}$ longitudinal deterioration sparkline (with $\ge 2$ pt / 12h rapid deterioration alerts), an AI-generated pre-visit case summary with Accept/Edit/Reject review, surgical operation bookings (`/Operations/Create`), and prescriptions — with an Anatomical Therapeutic Chemical (ATC) classification graph and deterministic safety net (beta-lactam cross-reactivity, high-risk drug-drug interaction matrix, duplicate therapy, stock substitution, pediatric dose), and HMAC-signed tamper-proof prescriptions & AI-translated Bangla patient instruction sheets.
+- **Pharmacist** — the prescription queue and inventory with First-Expired, First-Out (FEFO) batch allocation (`MedicineBatches`), automatic deduction from earliest-expiring stock, hard lockout against dispensing expired drugs, and instant QR verification of HMAC-signed prescriptions.
+- **Patient** — a self-service portal: own appointments, records, prescriptions, and bills. Direct doctor appointment self-booking and rescheduling with 15-minute slot calendar (`/Portal/Book`), doctor directory (`/Portal/Doctors`), bKash online bill payment (`/Bkash/Pay`), and pediatric dependent family account management (switching between primary patient and children). Never another patient's (guaranteed by claims-based IDOR isolation). Public `/Verify/Prescription` endpoint allows anti-forgery validation of printed prescriptions via HMAC-SHA256 QR scan.
+- **Admin** — staff and role management, AI provider configuration, and a reporting dashboard (revenue, occupancy, appointment volume, triage mix, AI governance, prescription safety net, top medicines, FEFO 30-day near-expiry batch monitor, and a one-click SHA-256 Ledger Integrity verification tool).
 
 See [docs/SYSTEM-GUIDE.md](docs/SYSTEM-GUIDE.md) for the all-in-one comprehensive system specification, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for architecture and data flows, and [docs/DEFENSE-NOTES.md](docs/DEFENSE-NOTES.md) for a demo walkthrough script and viva defense questions.
 
@@ -120,12 +120,17 @@ Additionally, pediatric dependent accounts are linked to family accounts:
 
 ## Security & Concurrency Guarantees
 
-- **Immutable Financial Ledger:** Billing updates record unalterable `PaymentTransaction` rows with cashier/gateway attribution. Total paid amounts and invoice statuses are derived dynamically from transaction rows, preventing accounting drift and race conditions.
-- **PostgreSQL `xmin` Concurrency Tokens:** `Bill` and `Appointment` models map PostgreSQL's native `xmin` rowversion token, protecting against double-payments, concurrent cashier/online checkouts, and doctor schedule slot double-bookings.
+- **Cryptographic Hash-Chained Financial Ledger:** Billing updates record unalterable `PaymentTransaction` rows linked via SHA-256 (`PreviousHash` + `RowHash`), creating a tamper-evident blockchain-style ledger. A one-click audit tool on `/Reports` re-evaluates the chain in $O(N)$ time, flagging exact manipulated rows.
+- **Hierarchical ATC Classification Graph:** Models medicines and pharmacological classes in a directed acyclic graph (DAG) structure, enabling $O(\text{depth})$ detection of beta-lactam cross-reactivity (e.g., penicillin allergy catching amoxicillin/ampicillin) and high-risk drug-drug interaction matrix checks with zero AI latency.
+- **Dynamic Acuity-Weighted Queue with Aging:** Combines NEWS2 clinical triage scoring with starvation-prevention waiting age ($\text{PriorityScore} = W_{\text{acuity}} \times \text{NEWS2} + W_{\text{wait}} \times \text{MinutesWaited}$), pushing live queue re-ranking and Estimated Wait Times (EWT) via SignalR.
+- **Longitudinal $\Delta\text{NEWS2}$ Deterioration Radar:** Tracks rate of physiological change across consecutive vitals readings, alerting clinicians if NEWS2 deteriorates by $\ge 2$ points within 12 hours, visualized via an inline SVG sparkline in the Clinical Cockpit.
+- **FEFO Pharmacy Batch Allocation & Expiry Control:** Allocates inventory using First-Expired, First-Out (`MedicineBatches`), automatically drawing from earliest-expiring stock, locking out expired medicines, and alerting the Admin dashboard on batches expiring within 30 days.
+- **HMAC-SHA256 Signed QR Prescriptions:** Digitally signs issued prescriptions and patient instruction sheets using server-secret HMAC signatures, rendering anti-forgery QR codes verifiable anonymously at `/Verify/Prescription`.
+- **Multi-Resource Surgical Scheduling Engine:** `OperationsController` schedules Operating Theatres by simultaneously enforcing three constraints: surgeon availability (outpatient & surgical collision checks), OT room vacancy, and automated post-op ICU/Cabin bed allocation.
+- **PostgreSQL Concurrency Guarantees:** Double-booking prevention via filtered unique indexes (`idx_appointments_doctor_slot_active`) and optimistic concurrency tokens (`xmin`) across `Bills` and `Appointments`.
 - **Strict SignalR Authorization:** `AiStreamHub` restricts connection to doctors, and stream subscription is gated to the initiating clinician. `NotificationHub` restricts connection to authenticated users and automatically scopes broadcasts to isolated user groups.
 - **Clinical Data Protection:** Formulary medicines reference `DeleteBehavior.Restrict` to eliminate cascade deletion of clinical prescription history. Admissions with active billing invoices cannot be deleted, avoiding broken accounting trails.
 - **Expanded AI Context & Invalidation:** Clinical AI summaries aggregate medical records, allergies, vitals, and active prescriptions, using dynamic composite hashes for cache invalidation and atomic state transitions on clinical reviews.
-- **Doctor Scheduling Engine:** `DoctorScheduleService` computes available 15-minute consultation slots between 09:00 AM and 05:00 PM (17:00) using `HospitalClock` (Asia/Dhaka UTC+6), with pre-flight collision checks for both doctors and patients.
 
 ## Running tests
 
@@ -133,15 +138,21 @@ Additionally, pediatric dependent accounts are linked to family accounts:
 dotnet test
 ```
 
-**277 automated xUnit tests** cover:
+**309 automated xUnit tests** cover:
+- **Cryptographic Ledger Integrity:** Genesis SHA-256 block calculation, chain hash propagation, valid chain verification, and tamper detection flagging modified historical transactions.
+- **Hierarchical ATC Graph & DDI:** Beta-lactam tree traversal (penicillin allergy catching amoxicillin and ampicillin) and drug-drug interaction matrix checks (Warfarin + Ibuprofen/Naproxen).
+- **Dynamic Acuity Queue & $\Delta\text{NEWS2}$:** Priority score aging formula, starvation prevention, live EWT estimation, and longitudinal $\Delta\text{NEWS2} \ge 2$ deterioration detection within 12 hours.
+- **FEFO Inventory & Expiry Protection:** Earliest-expiry batch consumption, partial multi-batch deductions, expired batch lockout, and near-expiry alerting.
+- **HMAC Anti-Forgery & Verification:** Cryptographic token signing, tamper rejection, expired token rejection, and valid token payload decoding.
+- **Multi-Resource Surgical Operations:** Surgeon schedule collision detection, operating theatre double-booking prevention, and post-op ICU/Cabin bed reservation.
 - **NEWS2 Triage & Boundaries:** 65 parameter boundary tests and physiological input range validation rules.
 - **Privacy & Sanitization:** PHI scrubbing and rehydration round trips with whole-word regex boundaries, AI stream sanitization, citation deduplication, and hallucinated citation stripping.
 - **AI Infrastructure:** Priority-ordered fallback chains and provider connectivity ping diagnostics (Gemini, Groq, Anthropic).
 - **Prescription Safety Net:** Deterministic checks for duplicate therapies, generic/brand allergy contraindications, active medication windows, stock substitutions, and pediatric doses.
 - **Billing & Accounting:** Subtotals, net totals, zero-net discounts, and immutable `PaymentTransaction` ledger derivations.
 - **Hospital Clock & Timezones:** Asia/Dhaka UTC+6 timezone conversions, start/end of day boundaries, and slot alignment.
-- **EF Core & Database Concurrency:** PostgreSQL `xmin` optimistic concurrency tokens on appointments and bills, referential integrity restrictions on medicines and admissions.
-- **Clinical Workflows:** Doctor Clinical Cockpit integration and pharmacy atomic inventory dispensing.
+- **EF Core & Database Concurrency:** Filtered unique indexes and PostgreSQL `xmin` optimistic concurrency tokens on appointments and bills.
+- **Clinical Workflows:** Doctor Clinical Cockpit integration, $\Delta\text{NEWS2}$ radar, and pharmacy atomic inventory dispensing.
 - **Patient Portal & Scheduling:** 15-minute slot generation, direct patient booking, rescheduling, cancellations, and pediatric dependent family account IDOR isolation.
 - **bKash Payment Gateway:** Token grant caching, payment creation, callback verification, payment execution, and transaction ledger logging.
 - **Access Control & Security:** Strict role-based and claims-based authorization across Doctor, Assistant, Receptionist, Patient, and Admin endpoints.
@@ -151,19 +162,19 @@ See [docs/DEFENSE-NOTES.md](docs/DEFENSE-NOTES.md) for what each suite is actual
 ## Project structure
 
 ```
-Controllers/    One controller per resource (Patients, Appointments, Bills, Bkash, DoctorDashboard, Portal, ...)
-Models/         EF Core entities + ViewModels/ and Dto/ for typed view payloads
-Services/       Business logic with no HTTP concerns (NEWS2, PHI scrubbing, AI spine, DoctorScheduleService, BkashPaymentService)
+Controllers/    One controller per resource (Patients, Appointments, Bills, Bkash, DoctorDashboard, Operations, Portal, Verify, ...)
+Models/         EF Core entities (20 tables) + ViewModels/ and Dto/ for typed view payloads
+Services/       Business logic (NEWS2, PHI scrubbing, AI spine, DoctorScheduleService, AtcClassificationGraph, AcuityQueueService, PrescriptionSecurityService, BkashPaymentService)
 Hubs/           SignalR hubs (live queue updates, streamed AI output)
 Views/          Razor views, one folder per controller
 Migrations/     EF Core migration history
-tests/          xUnit test project (excluded from the web project's build via a Compile Remove)
-docs/           ER diagram, architecture diagrams, and defense preparation notes
+tests/          xUnit test project (309 tests, excluded from the web project's build via a Compile Remove)
+docs/           ER diagram, architecture diagrams, comprehensive system guide, and defense preparation notes
 ```
 
 ## Documentation
 
 - [docs/SYSTEM-GUIDE.md](docs/SYSTEM-GUIDE.md) — master comprehensive system specification, workflows, and module reference (the single all-in-one document)
-- [docs/ER-DIAGRAM.md](docs/ER-DIAGRAM.md) — all 19 database tables, schema attributes, and relationships
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system layering, AI spine sequence, authorization model, payment gateway, and scheduling concurrency
+- [docs/ER-DIAGRAM.md](docs/ER-DIAGRAM.md) — all 20 database tables (including `MedicineBatches` and activated `Operations`), schema attributes, and relationships
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system layering, cryptographic ledger, graph algorithms, dynamic queues, AI spine sequence, and scheduling concurrency
 - [docs/DEFENSE-NOTES.md](docs/DEFENSE-NOTES.md) — rehearsable demo script, anticipated viva questions with grounded technical answers, and known limitations stated up front

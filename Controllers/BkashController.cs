@@ -18,15 +18,18 @@ namespace HospitalManagementSystem.Controllers
         private readonly ApplicationDbContext _context;
         private readonly IBkashPaymentService _bkashService;
         private readonly ILogger<BkashController> _logger;
+        private readonly ILedgerIntegrityService _ledgerService;
 
         public BkashController(
             ApplicationDbContext context,
             IBkashPaymentService bkashService,
-            ILogger<BkashController> logger)
+            ILogger<BkashController> logger,
+            ILedgerIntegrityService? ledgerService = null)
         {
             _context = context;
             _bkashService = bkashService;
             _logger = logger;
+            _ledgerService = ledgerService ?? new LedgerIntegrityService(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<LedgerIntegrityService>.Instance);
         }
 
         private async Task<(Patient? PrimaryPatient, List<Patient> Dependents)> GetPatientContextAsync()
@@ -222,6 +225,7 @@ namespace HospitalManagementSystem.Controllers
                     Notes = $"bKash Tokenized Checkout | PaymentID: {executeResponse.PaymentID} | TrxID: {trxId} | Payer: {executeResponse.CustomerMsisdn ?? executeResponse.PayerReference ?? "N/A"}"
                 };
 
+                await _ledgerService.StampTransactionAsync(paymentTx);
                 _context.PaymentTransactions.Add(paymentTx);
 
                 bill.PaidAmount = currentPaid + paidAmount;

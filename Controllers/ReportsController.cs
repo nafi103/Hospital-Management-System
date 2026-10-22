@@ -20,10 +20,12 @@ namespace HospitalManagementSystem.Controllers
     public class ReportsController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly ILedgerIntegrityService _ledgerService;
 
-        public ReportsController(ApplicationDbContext context)
+        public ReportsController(ApplicationDbContext context, ILedgerIntegrityService? ledgerService = null)
         {
             _context = context;
+            _ledgerService = ledgerService ?? new LedgerIntegrityService(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<LedgerIntegrityService>.Instance);
         }
 
         // GET: Reports
@@ -31,6 +33,32 @@ namespace HospitalManagementSystem.Controllers
         {
             var model = await BuildModelAsync(from, to);
             return View(model);
+        }
+
+        // POST: Reports/VerifyLedger
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> VerifyLedger(DateTime? from, DateTime? to)
+        {
+            var report = await _ledgerService.VerifyLedgerAsync();
+            if (report.IsValid)
+            {
+                var previewHash = report.LatestHash != null && report.LatestHash.Length >= 16 ? report.LatestHash[..16] : report.LatestHash;
+                TempData["SuccessMessage"] = $"Cryptographic Ledger Audit PASSED: {report.VerifiedTransactions} of {report.TotalTransactions} transaction blocks verified successfully. Zero database tampering detected. Latest Chain SHA-256: {previewHash}...";
+            }
+            else
+            {
+                TempData["ErrorMessage"] = $"LEDGER INTEGRITY FAILURE: {report.FailureReason}";
+            }
+            return RedirectToAction(nameof(Index), new { from = from?.ToString("yyyy-MM-dd"), to = to?.ToString("yyyy-MM-dd") });
+        }
+
+        // GET: Reports/LedgerStatus
+        [HttpGet]
+        public async Task<IActionResult> LedgerStatus()
+        {
+            var report = await _ledgerService.VerifyLedgerAsync();
+            return Json(report);
         }
 
         // GET: Reports/ExportAppointmentsCsv?from=...&to=...
@@ -176,6 +204,27 @@ namespace HospitalManagementSystem.Controllers
                 .ToListAsync();
 
             PopulateSafetyMetrics(model, prescriptionsInRange);
+
+            // FEFO Pharmacy Batches: Near-expiry and expired alerts
+            var nowUtc = DateTime.UtcNow;
+            var thirtyDaysFromNow = nowUtc.AddDays(30);
+
+            var expiringBatches = await _context.MedicineBatches
+                .Include(b => b.Medicine)
+                .Where(b => b.QuantityRemaining > 0 && b.ExpiryDate <= thirtyDaysFromNow)
+                .OrderBy(b => b.ExpiryDate)
+                .ToListAsync();
+
+            model.ExpiredBatchCount = expiringBatches.Count(b => b.ExpiryDate <= nowUtc);
+            model.NearExpiryBatches = expiringBatches
+                .Select(b => new NearExpiryBatchInfo(
+                    b.Id,
+                    b.Medicine?.Name ?? $"Med #{b.MedicineId}",
+                    b.BatchNumber,
+                    b.ExpiryDate,
+                    b.QuantityRemaining,
+                    (int)Math.Ceiling((b.ExpiryDate.Date - nowUtc.Date).TotalDays)))
+                .ToList();
 
             return model;
         }

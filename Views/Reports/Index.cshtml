@@ -44,6 +44,9 @@
         <a asp-action="ExportAppointmentsCsv" asp-route-from="@Model.FromDate.ToString("yyyy-MM-dd")" asp-route-to="@Model.ToDate.ToString("yyyy-MM-dd")" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-download me-1"></i> Export CSV
         </a>
+        <button type="submit" class="btn btn-sm btn-outline-success" formaction="@Url.Action("VerifyLedger")" formmethod="post" title="Recompute cryptographic SHA-256 hash chain and audit all ledger rows for database tampering">
+            <i class="bi bi-shield-check me-1"></i> Verify Ledger Integrity
+        </button>
     </form>
 </div>
 
@@ -232,6 +235,93 @@
             else
             {
                 <p class="text-muted mb-0">No safety warnings have been raised yet.</p>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mt-0">
+    <div class="col-12">
+        <div class="pro-card h-100">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 border-bottom pb-3 mb-3">
+                <div>
+                    <h5 class="mb-1"><i class="bi bi-boxes me-2 text-primary"></i>FEFO Pharmacy Batch Inventory &amp; Expiry Monitor</h5>
+                    <small class="text-muted">First-Expired, First-Out (FEFO) automated batch allocation &middot; 30-day early expiration alert</small>
+                </div>
+                <div>
+                    @if (Model.ExpiredBatchCount > 0)
+                    {
+                        <span class="badge bg-danger fs-6 py-2 px-3 me-2">
+                            <i class="bi bi-slash-circle me-1"></i>@Model.ExpiredBatchCount Expired Batches Blocked
+                        </span>
+                    }
+                    @if (Model.NearExpiryBatches.Any())
+                    {
+                        <span class="badge bg-warning text-dark fs-6 py-2 px-3">
+                            <i class="bi bi-clock-history me-1"></i>@Model.NearExpiryBatches.Count Batches Within 30 Days
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-success-subtle text-success border border-success-subtle fs-6 py-2 px-3">
+                            <i class="bi bi-check2-circle me-1"></i>All Batches Valid (>30 Days Shelf Life)
+                        </span>
+                    }
+                </div>
+            </div>
+
+            @if (Model.NearExpiryBatches.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Medicine</th>
+                                <th>Batch Number</th>
+                                <th>Expiry Date</th>
+                                <th class="text-center">Days Remaining</th>
+                                <th class="text-end">Units in Batch</th>
+                                <th class="text-center">Dispensing Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var batch in Model.NearExpiryBatches)
+                            {
+                                var isExpired = batch.DaysUntilExpiry <= 0;
+                                <tr>
+                                    <td class="fw-bold">@batch.MedicineName</td>
+                                    <td><code>@batch.BatchNumber</code></td>
+                                    <td>@batch.ExpiryDate.ToString("MMM dd, yyyy")</td>
+                                    <td class="text-center">
+                                        @if (isExpired)
+                                        {
+                                            <span class="badge bg-danger">EXPIRED</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning text-dark">@batch.DaysUntilExpiry days</span>
+                                        }
+                                    </td>
+                                    <td class="text-end fw-semibold">@batch.QuantityRemaining</td>
+                                    <td class="text-center">
+                                        @if (isExpired)
+                                        {
+                                            <span class="text-danger small fw-bold"><i class="bi bi-lock-fill me-1"></i>Blocked by FEFO</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-warning small fw-bold"><i class="bi bi-hourglass-split me-1"></i>Earliest Allocation</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <p class="text-muted mb-0">No batches are near expiration or expired. All pharmacy stock is safe and active.</p>
             }
         </div>
     </div>

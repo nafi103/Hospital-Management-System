@@ -27,6 +27,7 @@ namespace HospitalManagementSystem.Models
         public DbSet<PatientAllergy> PatientAllergies { get; set; }
         public DbSet<AiSuggestion> AiSuggestions { get; set; }
         public DbSet<AiProviderSetting> AiProviderSettings { get; set; }
+        public DbSet<MedicineBatch> MedicineBatches { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

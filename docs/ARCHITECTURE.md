@@ -9,8 +9,8 @@ flowchart TB
     Browser["Browser<br/>(Razor views, Bootstrap, vanilla JS)"]
 
     subgraph App["ASP.NET Core 10 MVC"]
-        Controllers["Controllers<br/>(Patients, Appointments, DoctorDashboard, Bills, Bkash, Portal, ...)"]
-        Services["Services<br/>(PhiScrubber, AiProviderResolver, ClinicalAiService, PrescriptionSafetyChecker,<br/>News2Calculator, DoctorScheduleService, BkashPaymentService, ApiKeyProtector, DemoDataSeeder)"]
+        Controllers["Controllers<br/>(Patients, Appointments, DoctorDashboard, Bills, Bkash, Portal, Operations, Verify, ...)"]
+        Services["Services<br/>(PhiScrubber, AiProviderResolver, ClinicalAiService, PrescriptionSafetyChecker,<br/>AtcClassificationGraph, LedgerIntegrityService, PrescriptionSecurityService, AcuityQueueService,<br/>News2Calculator, DoctorScheduleService, BkashPaymentService, ApiKeyProtector, DemoDataSeeder)"]
         Hubs["SignalR Hubs<br/>(NotificationHub, AiStreamHub)"]
     end
 
@@ -176,7 +176,9 @@ flowchart LR
     LedgerInsert --> BillUpdate["Update Bill.PaidAmount<br/>& Recalculate Totals"]
 ```
 
-- **Immutable `PaymentTransaction` Ledger:** Financial payments are never recorded as simple in-place mutations on `Bill.PaidAmount`. Every collection writes an unalterable `PaymentTransaction` row (recording the transaction timestamp, payment method, cashier or gateway transaction reference, cashier `UserId`, and amount). The bill's `PaidAmount` and status (`Paid`, `PartiallyPaid`, `Unpaid`) are derived atomically from the sum of all recorded transactions, preserving an unalterable audit trail.
+- **Cryptographic Hash-Chained Financial Ledger:** Financial payments are never recorded as simple in-place mutations on `Bill.PaidAmount`. Every collection writes an unalterable `PaymentTransaction` row incorporating a cryptographic hash chain:
+  `RowHash = SHA-256(PreviousHash + TransactionId + Amount + TimestampUtc + ProcessedById)`.
+  The genesis transaction links to `"GENESIS_BLOCK"`. A one-click integrity verification tool on `/Reports` re-hashes the chain sequentially in $O(N)$ time, immediately isolating any row manipulated via direct SQL modification.
 - **Online Checkout with bKash:** `BkashPaymentService` integrates with bKash Tokenized Checkout APIs:
   - Grants and caches the OAuth ID token in `IMemoryCache` for high-throughput efficiency.
   - Initiates payment creation with dynamic callback and invoice correlation (`MerchantInvoiceNumber = billId`).
@@ -184,16 +186,31 @@ flowchart LR
   - IDOR-protected in `BkashController`: ensures only the billing patient or their authorized guardian (or admin) can initiate payment.
 - **PostgreSQL `xmin` Concurrency Tokens:** `Bill` and `Appointment` entities utilize PostgreSQL's internal `xmin` system column mapped via EF Core's `IsRowVersion()`. If two cashiers record payments simultaneously, or a cashier and an online patient pay concurrently, the second commit fails with a `DbUpdateConcurrencyException`, triggering an immediate transaction rollback and alerting the user before any balance corruption occurs.
 
-## 5. Clinical Safety Net & Scheduling Concurrency
+## 5. Clinical Safety Net & Algorithmic Systems
 
-- **Doctor Scheduling Engine & Slot Collision Prevention:**
-  - `DoctorScheduleService` computes available 15-minute consultation slots between 09:00 AM and 05:00 PM (17:00), taking doctor shift availability, past appointments, and hospital operational timezone (`HospitalClock`, Asia/Dhaka UTC+6) into account.
-  - Concurrency conflict checks verify both doctor schedule collisions (`CheckDoctorCollisionAsync`) and patient double-booking collisions (`CheckPatientCollisionAsync`). The PostgreSQL `xmin` concurrency token on `Appointment` prevents race conditions when two patients or receptionists claim the same slot simultaneously.
+- **Hierarchical ATC Classification DAG Engine & DDI Matrix:**
+  - `AtcClassificationGraph` models medicines using the WHO Anatomical Therapeutic Chemical classification tree as an in-memory Directed Acyclic Graph (DAG).
+  - Traverses ancestor nodes in $O(1)$ or $O(\text{depth})$ time to catch drug-class cross-reactivity (e.g. a documented Penicillin allergy instantly catches Amoxicillin and Ampicillin via the shared beta-lactam parent node).
+  - Cross-references prescribed items against a deterministic high-risk clinical DDI matrix (e.g. Warfarin + NSAIDs, Sildenafil + Nitrates) with zero external AI latency.
+- **Dynamic Acuity-Weighted Queue with Starvation Prevention (Aging Algorithm):**
+  - Order is governed by: $\text{PriorityScore} = (W_{\text{acuity}} \times \text{NEWS2}) + (W_{\text{wait}} \times \text{MinutesWaited})$.
+  - Deteriorating patients are fast-tracked while linear time-aging ensures low-acuity walk-ins are never indefinitely starved. Real-time updates and live Estimated Wait Times (EWT) are broadcast via `NotificationHub`.
+- **$\Delta\text{NEWS2}$ Longitudinal Deterioration Radar:**
+  - Evaluates rate of physiological deterioration across consecutive vitals readings.
+  - Renders an inline SVG sparkline in the Clinical Cockpit and fires automated alert banners if a patient's NEWS2 score increases by $\ge 2$ points within 12 hours.
+- **FEFO (First-Expired, First-Out) Pharmacy Batch Allocation:**
+  - `MedicineBatch` sub-entity models manufacturing batches with individual expiry dates and quantities.
+  - Dispensing applies a greedy algorithm deducting stock from the earliest-expiring non-expired batch first.
+  - Dispensing of expired stock is strictly blocked at the transaction level, and the Admin dashboard flags batches within 30 days of expiration.
+- **HMAC-Signed QR Code Verification Service:**
+  - Prescriptions and Bangla Instruction Sheets are stamped with an SVG QR code containing an `HMAC-SHA256` signature generated with a secret server key.
+  - Public `/Verify/Prescription?token=...` endpoint validates the cryptographic token without authentication to confirm prescription authenticity and prevent forgery.
+- **Multi-Resource Surgical Theatre Scheduling:**
+  - `OperationsController` books surgical procedures by simultaneously validating three hard constraints:
+    1. Surgeon availability (no overlapping clinic appointments in `DoctorScheduleService` or concurrent surgeries).
+    2. Operating Theatre room availability.
+    3. Automatic earmarking of an unoccupied `ICU` or `Cabin` recovery bed via `BedTransfers`.
 - **Preventing Clinical History Data Loss (Restrict Deletions):**
   - `PrescriptionItem.Medicine` is configured with `DeleteBehavior.Restrict` in EF Core and enforced with pre-flight checks in `MedicinesController.DeleteConfirmed`. A formulary medicine cannot be deleted if historical prescription records reference it, eliminating cascade deletion hazards that could silently purge historic patient charts.
   - Inpatient admissions linked to billing invoices cannot be deleted (`_context.Bills.AnyAsync(b => b.AdmissionId == id)`), preventing unhandled foreign key crashes and protecting accounting audit trails.
-- **AI Context Expansion & Dynamic Cache Invalidation:**
-  - The clinical AI case summary pipeline aggregates comprehensive patient context: recent medical records, active allergies, latest vitals (including NEWS2 priority score), and active prescriptions.
-  - Dynamic cache invalidation computes a composite hash from the latest `UpdatedAt` timestamps and entity counts across all four clinical domains, ensuring clinician edits immediately invalidate cached prompts without redundant database queries.
-  - Review verdicts (`Accept`, `Reject`, `Edit`) execute atomic database transitions via `ExecuteUpdateAsync` conditioned on `s.Verdict == AiSuggestionVerdict.Pending`, preventing terminal decision race conditions.
 

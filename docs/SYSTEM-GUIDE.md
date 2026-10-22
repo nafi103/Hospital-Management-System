@@ -175,10 +175,16 @@ The **Clinical Cockpit** (`/DoctorDashboard/Cockpit/{appointmentId}`) is an all-
 
 ### Consultation Completion Pipeline:
 1. Validates diagnosis and prescription items.
-2. Invokes [PrescriptionSafetyChecker](file:///home/xenaf_i/Projects/Hospital-Management-System/Services/PrescriptionSafetyChecker.cs) synchronously.
+2. Invokes [PrescriptionSafetyChecker](file:///home/xenaf_i/Projects/Hospital-Management-System/Services/PrescriptionSafetyChecker.cs) synchronously with zero-latency hierarchical ATC DAG evaluation.
 3. If warnings exist, verifies doctor's documented `SafetyOverrideReason`.
 4. Saves `MedicalRecord`, creates `Prescription`, and transitions `Appointment.Status` to `Completed`.
-5. Broadcasts real-time SignalR notifications to update the assistant's chamber board and pharmacist's queue.
+5. Broadcasts real-time SignalR notifications to update the assistant's chamber board, priority-aged queue order, and pharmacist's queue.
+
+### 4.1 $\Delta\text{NEWS2}$ Longitudinal Deterioration Radar
+In addition to static intake vitals, the Clinical Cockpit calculates the **rate of physiological deterioration** across consecutive patient observations. If a patient's NEWS2 score escalates by $\ge 2$ points within a 12-hour window, the system triggers an inline alert banner and renders a dynamic SVG sparkline polyline, notifying the clinician of rapid deterioration even if their absolute score has not yet crossed the `Emergency` threshold.
+
+### 4.2 Tamper-Proof HMAC-Signed QR Verification
+Every issued prescription and AI-generated Bangla Instruction Sheet is stamped with a cryptographically verifiable QR code generated via [PrescriptionSecurityService.cs](file:///home/xenaf_i/Projects/Hospital-Management-System/Services/PrescriptionSecurityService.cs). The payload contains `PrescriptionId`, `Uhid`, `IssuedTimestamp`, and an `HMAC-SHA256` signature generated using the server's cryptographic secret key. Scanning the QR code directs to `/Verify/Prescription?token=...` (`[AllowAnonymous]`), providing zero-friction anti-forgery verification for pharmacists, patients, and external authorities.
 
 ---
 
@@ -229,6 +235,23 @@ Rather than relying on probabilistic language models for clinical safety, the sy
    - **Potent Drug Overdose Protection:** While general oral solid doses (tablets/capsules) are flagged above 500mg, high-potency and narrow-therapeutic-index drugs (**Digoxin**, **Warfarin**, **Morphine**, **Prednisolone**, **Methotrexate**) trigger pediatric warnings at a strict 5mg threshold to catch dangerous overdoses in young children.
    - **Weight Tracking:** Inpatient and triage vitals record `PatientVitals.WeightKg` (0.5–350 kg) to enable accurate weight-adjusted clinical dosing.
 
+### 5.3 Hierarchical ATC Classification DAG Engine & Drug-Drug Interaction Matrix
+
+Engineered in [AtcClassificationGraph.cs](file:///home/xenaf_i/Projects/Hospital-Management-System/Services/AtcClassificationGraph.cs), this component elevates medication safety from simplistic text matching into an algorithmic knowledge graph:
+- **Hierarchical Tree Structure:** Models the Anatomical Therapeutic Chemical (ATC) classification system as an in-memory Directed Acyclic Graph (DAG) covering all 5 anatomical and therapeutic levels:
+  - Level 1: Anatomical Main Group (e.g. `J` — Anti-infectives for systemic use)
+  - Level 2: Therapeutic Subgroup (e.g. `J01` — Antibacterials for systemic use)
+  - Level 3: Pharmacological Subgroup (e.g. `J01C` — Beta-lactam antibacterials, penicillins)
+  - Level 4: Chemical Subgroup (e.g. `J01CA` — Penicillins with extended spectrum)
+  - Level 5: Chemical Substance (e.g. `J01CA04` — Amoxicillin)
+- **$O(1)$ and $O(\text{depth})$ Cross-Reactivity Containment:** When an allergy is recorded (e.g., Penicillin), the graph resolves its ATC ancestor nodes. Any candidate prescription item is checked by traversing upward to common parent nodes, catching Amoxicillin, Ampicillin, and extended-spectrum cephalosporins instantly.
+- **Deterministic Drug-Drug Interaction (DDI) Matrix:** Prescribed medication pairs are cross-evaluated against high-risk clinical interaction edges with zero external AI latency:
+  - `Warfarin` + `Ibuprofen` / `Naproxen` $\rightarrow$ Severe gastrointestinal hemorrhage and bleeding risk.
+  - `Sildenafil` + `Nitroglycerin` $\rightarrow$ Fatal refractory hypotension and cardiovascular collapse.
+  - `Enalapril` / `Losartan` + `Spironolactone` $\rightarrow$ Severe hyperkalemia and cardiac arrhythmia risk.
+  - `Tramadol` + `Fluoxetine` / `Sertraline` $\rightarrow$ Serotonin syndrome and seizure threshold reduction.
+  - `Methotrexate` + `NSAIDs` $\rightarrow$ Renal clearance inhibition and severe methotrexate toxicity.
+
 ---
 
 ## 6. Doctor Scheduling & Self-Service Booking
@@ -264,16 +287,30 @@ The patient portal (`/Portal`) allows authenticated patients to manage their own
   }
   ```
 
+### 6.3 Dynamic Acuity-Weighted Queue with Starvation Prevention (Aging Algorithm)
+
+Managed by [AcuityQueueService.cs](file:///home/xenaf_i/Projects/Hospital-Management-System/Services/AcuityQueueService.cs) and broadcast in real-time via `NotificationHub`:
+- **Priority-Aging Scoring Formula:**
+  $$\text{PriorityScore} = (W_{\text{acuity}} \times \text{NEWS2}) + (W_{\text{wait}} \times \text{MinutesWaited})$$
+  *(Default calibration: $W_{\text{acuity}} = 10.0$, $W_{\text{wait}} = 1.0$)*
+- **Starvation Prevention Invariant:** High-acuity patients (NEWS2 $\ge 5$, Emergency) are fast-tracked to the top of the chamber queue. However, the continuous linear aging term ($W_{\text{wait}} \times \text{MinutesWaited}$) guarantees that stable walk-ins (`Normal` acuity) are never indefinitely starved by successive incoming patients.
+- **Live Estimated Wait Time (EWT):** Computed dynamically based on queue rank and estimated 15-minute slot durations, streamed directly to waiting patients on `/Portal` and assistants on `/Appointments`.
+
 ---
 
 ## 7. Financial Architecture & bKash Payment Gateway
 
-### 7.1 Immutable Financial Ledger
+### 7.1 Cryptographic Hash-Chained Financial Ledger (Tamper-Evident Auditing)
 
-Financial integrity is enforced through append-only accounting transactions:
-- Payments never directly mutate `Bill.PaidAmount`.
-- Every collection writes an unalterable [PaymentTransaction](file:///home/xenaf_i/Projects/Hospital-Management-System/Models/PaymentTransaction.cs) row.
-- `Bill.PaidAmount` and `Bill.Status` (`Unpaid`, `PartiallyPaid`, `Paid`) are dynamically recomputed from the ledger:
+Financial integrity is enforced through an append-only cryptographic ledger similar to Git commit trees or blockchain transaction ledgers:
+- **Cryptographic Hash Chain:** Every [PaymentTransaction](file:///home/xenaf_i/Projects/Hospital-Management-System/Models/PaymentTransaction.cs) stores:
+  - `PreviousHash`: The SHA-256 digest of the immediate preceding transaction (or `"GENESIS_BLOCK"` for the root entry).
+  - `RowHash`: `SHA-256(PreviousHash + TransactionId + Amount + TimestampUtc + ProcessedById)`.
+- **One-Click Ledger Integrity Verification:** Implemented in [LedgerIntegrityService.cs](file:///home/xenaf_i/Projects/Hospital-Management-System/Services/LedgerIntegrityService.cs) and exposed on `/Reports/VerifyLedgerIntegrity` (`[Authorize(Roles = "Admin")]`). The service scans all ledger rows in $O(N)$ time:
+  - Recomputes each transaction's SHA-256 hash.
+  - Verifies that `tx[i].PreviousHash == tx[i-1].RowHash`.
+  - If an insider database administrator alters an historical payment amount or transaction ID directly in PostgreSQL, verification fails immediately, citing the exact corrupted transaction ID, row index, and recorded amount.
+- **Ledger Balances & State Recalculation:** Payments never mutate `Bill.PaidAmount` directly. `RecalculateTotals()` derives totals by summing verified `PaymentTransactions`:
   ```csharp
   public void RecalculateTotals()
   {
@@ -427,15 +464,16 @@ erDiagram
 8. **`PatientVitals` (`PatientVital`):** Observation data: BP, HR, RR, SpO2, Temperature, `WeightKg` (0.5–350kg for pediatric weight-adjusted dosing), Supplemental O2, Consciousness, and computed `NEWS2` score/priority.
 9. **`MedicalRecords` (`MedicalRecord`):** Consultation notes, diagnoses, and treatment summaries.
 10. **`PatientAllergies` (`PatientAllergy`):** Documented substance allergies with severity, drug class mapping, and a server-computed normalized shadow column.
-11. **`Medicines` (`Medicine`):** Formulary inventory with brand name, generic name, strength, unit price, and current stock count. Stock deductions execute atomically via `ExecuteUpdateAsync` with a `WHERE StockQuantity >= requested` SQL guard to eliminate race conditions and negative inventory.
-12. **`Prescriptions` (`Prescription`):** Clinical medication orders with dispensing lifecycle tracking (`DispensedById`, `DiscontinuedById`) and safety override audit json.
-13. **`PrescriptionItems` (`PrescriptionItem`):** Specific dosage, frequency, and quantity lines linked to formulary medicines.
-14. **`Bills` (`Bill`):** Billing invoices mapping subtotal, discounts, net balance, paid totals, and native `Version` (`xmin` concurrency token).
-15. **`BillItems` (`BillItem`):** Line items specifying department charges (Pharmacy, Bed, Consultation, Diagnostics).
-16. **`PaymentTransactions` (`PaymentTransaction`):** Immutable financial ledger recording payment amounts, methods (Cash, bKash, Card), cashier IDs, and filtered unique index on `TransactionId` (`WHERE "TransactionId" IS NOT NULL`) for gateway idempotency.
-17. **`AiSuggestions` (`AiSuggestion`):** Generated AI clinical drafts (Case Summaries or Bangla Instructions) with token usage, latency, and clinician verdict.
-18. **`AiProviderSettings` (`AiProviderSetting`):** Multi-vendor configurations storing encrypted API keys, model identifiers, and failover priority ranks.
-19. **`Operations` (`Operation`):** Surgical theatre scheduling schema cross-checked by `DoctorScheduleService` to prevent booking clinic slots during surgery.
+11. **`Medicines` (`Medicine`):** Formulary inventory with brand name, generic name, strength, unit price, and aggregate stock count. Stock deductions execute atomically via `ExecuteUpdateAsync` with a `WHERE StockQuantity >= requested` SQL guard to eliminate race conditions and negative inventory.
+12. **`MedicineBatches` (`MedicineBatch`):** Sub-entity tracking individual manufacturing batches (`BatchNumber`, `ExpiryDate`, `QuantityRemaining`, `InitialQuantity`) enabling FEFO (First-Expired, First-Out) inventory allocation, automatic lockout of expired stock, and near-expiry alerts.
+13. **`Prescriptions` (`Prescription`):** Clinical medication orders with dispensing lifecycle tracking (`DispensedById`, `DiscontinuedById`), safety override audit JSON, and HMAC-SHA256 verification stamps.
+14. **`PrescriptionItems` (`PrescriptionItem`):** Specific dosage, frequency, and quantity lines linked to formulary medicines.
+15. **`Bills` (`Bill`):** Billing invoices mapping subtotal, discounts, net balance, paid totals, and native `Version` (`xmin` concurrency token).
+16. **`BillItems` (`BillItem`):** Line items specifying department charges (Pharmacy, Bed, Consultation, Operation, Diagnostics).
+17. **`PaymentTransactions` (`PaymentTransaction`):** Cryptographic hash-chained financial ledger recording payment amounts, methods (Cash, bKash, Card), cashier IDs, `PreviousHash`, `RowHash` (`SHA-256`), and filtered unique index on `TransactionId` (`WHERE "TransactionId" IS NOT NULL`) for gateway idempotency.
+18. **`AiSuggestions` (`AiSuggestion`):** Generated AI clinical drafts (Case Summaries or Bangla Instructions) with token usage, latency, and clinician verdict.
+19. **`AiProviderSettings` (`AiProviderSetting`):** Multi-vendor configurations storing encrypted API keys, model identifiers, and failover priority ranks.
+20. **`Operations` (`Operation`):** End-to-end surgical theatre scheduling engine validating surgeon availability, operating theatre availability, and automatic post-op recovery bed reservation via `BedTransfers`.
 
 ---
 
@@ -462,7 +500,9 @@ erDiagram
 | [AiReviewController](file:///home/xenaf_i/Projects/Hospital-Management-System/Controllers/AiReviewController.cs) | `/AiReview` | Streaming endpoints for AI case summaries and Bangla sheets; Accept/Edit/Reject review actions. |
 | [AiProviderSettingsController](file:///home/xenaf_i/Projects/Hospital-Management-System/Controllers/AiProviderSettingsController.cs) | `/AiProviderSettings` | Admin configuration for external LLMs (Gemini, Groq, Anthropic), priorities, and health pings. |
 | [StaffController](file:///home/xenaf_i/Projects/Hospital-Management-System/Controllers/StaffController.cs) | `/Staff` | Staff user administration, role assignment, and doctor-assistant pairing. |
-| [ReportsController](file:///home/xenaf_i/Projects/Hospital-Management-System/Controllers/ReportsController.cs) | `/Reports` | Executive dashboard: revenue, occupancy, triage mix, AI governance, and safety net stats. |
+| [ReportsController](file:///home/xenaf_i/Projects/Hospital-Management-System/Controllers/ReportsController.cs) | `/Reports` | Executive dashboard: revenue, occupancy, triage mix, AI governance, ledger integrity verification, and safety net stats. |
+| [OperationsController](file:///home/xenaf_i/Projects/Hospital-Management-System/Controllers/OperationsController.cs) | `/Operations` | Surgical theatre scheduling engine validating surgeon, OT room, and recovery bed constraints simultaneously. |
+| [VerifyController](file:///home/xenaf_i/Projects/Hospital-Management-System/Controllers/VerifyController.cs) | `/Verify` | Public, unauthenticated verification endpoint for HMAC-signed prescription and instruction sheet QR codes. |
 | [PatientAllergiesController](file:///home/xenaf_i/Projects/Hospital-Management-System/Controllers/PatientAllergiesController.cs) | `/PatientAllergies` | Patient allergy recording and deletion. |
 
 ### 10.2 Real-Time SignalR Hubs
@@ -470,7 +510,7 @@ erDiagram
 1. **`NotificationHub` (`/notificationHub`):**
    - Annotated with `[Authorize]`.
    - On connection, maps the caller to their private channel group `user_{userId}`.
-   - Pushes live updates when an assistant sends a patient in, keeping the doctor's consultation board dynamically updated without browser reloads.
+   - Pushes live updates when an assistant sends a patient in, keeping the doctor's consultation board dynamically updated without browser reloads. Broadcasts dynamic acuity-aged queue reordering and EWT estimations.
 2. **`AiStreamHub` (`/aiStreamHub`):**
    - Annotated with `[Authorize(Roles = "Doctor")]`.
    - Enforces that only the initiating doctor can join stream channel groups (`JoinStream`).
@@ -480,11 +520,11 @@ erDiagram
 
 ## 11. Testing & Quality Assurance Architecture
 
-The test suite contains **284 automated xUnit tests** with zero external database dependencies (using EF Core In-Memory and Mocked Handlers), providing 100% test pass rates in ~3 seconds:
+The test suite contains **309 automated xUnit tests** with zero external database dependencies (using EF Core In-Memory and Mocked Handlers), providing 100% test pass rates in ~4 seconds:
 
 ```bash
 dotnet test
-Passed! - Failed: 0, Passed: 284, Skipped: 0, Total: 284, Duration: 3 s
+Passed! - Failed: 0, Passed: 309, Skipped: 0, Total: 309, Duration: 4 s
 ```
 
 > [!NOTE]

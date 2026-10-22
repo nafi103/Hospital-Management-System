@@ -78,6 +78,9 @@
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="MedicalRecords" asp-action="Index">Medical Records</a>
                             </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Operations" asp-action="Index">Operations</a>
+                            </li>
                         }
                         else if (User.IsInRole("Assistant"))
                         {
@@ -116,6 +119,9 @@
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="Bills" asp-action="Index">Bills</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Operations" asp-action="Index">Operations</a>
                             </li>
                         }
                         else if (User.IsInRole("Patient"))
@@ -157,6 +163,9 @@
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="Bills" asp-action="Index">Bills</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-area="" asp-controller="Operations" asp-action="Index">Operations</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" asp-area="" asp-controller="Medicines" asp-action="Index">Inventory</a>

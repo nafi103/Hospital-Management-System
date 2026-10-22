@@ -473,6 +473,41 @@ namespace HospitalManagementSystem.Controllers
                         .Where(pi => pi.PrescriptionId == id)
                         .ToListAsync();
 
+                    // FEFO Pharmacy Batch Allocation Check
+                    foreach (var item in items)
+                    {
+                        var batches = await _context.MedicineBatches
+                            .Where(b => b.MedicineId == item.MedicineId && b.QuantityRemaining > 0)
+                            .OrderBy(b => b.ExpiryDate)
+                            .ToListAsync();
+
+                        if (batches.Any())
+                        {
+                            var nowUtc = DateTime.UtcNow;
+                            var nonExpiredBatches = batches.Where(b => b.ExpiryDate > nowUtc).ToList();
+                            int nonExpiredStock = nonExpiredBatches.Sum(b => b.QuantityRemaining);
+
+                            if (nonExpiredStock < item.Quantity)
+                            {
+                                await transaction.RollbackAsync();
+                                var medName = item.Medicine?.Name ?? $"Medicine #{item.MedicineId}";
+                                TempData["ErrorMessage"] = $"FEFO Inventory Lock: Cannot dispense {medName}. Non-expired batch stock is {nonExpiredStock}, but {item.Quantity} was requested. Expired batches are blocked from dispensing.";
+                                return RedirectToAction(nameof(Details), new { id });
+                            }
+
+                            int needed = item.Quantity;
+                            foreach (var batch in nonExpiredBatches)
+                            {
+                                int deduct = Math.Min(needed, batch.QuantityRemaining);
+                                batch.QuantityRemaining -= deduct;
+                                batch.UpdatedAt = DateTime.UtcNow;
+                                needed -= deduct;
+                                if (needed == 0) break;
+                            }
+                        }
+                    }
+                    await _context.SaveChangesAsync();
+
                     foreach (var item in items)
                     {
                         var updated = await _context.Medicines
@@ -525,7 +560,7 @@ namespace HospitalManagementSystem.Controllers
                         .Where(pi => pi.PrescriptionId == id)
                         .ToListAsync();
 
-                    // Pre-flight check: ensure every item has sufficient stock before making any changes
+                    // Pre-flight check: ensure every item has sufficient stock and non-expired batches before making any changes
                     foreach (var item in items)
                     {
                         var medicine = await _context.Medicines.FindAsync(item.MedicineId);
@@ -536,6 +571,36 @@ namespace HospitalManagementSystem.Controllers
                             var currentStock = medicine?.StockQuantity ?? 0;
                             TempData["ErrorMessage"] = $"Insufficient stock for {medName}. Requested: {item.Quantity}, Available: {currentStock}. Dispensing cancelled.";
                             return RedirectToAction(nameof(Details), new { id });
+                        }
+
+                        var batches = await _context.MedicineBatches
+                            .Where(b => b.MedicineId == item.MedicineId && b.QuantityRemaining > 0)
+                            .OrderBy(b => b.ExpiryDate)
+                            .ToListAsync();
+
+                        if (batches.Any())
+                        {
+                            var nowUtc = DateTime.UtcNow;
+                            var nonExpiredBatches = batches.Where(b => b.ExpiryDate > nowUtc).ToList();
+                            int nonExpiredStock = nonExpiredBatches.Sum(b => b.QuantityRemaining);
+
+                            if (nonExpiredStock < item.Quantity)
+                            {
+                                await transaction.RollbackAsync();
+                                var medName = medicine.Name;
+                                TempData["ErrorMessage"] = $"FEFO Inventory Lock: Cannot dispense {medName}. Non-expired batch stock is {nonExpiredStock}, but {item.Quantity} was requested. Expired batches are blocked from dispensing.";
+                                return RedirectToAction(nameof(Details), new { id });
+                            }
+
+                            int needed = item.Quantity;
+                            foreach (var batch in nonExpiredBatches)
+                            {
+                                int deduct = Math.Min(needed, batch.QuantityRemaining);
+                                batch.QuantityRemaining -= deduct;
+                                batch.UpdatedAt = DateTime.UtcNow;
+                                needed -= deduct;
+                                if (needed == 0) break;
+                            }
                         }
                     }
 

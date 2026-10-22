@@ -49,6 +49,7 @@ namespace HospitalManagementSystem.Services
 
             CheckDuplicateTherapy(resolvedItems, activeMedications, warnings);
             CheckAllergyConflicts(resolvedItems, allergies, activeMedications, warnings);
+            CheckDrugInteractions(resolvedItems, activeMedications, warnings);
             CheckStock(resolvedItems, allMedicines, warnings);
             if (patientIsChild)
             {
@@ -93,6 +94,53 @@ namespace HospitalManagementSystem.Services
                             "Duplicate Therapy",
                             SafetyWarningSeverity.Warning,
                             $"{medicine.Name} ({medicine.GenericName}) duplicates active dispensed medication {active.MedicineName} from Prescription #{active.PrescriptionId} (dispensed {dispensedDateStr}) - confirm this isn't unintentional duplicate therapy."));
+                    }
+                }
+            }
+        }
+
+        private static void CheckDrugInteractions(
+            List<(SafetyCheckItem Item, MedicineInfo Medicine)> resolvedItems,
+            IReadOnlyList<ActiveMedicationInfo>? activeMedications,
+            List<SafetyWarning> warnings)
+        {
+            // 1. Within current prescription: pairwise interaction check
+            for (int i = 0; i < resolvedItems.Count; i++)
+            {
+                var medA = resolvedItems[i].Medicine;
+                for (int j = i + 1; j < resolvedItems.Count; j++)
+                {
+                    var medB = resolvedItems[j].Medicine;
+                    var ddis = AtcClassificationGraph.EvaluateInteraction(
+                        medA.Name, medA.GenericName,
+                        medB.Name, medB.GenericName);
+
+                    foreach (var ddi in ddis)
+                    {
+                        warnings.Add(ddi);
+                    }
+                }
+            }
+
+            // 2. Between current prescription and active dispensed medications
+            if (activeMedications != null && activeMedications.Count > 0)
+            {
+                foreach (var (_, medicine) in resolvedItems)
+                {
+                    foreach (var active in activeMedications)
+                    {
+                        var ddis = AtcClassificationGraph.EvaluateInteraction(
+                            medicine.Name, medicine.GenericName,
+                            active.MedicineName, active.GenericName);
+
+                        foreach (var ddi in ddis)
+                        {
+                            var dispensedDateStr = active.PrescribedOrDispensedAt.ToString("MMM dd, yyyy");
+                            warnings.Add(new SafetyWarning(
+                                "Drug-Drug Interaction",
+                                ddi.Severity,
+                                $"{ddi.Message} (Active medication {active.MedicineName} from Prescription #{active.PrescriptionId}, dispensed {dispensedDateStr})"));
+                        }
                     }
                 }
             }
@@ -199,7 +247,26 @@ namespace HospitalManagementSystem.Services
                 }
             }
 
-            // 7. General bidirectional substring/token matching with chemical salt exclusion
+            // 7. ATC Graph Traversal for Cross-Reactivity
+            if (!string.IsNullOrWhiteSpace(allergenGen) && AtcClassificationGraph.MatchesAllergyClass(allergenGen, med, gen))
+            {
+                if (IsSulfaAllergy(allergenGen) && IsChemicalSulfateSaltOnly(gen, med))
+                {
+                    return false;
+                }
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(substance) && AtcClassificationGraph.MatchesAllergyClass(substance, med, gen))
+            {
+                if (IsSulfaAllergy(substance) && IsChemicalSulfateSaltOnly(gen, med))
+                {
+                    return false;
+                }
+                return true;
+            }
+
+            // 8. General bidirectional substring/token matching with chemical salt exclusion
             if (!string.IsNullOrWhiteSpace(substance))
             {
                 // Disambiguate chemical salts from sulfa

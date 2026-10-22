@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using HospitalManagementSystem.Models;
 using HospitalManagementSystem.Services;
+using HospitalManagementSystem.Hubs;
+using Microsoft.AspNetCore.SignalR;
 
 namespace HospitalManagementSystem.Controllers
 {
@@ -15,10 +17,17 @@ namespace HospitalManagementSystem.Controllers
     public class VitalsController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly IAcuityQueueService? _acuityService;
+        private readonly Microsoft.AspNetCore.SignalR.IHubContext<HospitalManagementSystem.Hubs.NotificationHub>? _hubContext;
 
-        public VitalsController(ApplicationDbContext context)
+        public VitalsController(
+            ApplicationDbContext context,
+            IAcuityQueueService? acuityService = null,
+            Microsoft.AspNetCore.SignalR.IHubContext<HospitalManagementSystem.Hubs.NotificationHub>? hubContext = null)
         {
             _context = context;
+            _acuityService = acuityService;
+            _hubContext = hubContext;
         }
 
         // GET: Vitals/Create?appointmentId=5
@@ -120,6 +129,36 @@ namespace HospitalManagementSystem.Controllers
 
                 _context.PatientVitals.Add(vital);
                 await _context.SaveChangesAsync();
+
+                if (!isChild && _acuityService != null)
+                {
+                    var pastVitals = await _context.PatientVitals
+                        .Where(v => v.PatientId == vital.PatientId && v.Id != vital.Id)
+                        .OrderByDescending(v => v.CreatedAt)
+                        .Take(10)
+                        .ToListAsync();
+
+                    var delta = _acuityService.ComputeDeltaNews2(vital, pastVitals);
+                    if (delta.IsRapidDeterioration && _hubContext != null)
+                    {
+                        await _hubContext.Clients.Group($"Doctor_{appointment.DoctorId}").SendAsync(
+                            "DeteriorationAlert",
+                            new
+                            {
+                                PatientId = appointment.PatientId,
+                                PatientName = appointment.Patient?.FullName,
+                                AppointmentId = appointment.Id,
+                                Delta = delta.Delta,
+                                CurrentScore = delta.CurrentScore,
+                                PreviousScore = delta.PreviousScore,
+                                Hours = delta.HoursBetween,
+                                Message = delta.Message
+                            });
+                    }
+
+                    // Dynamically re-rank doctor chamber queue and broadcast live EWT
+                    await _acuityService.BroadcastQueueUpdateAsync(appointment.DoctorId);
+                }
 
                 if (isChild)
                 {

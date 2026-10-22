@@ -40,6 +40,7 @@ erDiagram
     USER ||--o{ PRESCRIPTION : "discontinued by (doctor, optional)"
     PRESCRIPTION ||--o{ PRESCRIPTIONITEM : "contains"
     MEDICINE ||--o{ PRESCRIPTIONITEM : "prescribed as"
+    MEDICINE ||--o{ MEDICINEBATCH : "stocked in batches"
 
     PATIENT ||--o{ BILL : "billed"
     ADMISSION ||--o| BILL : "for (optional)"
@@ -122,6 +123,16 @@ erDiagram
         decimal UnitPrice
         int StockQuantity
     }
+    MEDICINEBATCH {
+        int Id PK
+        int MedicineId FK
+        string BatchNumber
+        datetime ExpiryDate
+        int QuantityRemaining
+        int InitialQuantity
+        datetime CreatedAt
+        datetime UpdatedAt
+    }
     PRESCRIPTION {
         int Id PK
         int PatientId FK
@@ -170,6 +181,8 @@ erDiagram
         int ProcessedById FK "nullable"
         datetime TransactionDate
         string Notes "nullable"
+        string PreviousHash "SHA-256 cryptographic chain"
+        string RowHash "SHA-256 cryptographic chain"
     }
     PATIENTVITAL {
         int Id PK
@@ -254,8 +267,10 @@ All clinical and user relationships use `OnDelete(DeleteBehavior.Restrict)` rath
 - **PostgreSQL `xmin` Concurrency Tokens:** `Appointment.Version` and `Bill.Version` map PostgreSQL's native `xmin` hidden system column via `.Property(x => x.Version).IsRowVersion()`. EF Core includes `xmin` in `WHERE` clauses of `UPDATE` queries to guarantee atomic collision detection (e.g. double-booking a doctor's slot or simultaneous bill payments).
 - **Allergy Normalization Shadow Column:** `PatientAllergy` includes a computed shadow column `SubstanceNormalized` defined as `lower(btrim("Substance"))` with a unique composite index on `(PatientId, SubstanceNormalized)`, preventing duplicate allergy entries regardless of case or whitespace variance.
 
-`Operation` is fully modeled (including its own `OnDelete(Restrict)` configuration for
-`SurgeonId`) but has no controller or views anywhere in the codebase — see
-[DEFENSE-NOTES.md](DEFENSE-NOTES.md#known-limitations) for why it's out of scope rather than
-half-built.
+## Surgical Theatre & Multi-Resource Scheduling
+
+`Operation` is fully implemented and wired end-to-end via `OperationsController`:
+- **Three Simultaneous Resource Constraints:** (1) Verifies the lead surgeon has no outpatient clinic appointments or concurrent surgeries via `DoctorScheduleService`; (2) Verifies the Operating Theatre room is free during the surgical window; and (3) Automatically earmarks an unoccupied `ICU` or `Cabin` recovery bed via `BedTransfer` under the patient's `Admission`.
+- **Clinical Lifecycle:** Tracks surgical procedures through `Scheduled` -> `InSurgery` -> `Recovery` -> `Completed` status transitions with pre-op checklist verification and automatic billing integration in `BillsController`.
+
 

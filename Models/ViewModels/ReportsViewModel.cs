@@ -54,5 +54,17 @@ namespace HospitalManagementSystem.Models.ViewModels
         public int TotalPrescriptions { get; set; }
         public int PrescriptionsWithSafetyOverride { get; set; }
         public List<SafetyWarningCategoryCount> SafetyWarningsByCategory { get; set; } = new();
+
+        // FEFO Pharmacy Inventory Expiry Alerts
+        public int ExpiredBatchCount { get; set; }
+        public List<NearExpiryBatchInfo> NearExpiryBatches { get; set; } = new();
     }
+
+    public record NearExpiryBatchInfo(
+        int BatchId,
+        string MedicineName,
+        string BatchNumber,
+        DateTime ExpiryDate,
+        int QuantityRemaining,
+        int DaysUntilExpiry);
 }

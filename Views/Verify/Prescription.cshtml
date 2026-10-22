@@ -1,0 +1,157 @@
+@model HospitalManagementSystem.Controllers.PrescriptionVerificationViewModel
+@using HospitalManagementSystem.Models
+@{
+    ViewData["Title"] = "Digital Prescription Verification";
+    Layout = "_Layout";
+}
+
+<div class="container py-4" style="max-width: 800px;">
+    @if (!Model.IsValid)
+    {
+        <div class="card border-danger shadow-sm mb-4">
+            <div class="card-header bg-danger text-white py-3">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-shield-x fs-2 me-3"></i>
+                    <div>
+                        <h4 class="mb-0 fw-bold">Verification Failed</h4>
+                        <small class="text-white-50">Cryptographic authenticity could not be established</small>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-4 text-center">
+                <div class="text-danger mb-3">
+                    <i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i>
+                </div>
+                <h5 class="fw-bold text-danger mb-3">@Model.ErrorMessage</h5>
+                <p class="text-muted mb-4">
+                    The digital signature does not match the hospital authority registry or the record has been tampered with.
+                    Do not dispense controlled medications against an unverified prescription.
+                </p>
+                <div class="bg-light p-3 rounded font-monospace small text-break text-start mb-4 border">
+                    <div><strong>Prescription ID:</strong> @Model.PrescriptionId</div>
+                    <div><strong>Claimed UHID:</strong> @Model.Uhid</div>
+                    <div><strong>Presented Signature:</strong> @Model.Signature</div>
+                </div>
+                <a href="/" class="btn btn-secondary px-4">
+                    <i class="bi bi-arrow-left me-1"></i> Return to Home
+                </a>
+            </div>
+        </div>
+    }
+    else if (Model.Prescription != null)
+    {
+        var rx = Model.Prescription;
+        <div class="card border-success shadow-sm mb-4">
+            <div class="card-header bg-success text-white py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-shield-check fs-2 me-3"></i>
+                        <div>
+                            <h4 class="mb-0 fw-bold">Authentic Prescription Verified</h4>
+                            <small class="text-white-50">Cryptographically Signed via HMAC-SHA256 Authority</small>
+                        </div>
+                    </div>
+                    <span class="badge bg-white text-success fs-6 px-3 py-2 fw-bold">
+                        <i class="bi bi-check-circle-fill me-1"></i> GENUINE
+                    </span>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                <div class="alert alert-success bg-opacity-10 border-success-subtle d-flex align-items-center mb-4">
+                    <i class="bi bi-lock-fill text-success fs-4 me-3"></i>
+                    <div class="small">
+                        <strong>Tamper-Proof Guarantee:</strong> This prescription was issued by an authorized doctor
+                        and verified against the central hospital clinical ledger.
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-4 pb-3 border-bottom">
+                    <div class="col-sm-6">
+                        <div class="text-muted small text-uppercase fw-semibold">Patient Information</div>
+                        <div class="fs-5 fw-bold text-dark">@(rx.Patient?.FullName ?? "N/A")</div>
+                        <div class="small text-muted">
+                            <span class="fw-semibold">UHID:</span> <span class="badge bg-secondary">@(rx.Patient?.Uhid ?? Model.Uhid)</span> &middot;
+                            <span>@(rx.Patient?.Gender ?? "N/A")</span> &middot;
+                            <span>DOB: @(rx.Patient?.DateOfBirth.ToString("MMM dd, yyyy") ?? "N/A")</span>
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-muted small text-uppercase fw-semibold">Prescribing Clinician</div>
+                        <div class="fs-5 fw-bold text-primary">Dr. @(rx.Doctor?.FullName ?? "Hospital Physician")</div>
+                        <div class="small text-muted">
+                            <span>Specialization: @(rx.Doctor?.Category ?? "General Medicine")</span>
+                        </div>
+                        <div class="small text-muted">
+                            <span>Issued Date: <strong>@(rx.CreatedAt.ToString("MMM dd, yyyy hh:mm tt"))</strong></span>
+                        </div>
+                    </div>
+                </div>
+
+                <h5 class="fw-bold mb-3"><i class="bi bi-capsule me-2 text-primary"></i>Prescribed Medications</h5>
+                <div class="table-responsive mb-4">
+                    <table class="table table-bordered align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Medication</th>
+                                <th>Generic Name</th>
+                                <th>Dosage & Instructions</th>
+                                <th class="text-center">Quantity</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (rx.PrescriptionItems != null && rx.PrescriptionItems.Any())
+                            {
+                                int idx = 1;
+                                foreach (var item in rx.PrescriptionItems)
+                                {
+                                    <tr>
+                                        <td>@(idx++)</td>
+                                        <td class="fw-bold text-dark">@(item.Medicine?.Name ?? "Item #" + item.MedicineId)</td>
+                                        <td class="text-muted small">@(item.Medicine?.GenericName ?? "N/A")</td>
+                                        <td>
+                                            <div><strong>@item.DoseDisplay</strong> @(item.DurationDays.HasValue ? $"({item.DurationDays} days)" : "")</div>
+                                            <small class="text-muted">@(string.IsNullOrWhiteSpace(item.Instructions) ? $"Route: {item.Route}" : $"{item.Instructions} &middot; Route: {item.Route}")</small>
+                                        </td>
+                                        <td class="text-center fw-bold">@item.Quantity</td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-3">No medication line items recorded.</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="bg-light p-3 rounded font-monospace small border mb-4">
+                    <div class="text-muted fw-bold mb-1">Cryptographic Audit Certificate:</div>
+                    <div><strong>Prescription ID:</strong> #@rx.Id</div>
+                    <div><strong>Digital HMAC-SHA256:</strong> <span class="text-break text-success">@Model.Signature</span></div>
+                    <div><strong>Timestamp (UTC):</strong> @Model.IssuedAt.ToString("o")</div>
+                    <div><strong>Dispensation Status:</strong> <span class="badge @(rx.Status == PrescriptionStatus.Dispensed ? "bg-success" : "bg-warning text-dark")">@rx.Status</span></div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center">
+                    <a href="/" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left me-1"></i> Home
+                    </a>
+                    <div class="d-flex gap-2">
+                        @if (Model.IsPharmacistOrDoctor)
+                        {
+                            <a asp-controller="Prescriptions" asp-action="Dispense" asp-route-id="@rx.Id" class="btn btn-primary">
+                                <i class="bi bi-cart-check me-1"></i> Open in Dispense Counter
+                            </a>
+                        }
+                        <a asp-controller="Prescriptions" asp-action="Print" asp-route-id="@rx.Id" target="_blank" class="btn btn-outline-dark">
+                            <i class="bi bi-printer me-1"></i> Print Formal Copy
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>

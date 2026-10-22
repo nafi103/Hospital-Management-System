@@ -39,50 +39,68 @@ needed). Credentials for accounts not on that page are in [README.md](../README.
      screen updates **without a reload** — this is the live SignalR proof, not a screenshot claim.
    - Enter the **Clinical Cockpit** (`/DoctorDashboard/Cockpit/{id}`) — a consolidated, unified
      workspace presenting patient vitals, NEWS2 score badge, allergy contraindication flags, medical
-     history, and active prescriptions side-by-side.
+     history, active prescriptions, and an inline **$\Delta\text{NEWS2}$ Longitudinal Deterioration Radar**
+     (rendering an SVG sparkline and triggering automatic alerts if NEWS2 increases by $\ge 2$ points within 12 hours).
    - Click **Generate Case Summary** → watch it stream in live via WebSocket, synthesizing recent
      medical records, active allergies, latest vitals, and active prescriptions with citation markers.
      Accept (or Edit, or Reject — all three are real, distinct code paths, not three buttons doing the same thing).
-   - Add a medical record, then write a prescription for **Mizanur Rahman** with **Napa 500mg and
-     Ace 500mg together** — this fires two real safety warnings at once (duplicate Paracetamol
-     therapy, and his recorded Paracetamol allergy) on data that was already seeded before this
-     feature existed, not staged for the demo. Type an override reason and save — both the exact
-     warnings shown and the reason are now a permanent, inspectable part of that prescription.
+   - **Zero-AI-Latency ATC Graph Allergy Cross-Reactivity & DDI Matrix:** Write a prescription for
+     **Mizanur Rahman** with **Napa 500mg and Ace 500mg together** — this fires two real safety warnings at once
+     (duplicate Paracetamol therapy, and his recorded Paracetamol allergy). Prescribe **Warfarin + Ibuprofen** to
+     demonstrate high-risk DDI detection, or prescribe **Amoxicillin** to a patient with a documented **Penicillin**
+     allergy to showcase the Hierarchical ATC Graph catching beta-lactam cross-reactivity in $O(1)$ time. Type an override
+     reason and save — both the exact warnings shown and the reason are now a permanent, inspectable part of that prescription.
    - On that prescription's page, click **Generate Instructions** to produce a Bangla-language
      patient instruction sheet, watch it stream in, Accept it, then **Print Instruction Sheet** —
-     the only document in the system a patient without medical training actually reads. (No
-     internet at the venue? Rahim Uddin's dispensed Napa prescription already has one
-     pre-accepted — open that instead and skip straight to Print.)
+     notice the **tamper-proof HMAC-SHA256 signed QR code** stamped on both the printed prescription and
+     Bangla instruction sheet. Anyone scanning the QR code or visiting `/Verify/Prescription?token=...`
+     verifies prescription authenticity, issue timestamp, and doctor credentials with zero login required.
    - Mark the consultation Completed.
 
 4. **Pharmacist** (`pharmacistmock`, one-click)
-   - Prescriptions queue → open the one just written → Dispense. Inventory stock decrements by
-     the dispensed quantity atomically within a database transaction.
+   - Prescriptions queue → scan the HMAC QR code or open the prescription → Dispense.
+   - **FEFO (First-Expired, First-Out) Pharmacy Batch Allocation:** Stock is greedily deducted from the
+     earliest-expiring non-expired batch first (`MedicineBatches`). If non-expired batch stock is insufficient,
+     dispensing is blocked with an explicit inventory lockout alert.
 
 5. **Patient** (the account from step 1, or `PT-202610-0001` Rahim Uddin, real username/password)
    - Portal shows only that patient's own appointments, records, prescriptions, and bills.
+   - **Dynamic Acuity-Weighted Queue & Live EWT:** Patient views their live queue position and Estimated Wait Time
+     (EWT) calculated via the starvation-prevention formula: $\text{PriorityScore} = (W_{\text{acuity}} \times \text{NEWS2}) + (W_{\text{wait}} \times \text{MinutesWaited})$.
    - **Dependent Account Switching:** Switch active profile between primary account and linked
      pediatric dependents (e.g. Rahim Uddin managing Ayan Uddin) using the portal family switcher.
    - **Direct Self-Service Booking:** Browse doctors, inspect available 15-minute appointment slots,
      and book directly via `/Portal/Book` (or reschedule via `/Portal/Reschedule`).
    - **Online Bill Payment via bKash:** Initiate checkout on an unpaid bill → redirects through
-     bKash tokenized gateway sandbox → captures payment and logs an unalterable `PaymentTransaction` row.
+     bKash tokenized gateway sandbox → captures payment and logs an immutable `PaymentTransaction` row
+     linked to the cryptographic hash chain.
    - **IDOR check, live**: hand-edit the URL to another patient's id —
      `/Patients/Details/1`, `/MedicalRecords`, `/Prescriptions` — and show each one 403s or
      redirects rather than leaking another patient's chart. This is the single most examiner-proof
      five seconds in the whole demo.
 
 6. **Admin** (`admin`, one-click)
-   - Reports: the panels are populated with real numbers pulled from everything the walkthrough
-     just generated, not placeholder data — revenue, occupancy, the 14-day appointment trend, the
-     triage mix from step 2, the AI governance panel (token counts, latency, verdict distribution
-     across both the case summary and the Bangla instruction sheet from step 3), and the
-     **Prescription Safety Net** panel showing the exact duplicate-therapy and allergy-conflict
-     warnings from step 3 — with an explicit "0 AI calls" badge, since all four checks behind it
-     are deterministic SQL, not a model call.
+   - Reports (`/Reports`):
+     - Click **"Verify Ledger Integrity"** to recompute the SHA-256 cryptographic hash chain across all
+       historical `PaymentTransactions` (`RowHash = SHA-256(PreviousHash + TransactionId + Amount + Timestamp + ProcessedById)`).
+       Shows an instant green verified badge or flags the exact compromised row ID if database fraud ever occurs.
+     - Inspect the **FEFO Near-Expiry Medication Monitor** flagging drug batches within 30 days of expiry.
+     - The panels are populated with real numbers pulled from everything the walkthrough
+       just generated, not placeholder data — revenue, occupancy, the 14-day appointment trend, the
+       triage mix from step 2, the AI governance panel (token counts, latency, verdict distribution
+       across both the case summary and the Bangla instruction sheet from step 3), and the
+       **Prescription Safety Net** panel showing the exact duplicate-therapy and allergy-conflict
+       warnings from step 3 — with an explicit "0 AI calls" badge, since all four checks behind it
+       are deterministic SQL, not a model call.
    - Staff → edit a user and leave the password field blank → save → confirm they can still log
      in with the old password. (This exercises a real bug found and fixed during testing —
      see [Anticipated questions](#anticipated-questions) if asked how it was caught.)
+
+7. **Surgical Operations & Theatre Console** (`/Operations`)
+   - Schedule a surgical procedure by validating three simultaneous constraints: (1) surgeon has no conflicting
+     clinic appointments or overlapping surgeries; (2) Operating Theatre is free; and (3) an ICU or Cabin recovery
+     bed is automatically earmarked via `BedTransfers`.
+   - Advance surgery through clinical lifecycle stages (`Scheduled` -> `InSurgery` -> `Recovery` -> `Completed`).
 
 ## Delivered vs. the original AI roadmap
 
@@ -97,10 +115,10 @@ pathways:
 | P1 — AI spine | `AiSuggestion` table, PHI scrubbing, review UI, typed errors, schema-enforced output, prompt caching | **Done**, and exceeded in one place: a 3-provider (Gemini/Groq/Anthropic) encrypted, priority-ordered fallback chain with live health diagnostics, versus the one hardcoded key originally planned. Schema enforcement is handled via structured prompts and regex/DTO extraction. |
 | P2 — Case summary with citations | Broad context (records + vitals + meds + admissions), citation grounding, content-hash caching | **Delivered.** Context aggregates recent medical records, active allergies, latest vitals (including NEWS2 priority score), and active/recent prescriptions. Grounded with server-validated `[[rec:id]]` citations against real records. Implemented dynamic composite cache invalidation in memory keyed on entity counts and latest `UpdatedAt`/`CreatedAt` ticks across all four clinical domains to avoid redundant API billing. (Inpatient admissions are omitted from prompt context). |
 | P3 — Triage co-pilot | Deterministic NEWS2 + AI narration + a priority-sorted live board | **Delivered deterministically.** `News2Calculator` is built and thoroughly tested (65 boundary tests + physiological range validation). Real-time SignalR notifications push queue status updates when an assistant sends in a patient. |
-| P4 — Prescription safety net | Duplicate therapy, allergy conflict, stock substitution, pediatric dose, an override UI | **Delivered — see the demo script above.** All four checks are real and fire against real seeded traps (Napa/Ace duplicate therapy, Nasrin's and Mizan's allergies, Zmax's zero stock, and pediatric strength thresholds). Pure deterministic logic with no external AI dependency. |
+| P4 — Prescription safety net | Duplicate therapy, allergy conflict, stock substitution, pediatric dose, an override UI | **Delivered — see the demo script above.** All four checks are real and fire against real seeded traps (Napa/Ace duplicate therapy, Nasrin's and Mizan's allergies, Zmax's zero stock, and pediatric strength thresholds). Upgraded with a zero-latency Hierarchical ATC Classification DAG Engine catching cross-reactive beta-lactams and high-risk DDIs. |
 | P5 — Ambient consultation scribe | Free-text intake box, tool-calling medicine lookup, form autofill, edit-diff capture | **Not built.** No audio ingestion or ambient scribe. Scoped out as future work in favor of hardening the Clinical Cockpit and financial ledger. |
-| P6 — Discharge packet | Admission-level clinical summary + a Bangla patient sheet, with bed-rent reconciliation | **Substantially delivered.** Bed-rent aggregation across `BedTransfers` is fully implemented in the billing module (`BillsController.Create`). The Bangla patient instruction sheet is delivered with live streaming generation, Accept-before-print review gate, and print formatting for prescriptions. |
-| P7 — Evaluation & write-up | 30–50 seeded patients, an acceptance dashboard, a cost/latency report, ablations, a failure taxonomy | **Covered via comprehensive testing & admin governance.** The Reports page provides an AI Governance dashboard (verdict distribution, token counts, and latency) and Safety Net metrics. Verified by **277 automated xUnit tests** across unit, integration, and security suites. |
+| P6 — Discharge packet | Admission-level clinical summary + a Bangla patient sheet, with bed-rent reconciliation | **Substantially delivered.** Bed-rent aggregation across `BedTransfers` is fully implemented in the billing module (`BillsController.Create`). The Bangla patient instruction sheet is delivered with live streaming generation, Accept-before-print review gate, print formatting with HMAC-signed QR verification for prescriptions. |
+| P7 — Evaluation & write-up | 30–50 seeded patients, an acceptance dashboard, a cost/latency report, ablations, a failure taxonomy | **Covered via comprehensive testing & admin governance.** The Reports page provides an AI Governance dashboard, cryptographic ledger verification, FEFO batch monitor, and Safety Net metrics. Verified by **309 automated xUnit tests** across unit, integration, and security suites. |
 | P8 — Stretch (pgvector, charge capture, NL analytics) | — | Not built; out of scope. |
 
 ## Anticipated questions
@@ -175,8 +193,14 @@ by `AiProviderResolver`, and never returned to any view — the admin UI only ev
 "configured" / "not configured," never the key itself.
 
 **How did you verify the NEWS2 implementation and application logic are actually correct?**
-**284 automated xUnit tests** cover the entire system (executed against EF Core In-Memory for fast CI execution):
+**309 automated xUnit tests** cover the entire system (executed against EF Core In-Memory for fast CI execution):
 - 65 NEWS2 boundary theories testing all seven physiological parameters and the NHS "single red score" rule, plus extreme input boundary validations.
+- Cryptographic SHA-256 hash-chained ledger verification tests and tamper-detection unit tests.
+- Hierarchical ATC Classification DAG tests verifying $O(1)$ and $O(\text{depth})$ cross-reactivity and high-risk DDI matrix evaluations.
+- HMAC-SHA256 signed QR code generation, URL token signing, and public verification endpoint security tests.
+- Dynamic Acuity-Weighted Queue priority-aging formula tests preventing starvation of low-acuity patients, and $\Delta\text{NEWS2}$ rate-of-deterioration radar tests.
+- FEFO (First-Expired, First-Out) pharmacy batch inventory tests verifying greedy deduction and expired stock lockouts.
+- Multi-resource surgical theatre scheduling tests verifying surgeon collision, OT room conflict, and recovery bed earmarking.
 - PHI scrubbing/rehydration round trips with word-boundary regex protection and stateful lookahead streaming buffer.
 - AI provider ping diagnostics and priority-ordered failover logic.
 - Immutable payment ledger derivations and bill totals recalculation with null navigation guards and ledger summation.
@@ -185,6 +209,15 @@ by `AiProviderResolver`, and never returned to any view — the admin UI only ev
 - Security access control tests verifying role gating and IDOR isolation across doctors, assistants, cashiers, and patients.
 
 *(Note on Database Engine Testing: EF Core In-Memory validates application-layer pre-checks, entity constraints, domain events, and controllers. Production relational locks, filtered unique indexes, and PostgreSQL `xmin` rowversions are enforced by the PostgreSQL database engine via EF Core migration scripts).*
+
+**How does the tamper-evident cryptographic ledger protect against insider DB fraud?**
+Each `PaymentTransaction` row stores `PreviousHash` and `RowHash = SHA-256(PreviousHash + TransactionId + Amount + Timestamp + ProcessedById)`. The genesis transaction uses a known salt (`"GENESIS_BLOCK"`). The Admin Reports page features a one-click **"Verify Ledger Integrity"** tool that traverses all transactions sequentially in $O(N)$ time. If an unauthorized DBA alters a single payment record directly in PostgreSQL, the hash chain breaks at that exact index, displaying an immediate alert citing the specific corrupted transaction ID.
+
+**How does the Hierarchical ATC Graph catch drug interactions and cross-reactivity without AI latency?**
+Rather than slow LLM prompts or naive substring matching, `AtcClassificationGraph` models chemical classifications as a lightweight in-memory Directed Acyclic Graph (DAG). Allergies traverse parent nodes (e.g., `J01CA04 Amoxicillin` -> `J01CA Penicillins with extended spectrum` -> `J01C Beta-lactam antibacterials, penicillins`), detecting cross-reactivity in $O(\text{depth})$ time. A deterministic DDI matrix checks prescribed pairs against high-risk clinical edges (e.g., Warfarin + Ibuprofen -> Severe Bleeding Risk) in $O(1)$ time with zero external network overhead.
+
+**How does the priority-aging formula prevent low-acuity starvation in the waiting queue?**
+The chamber queue computes: $\text{PriorityScore} = (W_{\text{acuity}} \times \text{NEWS2}) + (W_{\text{wait}} \times \text{MinutesWaited})$. High-acuity patients (NEWS2 $\ge 5$) receive an immediate boost, but the linear aging term ($W_{\text{wait}} \times \text{MinutesWaited}$) ensures that a stable patient who has waited 45+ minutes eventually overtakes newer, low-acuity walk-ins. Patients see live Estimated Wait Time (EWT) updates on `/Portal`.
 
 **Did testing actually find anything, or is the test suite just for show?**
 Real bugs caught by testing:
@@ -198,8 +231,6 @@ Real bugs caught by testing:
 
 Stated proactively rather than left for the examiner to find:
 
-- **`Operation` is fully modeled in schema and cross-checked by doctor scheduling, but has no dedicated surgeon UI.** The entity, its migration, and
-  its `OnDelete` configuration all exist; outpatient appointment scheduling proactively checks `Operations` to avoid double-booking surgeons, but dedicated surgical theatre console views were scoped out because none of the six active roles being defended require them.
 - **NEWS2 Scale 2 (COPD) is not implemented** — requires a target-SpO2 parameter that `PatientVital` does not track.
 - **No forced password change on a patient's first portal login.** The receptionist-issued
   temporary password works indefinitely unless changed voluntarily.

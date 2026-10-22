@@ -1,0 +1,93 @@
+@model IEnumerable<HospitalManagementSystem.Models.Operation>
+
+@{
+    ViewData["Title"] = "Surgical Operations & Theatre Schedule";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
+    <div>
+        <h2 class="mb-1 fw-bold"><i class="bi bi-hospital me-2 text-primary"></i>Surgical Operations & Theatre Scheduling</h2>
+        <p class="text-muted mb-0">Multi-resource scheduling engine validating surgeon availability, operating theatre slots, and post-op recovery beds.</p>
+    </div>
+    <a asp-action="Create" class="btn btn-primary">
+        <i class="bi bi-calendar-plus me-1"></i> Schedule Surgical Procedure
+    </a>
+</div>
+
+<partial name="_ActionSuccessBanner" />
+
+<div class="pro-card p-0 overflow-hidden shadow-sm border-0">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th class="ps-4">Patient</th>
+                    <th>Lead Surgeon</th>
+                    <th>Operating Theatre</th>
+                    <th>Operation Date & Time</th>
+                    <th>Pre-op Protocol / Recovery Bed</th>
+                    <th>Status</th>
+                    <th class="text-end pe-4">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model != null && Model.Any())
+                {
+                    foreach (var item in Model)
+                    {
+                        var statusBadgeClass = item.Status switch
+                        {
+                            HospitalManagementSystem.Models.OperationStatus.Scheduled => "bg-primary",
+                            HospitalManagementSystem.Models.OperationStatus.InSurgery => "bg-danger",
+                            HospitalManagementSystem.Models.OperationStatus.Recovery => "bg-warning text-dark",
+                            HospitalManagementSystem.Models.OperationStatus.Completed => "bg-success",
+                            _ => "bg-secondary"
+                        };
+
+                        <tr>
+                            <td class="ps-4">
+                                <p class="fw-bold mb-0">@item.Patient?.FullName</p>
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle">@item.Patient?.Uhid</span>
+                            </td>
+                            <td>
+                                <div class="fw-semibold">Dr. @item.Surgeon?.FullName</div>
+                                <small class="text-muted">@(item.Surgeon?.Category ?? "Surgery")</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-info bg-opacity-10 text-info border border-info-subtle px-2 py-1">
+                                    <i class="bi bi-door-open me-1"></i>@item.OtRoom
+                                </span>
+                            </td>
+                            <td>
+                                <div class="fw-semibold">@item.OperationDatetime.ToString("MMM dd, yyyy")</div>
+                                <small class="text-muted">@item.OperationDatetime.ToString("hh:mm tt") UTC</small>
+                            </td>
+                            <td>
+                                <small class="text-muted text-truncate d-inline-block" style="max-width: 250px;" title="@item.PreparationChecklist">
+                                    @item.PreparationChecklist
+                                </small>
+                            </td>
+                            <td>
+                                <span class="badge @statusBadgeClass px-2 py-1">@item.Status</span>
+                            </td>
+                            <td class="text-end pe-4">
+                                <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-eye me-1"></i> Details
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            <i class="bi bi-calendar-x fs-1 d-block mb-2 text-muted"></i>
+                            No surgical operations scheduled yet. Click <strong>Schedule Surgical Procedure</strong> to book an OT slot.
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

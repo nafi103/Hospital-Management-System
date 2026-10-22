@@ -287,4 +287,93 @@ public class PrescriptionSafetyCheckerTests
         Assert.Equal(SafetyWarningSeverity.Critical, warning.Severity);
         Assert.Contains("Seclo", warning.Message);
     }
+
+    [Fact]
+    public void AtcGraph_PenicillinAllergy_CrossReactsWithAmoxicillinViaBetaLactamParent()
+    {
+        var amoxicillin = new MedicineInfo(10, "Moxacil 500mg", "Amoxicillin", "500mg", 100);
+        var formulary = new List<MedicineInfo> { amoxicillin };
+        var allergies = new List<SafetyCheckAllergy> { new("Penicillin", null, AllergySeverity.Severe) };
+
+        var warnings = PrescriptionSafetyChecker.Check(
+            patientIsChild: false,
+            allergies: allergies,
+            items: [new SafetyCheckItem(amoxicillin.Id, 10, DoseUnit.Capsule)],
+            allMedicines: formulary);
+
+        var warning = Assert.Single(warnings);
+        Assert.Equal("Allergy Conflict", warning.Category);
+        Assert.Equal(SafetyWarningSeverity.Critical, warning.Severity);
+        Assert.Contains("Moxacil 500mg", warning.Message);
+    }
+
+    [Fact]
+    public void AtcGraph_DdiMatrix_WarfarinAndIbuprofen_TriggersSevereBleedingCriticalWarning()
+    {
+        var warfarin = new MedicineInfo(20, "Coumadin 5mg", "Warfarin", "5mg", 100);
+        var ibuprofen = new MedicineInfo(21, "Brufen 400mg", "Ibuprofen", "400mg", 100);
+        var formulary = new List<MedicineInfo> { warfarin, ibuprofen };
+
+        var warnings = PrescriptionSafetyChecker.Check(
+            patientIsChild: false,
+            allergies: [],
+            items: [
+                new SafetyCheckItem(warfarin.Id, 30, DoseUnit.Tablet),
+                new SafetyCheckItem(ibuprofen.Id, 10, DoseUnit.Tablet)
+            ],
+            allMedicines: formulary);
+
+        var ddiWarning = Assert.Single(warnings, w => w.Category == "Drug-Drug Interaction");
+        Assert.Equal(SafetyWarningSeverity.Critical, ddiWarning.Severity);
+        Assert.Contains("Severe Bleeding Risk", ddiWarning.Message);
+        Assert.Contains("Warfarin", ddiWarning.Message);
+        Assert.Contains("Ibuprofen", ddiWarning.Message);
+    }
+
+    [Fact]
+    public void AtcGraph_DdiMatrix_ActiveSildenafil_NewNitroglycerin_TriggersCriticalHypotensionWarning()
+    {
+        var nitroglycerin = new MedicineInfo(30, "Nitrostat 0.4mg", "Nitroglycerin", "0.4mg", 100);
+        var sildenafil = new MedicineInfo(31, "Viagra 50mg", "Sildenafil", "50mg", 50);
+        var formulary = new List<MedicineInfo> { nitroglycerin, sildenafil };
+
+        var activeMeds = new List<ActiveMedicationInfo>
+        {
+            new(sildenafil.Id, sildenafil.Name, sildenafil.GenericName, DateTime.UtcNow.AddDays(-2), 30, 201)
+        };
+
+        var warnings = PrescriptionSafetyChecker.Check(
+            patientIsChild: false,
+            allergies: [],
+            items: [new SafetyCheckItem(nitroglycerin.Id, 1, DoseUnit.Tablet)],
+            allMedicines: formulary,
+            activeMedications: activeMeds);
+
+        var ddiWarning = Assert.Single(warnings, w => w.Category == "Drug-Drug Interaction");
+        Assert.Equal(SafetyWarningSeverity.Critical, ddiWarning.Severity);
+        Assert.Contains("Hypotension", ddiWarning.Message);
+        Assert.Contains("Prescription #201", ddiWarning.Message);
+    }
+
+    [Fact]
+    public void AtcGraph_DdiMatrix_RaasAndPotassiumSparing_TriggersCriticalHyperkalemiaWarning()
+    {
+        var losartan = new MedicineInfo(40, "Cozaar 50mg", "Losartan", "50mg", 100);
+        var spironolactone = new MedicineInfo(41, "Aldactone 25mg", "Spironolactone", "25mg", 100);
+        var formulary = new List<MedicineInfo> { losartan, spironolactone };
+
+        var warnings = PrescriptionSafetyChecker.Check(
+            patientIsChild: false,
+            allergies: [],
+            items: [
+                new SafetyCheckItem(losartan.Id, 30, DoseUnit.Tablet),
+                new SafetyCheckItem(spironolactone.Id, 30, DoseUnit.Tablet)
+            ],
+            allMedicines: formulary);
+
+        var ddiWarning = Assert.Single(warnings, w => w.Category == "Drug-Drug Interaction");
+        Assert.Equal(SafetyWarningSeverity.Critical, ddiWarning.Severity);
+        Assert.Contains("Hyperkalemia", ddiWarning.Message);
+    }
 }
+

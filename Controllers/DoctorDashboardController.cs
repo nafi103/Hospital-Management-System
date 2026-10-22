@@ -19,11 +19,16 @@ namespace HospitalManagementSystem.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly IAcuityQueueService? _acuityService;
 
-        public DoctorDashboardController(ApplicationDbContext context, IHubContext<NotificationHub> hubContext)
+        public DoctorDashboardController(
+            ApplicationDbContext context,
+            IHubContext<NotificationHub> hubContext,
+            IAcuityQueueService? acuityService = null)
         {
             _context = context;
             _hubContext = hubContext;
+            _acuityService = acuityService;
         }
 
         // GET: DoctorDashboard
@@ -258,8 +263,15 @@ namespace HospitalManagementSystem.Controllers
                     .FirstOrDefaultAsync();
             }
 
-            // Calculate NEWS2
+            // Calculate NEWS2 and Longitudinal Delta-NEWS2
             News2Calculator.Result? news2 = null;
+            var longitudinalVitals = await _context.PatientVitals
+                .Where(v => v.PatientId == patient.Id)
+                .OrderByDescending(v => v.CreatedAt)
+                .Take(8)
+                .ToListAsync();
+
+            DeltaNews2Result? deltaNews2 = null;
             if (vitals != null)
             {
                 news2 = News2Calculator.TryCalculate(
@@ -272,7 +284,15 @@ namespace HospitalManagementSystem.Controllers
                     vitals.HeartRate,
                     vitals.Consciousness
                 );
+
+                if (!patient.IsChild && _acuityService != null)
+                {
+                    deltaNews2 = _acuityService.ComputeDeltaNews2(vitals, longitudinalVitals);
+                }
             }
+
+            ViewBag.DeltaNews2 = deltaNews2;
+            ViewBag.LongitudinalVitals = longitudinalVitals;
 
             // Load active medications
             var activeMeds = await GetActiveMedicationsAsync(patient.Id);
