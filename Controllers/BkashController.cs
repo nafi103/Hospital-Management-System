@@ -228,7 +228,6 @@ namespace HospitalManagementSystem.Controllers
                 await _ledgerService.StampTransactionAsync(paymentTx);
                 _context.PaymentTransactions.Add(paymentTx);
 
-                bill.PaidAmount = currentPaid + paidAmount;
                 bill.UpdatedAt = DateTime.UtcNow;
                 bill.RecalculateTotals();
 

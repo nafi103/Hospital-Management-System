@@ -118,7 +118,7 @@ pathways:
 | P4 — Prescription safety net | Duplicate therapy, allergy conflict, stock substitution, pediatric dose, an override UI | **Delivered — see the demo script above.** All four checks are real and fire against real seeded traps (Napa/Ace duplicate therapy, Nasrin's and Mizan's allergies, Zmax's zero stock, and pediatric strength thresholds). Upgraded with a zero-latency Hierarchical ATC Classification DAG Engine catching cross-reactive beta-lactams and high-risk DDIs. |
 | P5 — Ambient consultation scribe | Free-text intake box, tool-calling medicine lookup, form autofill, edit-diff capture | **Not built.** No audio ingestion or ambient scribe. Scoped out as future work in favor of hardening the Clinical Cockpit and financial ledger. |
 | P6 — Discharge packet | Admission-level clinical summary + a Bangla patient sheet, with bed-rent reconciliation | **Substantially delivered.** Bed-rent aggregation across `BedTransfers` is fully implemented in the billing module (`BillsController.Create`). The Bangla patient instruction sheet is delivered with live streaming generation, Accept-before-print review gate, print formatting with HMAC-signed QR verification for prescriptions. |
-| P7 — Evaluation & write-up | 30–50 seeded patients, an acceptance dashboard, a cost/latency report, ablations, a failure taxonomy | **Covered via comprehensive testing & admin governance.** The Reports page provides an AI Governance dashboard, cryptographic ledger verification, FEFO batch monitor, and Safety Net metrics. Verified by **309 automated xUnit tests** across unit, integration, and security suites. |
+| P7 — Evaluation & write-up | 30–50 seeded patients, an acceptance dashboard, a cost/latency report, ablations, a failure taxonomy | **Covered via comprehensive testing & admin governance.** The Reports page provides an AI Governance dashboard, cryptographic ledger verification, FEFO batch monitor, and Safety Net metrics. Verified by **310 automated xUnit tests** across unit, integration, and security suites. |
 | P8 — Stretch (pgvector, charge capture, NL analytics) | — | Not built; out of scope. |
 
 ## Anticipated questions
@@ -193,7 +193,7 @@ by `AiProviderResolver`, and never returned to any view — the admin UI only ev
 "configured" / "not configured," never the key itself.
 
 **How did you verify the NEWS2 implementation and application logic are actually correct?**
-**309 automated xUnit tests** cover the entire system (executed against EF Core In-Memory for fast CI execution):
+**310 automated xUnit tests** cover the entire system (executed against EF Core In-Memory for fast CI execution):
 - 65 NEWS2 boundary theories testing all seven physiological parameters and the NHS "single red score" rule, plus extreme input boundary validations.
 - Cryptographic SHA-256 hash-chained ledger verification tests and tamper-detection unit tests.
 - Hierarchical ATC Classification DAG tests verifying $O(1)$ and $O(\text{depth})$ cross-reactivity and high-risk DDI matrix evaluations.

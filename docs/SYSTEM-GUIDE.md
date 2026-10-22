@@ -74,9 +74,9 @@ flowchart TD
 ```
 
 - **Zero AI Clinical Direct Writes:** AI providers never write to clinical records. Outputs are staged as pending drafts requiring explicit clinician review (Accept, Edit, or Reject) before any clinical action is finalized.
-- **Deterministic Clinical Safety Net:** Four drug interaction checks run synchronously as pure mathematical functions on every prescription submission without external AI dependency.
-- **Immutable Financial Ledger:** Billing balances and invoice statuses are dynamically derived from unalterable transaction ledger rows, eliminating accounting drift and double-entry races.
-- **PostgreSQL `xmin` Concurrency Tokens:** Native system rowversion tokens protect against concurrent cashier double-payments and simultaneous doctor appointment slot double-bookings.
+- **Deterministic Clinical Safety Net:** Five deterministic checks (including hierarchical ATC classification DAG for beta-lactam cross-reactivity and clinical DDI matrix) run synchronously as pure algorithmic functions on every prescription submission without external AI dependency.
+- **Immutable Financial Ledger:** Billing balances and invoice statuses are dynamically derived from a SHA-256 cryptographic hash-chained transaction ledger, eliminating accounting drift, double-entry races, and insider tampering.
+- **PostgreSQL Concurrency Guarantees:** Filtered unique indexes (`ix_appointments_doctor_slot_active`) prevent simultaneous appointment double-booking collisions, while native PostgreSQL `xmin` system rowversion tokens protect against concurrent cashier double-payments and race conditions.
 - **Strict Claims-Based IDOR Protection:** Patients and clinicians cannot query records outside their authorized tenancy. Route parameters are never trusted for ownership.
 
 ---
@@ -314,15 +314,12 @@ Financial integrity is enforced through an append-only cryptographic ledger simi
   ```csharp
   public void RecalculateTotals()
   {
-      if (BillItems == null)
+      if (BillItems == null || PaymentTransactions == null)
       {
-          throw new InvalidOperationException("BillItems navigation collection must be loaded before recalculating totals.");
+          throw new InvalidOperationException("BillItems and PaymentTransactions navigation collections must be loaded before recalculating totals.");
       }
 
-      if (PaymentTransactions != null && PaymentTransactions.Count > 0)
-      {
-          PaidAmount = PaymentTransactions.Sum(t => t.Amount);
-      }
+      PaidAmount = PaymentTransactions.Sum(t => t.Amount);
 
       SubtotalAmount = BillItems.Sum(i => i.Amount);
       NetTotal = Math.Max(0, SubtotalAmount - DiscountAmount);
@@ -336,7 +333,7 @@ Financial integrity is enforced through an append-only cryptographic ledger simi
           Status = BillStatus.Unpaid;
   }
   ```
-- **Null-Navigation Protection:** Guarding against null `BillItems` prevents queries executed without `.Include(b => b.BillItems)` from evaluating subtotal as 0 and inadvertently corrupting an unpaid bill into `Paid`.
+- **Null-Navigation Protection:** Guarding against null `BillItems` or `PaymentTransactions` prevents queries executed without `.Include(...)` from evaluating totals with missing collections and inadvertently corrupting bill status or payment balances.
 - **Idempotency & Gateway Duplicate Protection:** A filtered unique index on `PaymentTransactions.TransactionId` (`WHERE "TransactionId" IS NOT NULL`) stops double-clicks, browser refreshes, and concurrent callback retries from recording duplicate payments.
 
 ### 7.2 bKash Tokenized Checkout Integration
@@ -399,9 +396,11 @@ Every endpoint is strictly closed by default; public endpoints (e.g., `/Auth/Log
 | Controller / Resource | Anonymous | Patient | Assistant | Doctor | Pharmacist | Receptionist | Admin |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | `Auth/Login` | Allowed | Allowed | Allowed | Allowed | Allowed | Allowed | Allowed |
+| `Verify/Prescription` | **Allowed** | Allowed | Allowed | Allowed | Allowed | Allowed | Allowed |
 | `Portal/*` | Denied | **Scoped** | Denied | Denied | Denied | Denied | Denied |
 | `DoctorDashboard/*` | Denied | Denied | Denied | **Scoped** | Denied | Denied | Denied |
 | `Appointments/Book` | Denied | Via Portal | Denied | Denied | Denied | Full | Full |
+| `Operations/*` | Denied | Denied | Denied | **Scoped** | Denied | **Full** | **Full** |
 | `Vitals/Create` | Denied | Denied | **Chamber** | Read-Only | Denied | Denied | Full |
 | `Prescriptions/Create` | Denied | Denied | Denied | **Active** | Denied | Denied | Full |
 | `Prescriptions/Dispense` | Denied | Denied | Denied | Denied | **Full** | Denied | Full |
@@ -415,7 +414,7 @@ Every endpoint is strictly closed by default; public endpoints (e.g., `/Auth/Log
 
 ## 9. Database Schema & Entity Reference
 
-The database consists of **19 relational tables** configured in [ApplicationDbContext.cs](file:///home/xenaf_i/Projects/Hospital-Management-System/Models/ApplicationDbContext.cs):
+The database consists of **20 relational tables** configured in [ApplicationDbContext.cs](file:///home/xenaf_i/Projects/Hospital-Management-System/Models/ApplicationDbContext.cs):
 
 ```mermaid
 erDiagram
@@ -440,6 +439,7 @@ erDiagram
     USER ||--o{ PRESCRIPTION : "prescribing doctor"
     PRESCRIPTION ||--o{ PRESCRIPTIONITEM : "items"
     MEDICINE ||--o{ PRESCRIPTIONITEM : "formulary"
+    MEDICINE ||--o{ MEDICINEBATCH : "batches"
     PATIENT ||--o{ BILL : "invoiced"
     ADMISSION ||--o| BILL : "admission charges"
     BILL ||--o{ BILLITEM : "line items"
@@ -520,11 +520,11 @@ erDiagram
 
 ## 11. Testing & Quality Assurance Architecture
 
-The test suite contains **309 automated xUnit tests** with zero external database dependencies (using EF Core In-Memory and Mocked Handlers), providing 100% test pass rates in ~4 seconds:
+The test suite contains **310 automated xUnit tests** with zero external database dependencies (using EF Core In-Memory and Mocked Handlers), providing 100% test pass rates in ~4 seconds:
 
 ```bash
 dotnet test
-Passed! - Failed: 0, Passed: 309, Skipped: 0, Total: 309, Duration: 4 s
+Passed! - Failed: 0, Passed: 310, Skipped: 0, Total: 310, Duration: 4 s
 ```
 
 > [!NOTE]
@@ -540,8 +540,13 @@ tests/HospitalManagementSystem.Tests/
 │   ├── News2BoundaryTests.cs                 (15 tests: Physiological range extremes & pediatric score withholding)
 │   ├── AllergyContraindicationTests.cs       (12 tests: Case-insensitive, drug class cross-reactivity, salt disambiguation, potent pediatric checks)
 │   └── DuplicateTherapyTests.cs              (8 tests: Same generic active therapies & window expiry rules)
-├── PrescriptionSafetyCheckerTests.cs         (11 tests: Unit tests for all 4 safety net rules & override requirements)
-├── BillTotalsTests.cs                        (14 tests: Subtotals, net totals, fully discounted bills, ledger math, null-navigation guards)
+├── PrescriptionSafetyCheckerTests.cs         (11 tests: Unit tests for all 4 safety net rules, ATC graph cross-reactivity, & override requirements)
+├── BillTotalsTests.cs                        (15 tests: Subtotals, net totals, fully discounted bills, ledger math, null-navigation guards on BillItems & PaymentTransactions)
+├── LedgerIntegrityTests.cs                   (6 tests: Genesis SHA-256 block calculation, chain hash propagation, valid chain verification, and tamper detection)
+├── AcuityQueueTests.cs                       (5 tests: Priority score aging formula, starvation prevention, live EWT estimation, and longitudinal ΔNEWS2 ≥ 2 deterioration)
+├── FefoInventoryTests.cs                     (4 tests: Earliest-expiry batch consumption, partial multi-batch deductions, expired batch lockout, and near-expiry alerting)
+├── PrescriptionSecurityTests.cs              (5 tests: HMAC-SHA256 token signing, tamper rejection, expired token rejection, and valid token payload decoding)
+├── OperationSchedulingTests.cs               (5 tests: Surgeon schedule collision detection, operating theatre double-booking prevention, and post-op ICU/Cabin bed reservation)
 ├── HospitalClockTests.cs                     (6 tests: Asia/Dhaka UTC+6 conversions & day boundary calculations)
 ├── PhiScrubberTests.cs                       (8 tests: Whole-word regex scrubbing & pseudonym reversal round trips)
 ├── Ai/

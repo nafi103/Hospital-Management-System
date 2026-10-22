@@ -317,7 +317,6 @@ namespace HospitalManagementSystem.Controllers
                 _context.PaymentTransactions.Add(tx);
 
                 // Derive bill.PaidAmount from all recorded ledger transactions
-                bill.PaidAmount = currentPaid + PaymentAmount;
                 bill.UpdatedAt = DateTime.UtcNow;
                 bill.RecalculateTotals();
 

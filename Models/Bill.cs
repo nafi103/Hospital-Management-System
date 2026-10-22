@@ -41,15 +41,12 @@ namespace HospitalManagementSystem.Models
 
         public void RecalculateTotals()
         {
-            if (BillItems == null)
+            if (BillItems == null || PaymentTransactions == null)
             {
-                throw new InvalidOperationException("BillItems navigation collection must be loaded before recalculating totals.");
+                throw new InvalidOperationException("BillItems and PaymentTransactions navigation collections must be loaded before recalculating totals.");
             }
 
-            if (PaymentTransactions != null && PaymentTransactions.Count > 0)
-            {
-                PaidAmount = PaymentTransactions.Sum(t => t.Amount);
-            }
+            PaidAmount = PaymentTransactions.Sum(t => t.Amount);
 
             SubtotalAmount = BillItems.Sum(i => i.Amount);
             NetTotal = Math.Max(0, SubtotalAmount - DiscountAmount);

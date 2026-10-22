@@ -17,6 +17,17 @@ public class BillTotalsTests
                 Amount = a
             }).ToList()
         };
+
+        if (paid > 0)
+        {
+            bill.PaymentTransactions.Add(new PaymentTransaction
+            {
+                Amount = paid,
+                PaymentMethod = "Cash",
+                TransactionDate = DateTime.UtcNow
+            });
+        }
+
         return bill;
     }
 
@@ -148,11 +159,25 @@ public class BillTotalsTests
     {
         var bill = new Bill
         {
-            BillItems = null!
+            BillItems = null!,
+            PaymentTransactions = new List<PaymentTransaction>()
         };
 
         var ex = Assert.Throws<InvalidOperationException>(() => bill.RecalculateTotals());
-        Assert.Contains("BillItems navigation collection must be loaded", ex.Message);
+        Assert.Contains("BillItems and PaymentTransactions navigation collections must be loaded", ex.Message);
+    }
+
+    [Fact]
+    public void RecalculateTotals_NullPaymentTransactions_ThrowsInvalidOperationException()
+    {
+        var bill = new Bill
+        {
+            BillItems = new List<BillItem>(),
+            PaymentTransactions = null!
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => bill.RecalculateTotals());
+        Assert.Contains("BillItems and PaymentTransactions navigation collections must be loaded", ex.Message);
     }
 
     [Fact]

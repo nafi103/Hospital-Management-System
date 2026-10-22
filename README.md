@@ -19,7 +19,7 @@ Receptionist, and Patient.**
 | Payments | bKash Payment Gateway (Tokenized Checkout API v1.2.0-beta sandbox, OAuth token caching, online billing) |
 | Operational Clock | HospitalClock (Asia/Dhaka UTC+6 operational timezone, 15-minute appointment slot calculations) |
 | Secrets | ASP.NET Data Protection (encrypted AI provider keys at rest), .NET user-secrets (local dev connection string/API keys) |
-| Testing | xUnit (309 tests across cryptographic chains, graph algorithms, multi-resource scheduling, FEFO inventory, concurrency, and security) |
+| Testing | xUnit (310 tests across cryptographic chains, graph algorithms, multi-resource scheduling, FEFO inventory, concurrency, and security) |
 
 ## Features by role
 
@@ -138,7 +138,7 @@ Additionally, pediatric dependent accounts are linked to family accounts:
 dotnet test
 ```
 
-**309 automated xUnit tests** cover:
+**310 automated xUnit tests** cover:
 - **Cryptographic Ledger Integrity:** Genesis SHA-256 block calculation, chain hash propagation, valid chain verification, and tamper detection flagging modified historical transactions.
 - **Hierarchical ATC Graph & DDI:** Beta-lactam tree traversal (penicillin allergy catching amoxicillin and ampicillin) and drug-drug interaction matrix checks (Warfarin + Ibuprofen/Naproxen).
 - **Dynamic Acuity Queue & $\Delta\text{NEWS2}$:** Priority score aging formula, starvation prevention, live EWT estimation, and longitudinal $\Delta\text{NEWS2} \ge 2$ deterioration detection within 12 hours.
@@ -168,7 +168,7 @@ Services/       Business logic (NEWS2, PHI scrubbing, AI spine, DoctorScheduleSe
 Hubs/           SignalR hubs (live queue updates, streamed AI output)
 Views/          Razor views, one folder per controller
 Migrations/     EF Core migration history
-tests/          xUnit test project (309 tests, excluded from the web project's build via a Compile Remove)
+tests/          xUnit test project (310 tests, excluded from the web project's build via a Compile Remove)
 docs/           ER diagram, architecture diagrams, comprehensive system guide, and defense preparation notes
 ```
 
