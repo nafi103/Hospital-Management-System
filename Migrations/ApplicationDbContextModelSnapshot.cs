@@ -221,7 +221,10 @@ namespace Hospital_Management_System.Migrations
 
                     b.HasIndex("PatientId");
 
-                    b.HasIndex("DoctorId", "AppointmentDatetime");
+                    b.HasIndex("DoctorId", "AppointmentDatetime")
+                        .IsUnique()
+                        .HasDatabaseName("ix_appointments_doctor_slot_active")
+                        .HasFilter("\"Status\" <> 2");
 
                     b.ToTable("Appointments");
                 });
@@ -586,6 +589,46 @@ namespace Hospital_Management_System.Migrations
                         });
                 });
 
+            modelBuilder.Entity("HospitalManagementSystem.Models.MedicineBatch", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BatchNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiryDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("InitialQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MedicineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("QuantityRemaining")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiryDate");
+
+                    b.HasIndex("MedicineId", "ExpiryDate");
+
+                    b.ToTable("MedicineBatches");
+                });
+
             modelBuilder.Entity("HospitalManagementSystem.Models.Operation", b =>
                 {
                     b.Property<int>("Id")
@@ -849,8 +892,16 @@ namespace Hospital_Management_System.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<string>("PreviousHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<int?>("ProcessedById")
                         .HasColumnType("integer");
+
+                    b.Property<string>("RowHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<DateTime>("TransactionDate")
                         .HasColumnType("timestamp with time zone");
@@ -867,7 +918,10 @@ namespace Hospital_Management_System.Migrations
 
                     b.HasIndex("TransactionDate");
 
-                    b.HasIndex("TransactionId");
+                    b.HasIndex("TransactionId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_payment_transactions_transaction_id")
+                        .HasFilter("\"TransactionId\" IS NOT NULL");
 
                     b.ToTable("PaymentTransactions");
                 });
@@ -1302,6 +1356,17 @@ namespace Hospital_Management_System.Migrations
                     b.Navigation("Doctor");
 
                     b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("HospitalManagementSystem.Models.MedicineBatch", b =>
+                {
+                    b.HasOne("HospitalManagementSystem.Models.Medicine", "Medicine")
+                        .WithMany()
+                        .HasForeignKey("MedicineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Medicine");
                 });
 
             modelBuilder.Entity("HospitalManagementSystem.Models.Operation", b =>

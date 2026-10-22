@@ -175,6 +175,7 @@ docs/           ER diagram, architecture diagrams, comprehensive system guide, a
 ## Documentation
 
 - [docs/SYSTEM-GUIDE.md](docs/SYSTEM-GUIDE.md) — master comprehensive system specification, workflows, and module reference (the single all-in-one document)
+- [docs/FRONTEND.md](docs/FRONTEND.md) — comprehensive frontend architecture, design tokens, SignalR real-time hubs, interactive booking engines, specialized clinical workstations, and print media rules
 - [docs/ER-DIAGRAM.md](docs/ER-DIAGRAM.md) — all 20 database tables (including `MedicineBatches` and activated `Operations`), schema attributes, and relationships
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system layering, cryptographic ledger, graph algorithms, dynamic queues, AI spine sequence, and scheduling concurrency
 - [docs/DEFENSE-NOTES.md](docs/DEFENSE-NOTES.md) — rehearsable demo script, anticipated viva questions with grounded technical answers, and known limitations stated up front

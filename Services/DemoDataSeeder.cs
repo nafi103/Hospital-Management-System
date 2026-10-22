@@ -707,11 +707,19 @@ namespace HospitalManagementSystem.Services
             };
 
             var now = DateTime.UtcNow;
+            var slotTracker = new Dictionary<(int, int), int>();
             foreach (var spec in specs)
             {
                 var patient = patients[spec.PatientKey];
                 var doctorId = spec.DoctorSlot == 1 ? drOneId : drTwoId;
-                var startedAt = now.Date.AddDays(-spec.DaysAgo).AddHours(10);
+                var key = (doctorId, spec.DaysAgo);
+                if (!slotTracker.TryGetValue(key, out var slotIndex))
+                {
+                    slotIndex = 0;
+                }
+                slotTracker[key] = slotIndex + 1;
+
+                var startedAt = now.Date.AddDays(-spec.DaysAgo).AddHours(10).AddMinutes(slotIndex * 15);
 
                 _context.Appointments.Add(new Appointment
                 {
