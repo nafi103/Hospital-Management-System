@@ -71,11 +71,11 @@
     <div class="cockpit-top-strip">
         <div class="row align-items-center g-3">
             <!-- Patient Demographics -->
-            <div class="col-lg-3 col-md-6 border-end-lg border-secondary">
-                <div class="small text-light opacity-75">
-                    <span>Age: <strong class="text-white">@Model.AgeDisplay</strong></span> &bull;
-                    <span>Gender: <strong class="text-white">@Model.Patient.Gender</strong></span> &bull;
-                    <span>Blood: <strong class="text-danger">@Model.Patient.BloodGroup</strong></span>
+            <div class="col-lg-3 col-md-6 border-end-lg border-subtle">
+                <div class="small strip-label">
+                    <span>Age: <strong class="strip-val">@Model.AgeDisplay</strong></span> &bull;
+                    <span>Gender: <strong class="strip-val">@Model.Patient.Gender</strong></span> &bull;
+                    <span>Blood: <strong class="text-danger fw-bold">@Model.Patient.BloodGroup</strong></span>
                 </div>
                 @if (isChild && Model.Patient.GuardianPatient != null)
                 {
@@ -86,7 +86,7 @@
                 @if (Model.ActiveMedications.Any())
                 {
                     <div class="mt-1">
-                        <span class="badge bg-secondary bg-opacity-25 text-light border border-secondary" style="font-size: 0.7rem;">
+                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle" style="font-size: 0.7rem;">
                             <i class="bi bi-capsule me-1"></i>@Model.ActiveMedications.Count Active Regimens
                         </span>
                     </div>
@@ -94,8 +94,8 @@
             </div>
 
             <!-- Allergies Banner -->
-            <div class="col-lg-4 col-md-6 border-end-lg border-secondary">
-                <div class="small text-uppercase tracking-wider opacity-75 mb-1 fw-bold text-white-50" style="font-size: 0.7rem;">
+            <div class="col-lg-4 col-md-6 border-end-lg border-subtle">
+                <div class="small text-uppercase tracking-wider strip-label mb-1 fw-bold" style="font-size: 0.7rem;">
                     <i class="bi bi-shield-exclamation me-1"></i>Known Allergies
                 </div>
                 @if (hasAllergies)
@@ -113,7 +113,7 @@
                 }
                 else
                 {
-                    <span class="badge bg-success bg-opacity-25 text-success border border-success py-1 px-2" style="font-size: 0.75rem;">
+                    <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2" style="font-size: 0.75rem;">
                         <i class="bi bi-check-circle me-1"></i>No Known Drug Allergies (NKDA)
                     </span>
                 }
@@ -122,7 +122,7 @@
             <!-- Vitals Telemetry Grid -->
             <div class="col-lg-5 col-12">
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                    <span class="small text-uppercase tracking-wider opacity-75 fw-bold text-white-50" style="font-size: 0.7rem;">
+                    <span class="small text-uppercase tracking-wider strip-label fw-bold" style="font-size: 0.7rem;">
                         <i class="bi bi-activity me-1"></i>Vitals &amp; &Delta;NEWS2
                     </span>
                     @if (news2.HasValue)
@@ -140,24 +140,24 @@
                         var v = Model.LatestVitals!;
                         <div class="d-grid gap-1 flex-grow-1" style="grid-template-columns: repeat(5, 1fr);">
                             <div class="vitals-tile">
-                                <div class="text-white-50" style="font-size: 0.65rem;">BP</div>
-                                <div class="font-mono-data fw-bold text-white" style="font-size: 0.8rem;">@v.SystolicBp/@v.DiastolicBp</div>
+                                <div class="vitals-label">BP</div>
+                                <div class="font-mono-data fw-bold vitals-val">@v.SystolicBp/@v.DiastolicBp</div>
                             </div>
                             <div class="vitals-tile">
-                                <div class="text-white-50" style="font-size: 0.65rem;">HR</div>
-                                <div class="font-mono-data fw-bold text-white" style="font-size: 0.8rem;">@v.HeartRate</div>
+                                <div class="vitals-label">HR</div>
+                                <div class="font-mono-data fw-bold vitals-val">@v.HeartRate</div>
                             </div>
                             <div class="vitals-tile">
-                                <div class="text-white-50" style="font-size: 0.65rem;">SpO2</div>
-                                <div class="font-mono-data fw-bold @(v.Spo2 < 95 ? "text-warning" : "text-success")" style="font-size: 0.8rem;">@v.Spo2%</div>
+                                <div class="vitals-label">SpO2</div>
+                                <div class="font-mono-data fw-bold @(v.Spo2 < 95 ? "text-warning" : "text-success")">@v.Spo2%</div>
                             </div>
                             <div class="vitals-tile">
-                                <div class="text-white-50" style="font-size: 0.65rem;">Temp</div>
-                                <div class="font-mono-data fw-bold text-white" style="font-size: 0.8rem;">@v.Temperature&deg;</div>
+                                <div class="vitals-label">Temp</div>
+                                <div class="font-mono-data fw-bold vitals-val">@v.Temperature&deg;</div>
                             </div>
                             <div class="vitals-tile">
-                                <div class="text-white-50" style="font-size: 0.65rem;">RR</div>
-                                <div class="font-mono-data fw-bold text-white" style="font-size: 0.8rem;">@v.RespiratoryRate</div>
+                                <div class="vitals-label">RR</div>
+                                <div class="font-mono-data fw-bold vitals-val">@v.RespiratoryRate</div>
                             </div>
                         </div>
                     }
@@ -214,8 +214,85 @@
 
     <!-- 3-COLUMN WORKSTATION CONTAINER -->
     <div class="cockpit-columns-container">
-        <!-- LEFT COLUMN: PATIENT TIMELINE & MEDICAL HISTORY -->
+        <!-- LEFT COLUMN: CLINICAL CONTEXT (AI COPILOT, ACTIVE REGIMENS & HISTORY) -->
         <aside class="cockpit-col-left">
+            <!-- 1. AI Clinical Copilot -->
+            <div class="pro-card pro-card-compact pro-card-ai mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom" style="border-color: var(--ai-border) !important;">
+                    <div class="d-flex align-items-center gap-1-5">
+                        <i class="bi bi-robot text-purple fs-6" style="color: var(--ai-accent);"></i>
+                        <h6 class="fw-bold mb-0" style="color: var(--ai-accent);">Clinical Copilot</h6>
+                    </div>
+                    @if (Model.LatestAiCaseSummary != null)
+                    {
+                        <span class="badge bg-purple bg-opacity-25 border text-purple" style="font-size: 0.7rem; border-color: var(--ai-border); color: var(--ai-accent);">
+                            @Model.LatestAiCaseSummary.Verdict
+                        </span>
+                    }
+                </div>
+
+                @if (Model.LatestAiCaseSummary != null)
+                {
+                    <div class="small" id="aiSummaryTextContainer" style="max-height: 220px; overflow-y: auto;">
+                        @{
+                            var vdAi = new ViewDataDictionary(ViewData) { ["ReturnUrl"] = Url.Action("Cockpit", "DoctorDashboard", new { id = Model.Appointment.Id }) };
+                        }
+                        <partial name="_SuggestionCardBody" model="Model.LatestAiCaseSummary" view-data="vdAi" />
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-3 text-muted" style="font-size: 0.8125rem;">
+                        <i class="bi bi-sparkles fs-2 d-block mb-1 opacity-50" style="color: var(--ai-accent);"></i>
+                        <span>No AI case summary generated yet.</span>
+                    </div>
+                }
+            </div>
+
+            <!-- 2. Active Prescribed Regimens (Last 30 Days) -->
+            <div class="pro-card pro-card-compact mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                    <h6 class="fw-bold mb-0 text-strong">
+                        <i class="bi bi-capsule me-1 text-primary"></i>Active Regimens
+                    </h6>
+                    <span class="badge bg-secondary bg-opacity-10 text-muted font-mono-data">@Model.ActiveMedications.Count</span>
+                </div>
+
+                @if (Model.ActiveMedications.Any())
+                {
+                    <div class="d-flex flex-column gap-2" style="font-size: 0.8125rem;">
+                        @foreach (var med in Model.ActiveMedications)
+                        {
+                            <div class="p-2 rounded bg-surface-sunken border">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <div class="fw-bold text-strong">@med.MedicineName</div>
+                                        <small class="text-muted d-block">@med.GenericName</small>
+                                    </div>
+                                    <form asp-controller="Prescriptions" asp-action="Discontinue" asp-route-id="@med.PrescriptionId" method="post" class="d-inline" onsubmit="return confirmDiscontinueActiveMed(this, '@med.MedicineName');">
+                                        <input type="hidden" name="reason" value="Discontinued during consultation" />
+                                        <button type="submit" class="btn btn-outline-warning btn-sm py-0 px-1" title="Discontinue Therapy" style="font-size: 0.7rem;">
+                                            Discontinue
+                                        </button>
+                                    </form>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-1 text-muted" style="font-size: 0.72rem;">
+                                    <span>Dispensed @med.PrescribedOrDispensedAt.ToLocalTime().ToString("MMM dd")</span>
+                                    <span>@(med.DurationDays.HasValue ? $"{med.DurationDays}d course" : "Ongoing")</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-2 text-muted" style="font-size: 0.8125rem;">
+                        <span>No active regimens in last 30 days.</span>
+                    </div>
+                }
+            </div>
+
+            <!-- 3. Encounter History -->
             <div class="pro-card pro-card-compact mb-3">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <h6 class="fw-bold mb-0 text-strong">
@@ -254,7 +331,7 @@
                 }
                 else
                 {
-                    <div class="text-center py-4 text-muted">
+                    <div class="text-center py-3 text-muted">
                         <i class="bi bi-journal-check fs-2 text-muted opacity-50 d-block mb-1"></i>
                         <span class="small">First recorded clinical encounter for this patient.</span>
                     </div>
@@ -262,64 +339,71 @@
             </div>
         </aside>
 
-        <!-- CENTER COLUMN: ACTIVE CONSULTATION & PRESCRIPTION WORKSPACE -->
-        <main class="cockpit-col-center">
-            <form asp-action="CompleteConsultation" method="post" id="cockpitForm" class="d-flex flex-column h-100">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="AppointmentId" value="@Model.Appointment.Id" />
-                <input type="hidden" name="PatientId" value="@Model.Patient.Id" />
-                <input type="hidden" name="SafetyOverrideReason" id="SafetyOverrideReasonInput" />
+        <!-- FORM WRAPPING ACTIVE CONSULTATION & PRESCRIPTION WORKSPACE (MERGED) -->
+        <form asp-action="CompleteConsultation" method="post" id="cockpitForm" class="cockpit-workspace-form">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="AppointmentId" value="@Model.Appointment.Id" />
+            <input type="hidden" name="PatientId" value="@Model.Patient.Id" />
+            <input type="hidden" name="SafetyOverrideReason" id="SafetyOverrideReasonInput" />
 
-                <!-- Clinical Encounter Notes -->
-                <div class="pro-card mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+            <div class="cockpit-col-main d-flex flex-column gap-3">
+                <!-- 1. ENCOUNTER DOCUMENTATION & DIAGNOSIS -->
+                <div class="pro-card">
+                    <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
                         <h6 class="fw-bold mb-0 text-strong">
-                            <i class="bi bi-journal-medical me-1 text-primary"></i>Encounter Documentation
+                            <i class="bi bi-journal-medical me-2 text-primary"></i>Encounter Documentation
                         </h6>
                         @if (Model.LatestAiCaseSummary != null)
                         {
-                            <button type="button" class="btn btn-sm btn-outline-info py-0 px-2" id="btnInsertAiSummary" title="Auto-populate diagnosis and complaints from AI summary">
+                            <button type="button" class="btn btn-sm btn-outline-info py-1 px-3" id="btnInsertAiSummary" title="Auto-populate diagnosis and complaints from AI summary">
                                 <i class="bi bi-magic me-1"></i>Insert AI Summary
                             </button>
                         }
                     </div>
 
-                    <div class="bg-surface-sunken p-2 rounded mb-2 border" style="font-size: 0.8125rem;">
-                        <span class="text-muted fw-bold text-uppercase d-block" style="font-size: 0.6875rem;">Queue Reason for Visit:</span>
-                        <span class="text-strong">@(string.IsNullOrWhiteSpace(Model.Appointment.ReasonForVisit) ? "Routine Consultation" : Model.Appointment.ReasonForVisit)</span>
+                    <div class="bg-surface-sunken p-2 px-3 rounded mb-3 border d-flex align-items-center justify-content-between" style="font-size: 0.8125rem;">
+                        <div>
+                            <span class="text-muted fw-bold text-uppercase me-2" style="font-size: 0.6875rem;">Queue Reason for Visit:</span>
+                            <span class="text-strong fw-semibold">@(string.IsNullOrWhiteSpace(Model.Appointment.ReasonForVisit) ? "Routine Consultation" : Model.Appointment.ReasonForVisit)</span>
+                        </div>
+                        <small class="text-muted"><i class="bi bi-clock me-1"></i>Slot: @Model.Appointment.AppointmentDatetime.ToLocalTime().ToString("hh:mm tt")</small>
                     </div>
 
-                    <div class="mb-2">
-                        <label class="form-label small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">Chief Complaints</label>
-                        <textarea name="ChiefComplaint" id="chiefComplaintInput" class="form-control form-control-sm" rows="2" placeholder="e.g. High fever for 3 days, sore throat...">@Model.ChiefComplaint</textarea>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">Chief Complaints</label>
+                            <textarea name="ChiefComplaint" id="chiefComplaintInput" class="form-control form-control-sm" rows="3" placeholder="e.g. High fever for 3 days, sore throat...">@Model.ChiefComplaint</textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">Clinical Diagnosis <span class="text-danger">*</span></label>
+                            <textarea name="Diagnosis" id="diagnosisInput" class="form-control form-control-sm fw-bold" rows="3" placeholder="Clinical assessment / diagnosis (Required)..." required>@Model.Diagnosis</textarea>
+                        </div>
                     </div>
 
-                    <div class="mb-2">
-                        <label class="form-label small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">Clinical Diagnosis <span class="text-danger">*</span></label>
-                        <textarea name="Diagnosis" id="diagnosisInput" class="form-control form-control-sm fw-bold" rows="2" placeholder="Clinical assessment / diagnosis (Required)..." required>@Model.Diagnosis</textarea>
-                    </div>
-
-                    <div class="mb-2">
+                    <div class="mb-1">
                         <label class="form-label small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">Treatment Plan &amp; Advice</label>
                         <textarea name="Treatment" id="treatmentInput" class="form-control form-control-sm" rows="3" placeholder="Clinical advice, precautions, follow-up instructions...">@Model.Treatment</textarea>
                     </div>
                 </div>
 
-                <!-- Prescription Formulary Builder -->
-                <div class="pro-card mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
-                        <h6 class="fw-bold mb-0 text-strong">
-                            <i class="bi bi-capsule me-1 text-primary"></i>Prescription Formulary
-                        </h6>
-                        <button type="button" class="btn btn-sm btn-primary py-0 px-2" id="btnAddMedicineRow">
+                <!-- 2. PRESCRIPTION FORMULARY & SAFETY NET -->
+                <div class="pro-card">
+                    <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                        <div class="d-flex align-items-center gap-2">
+                            <h6 class="fw-bold mb-0 text-strong">
+                                <i class="bi bi-capsule me-2 text-primary"></i>Prescription Formulary
+                            </h6>
+                            <span class="text-muted small d-none d-sm-inline">(Add medications to prescribe from the formulary)</span>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-primary py-1 px-3" id="btnAddMedicineRow">
                             <i class="bi bi-plus-circle me-1"></i>Add Medication
                         </button>
                     </div>
 
                     <!-- Prescribed Medicines Dynamic Rows -->
-                    <div id="medicinesListContainer" class="d-flex flex-column gap-2 mb-2"></div>
+                    <div id="medicinesListContainer" class="d-flex flex-column gap-2 mb-3"></div>
 
-                    <div id="emptyMedicinesNotice" class="text-center py-4 text-muted bg-surface-sunken rounded border border-dashed mb-2">
+                    <div id="emptyMedicinesNotice" class="text-center py-4 text-muted bg-surface-sunken rounded border border-dashed mb-3">
                         <i class="bi bi-capsule fs-3 d-block mb-1 text-primary opacity-50"></i>
                         <span class="fw-semibold small d-block">No Medications Added</span>
                         <small class="text-muted">Click "Add Medication" to prescribe items from the formulary.</small>
@@ -335,97 +419,18 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- STICKY ACTION BAR -->
-                <div class="cockpit-sticky-footer d-flex justify-content-between align-items-center rounded">
-                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnCompleteNotesOnly">
-                        <i class="bi bi-file-earmark-check me-1"></i>Notes Only
-                    </button>
-                    <button type="submit" class="btn btn-success px-4" id="btnSubmitEncounter">
-                        <i class="bi bi-check2-circle me-1"></i>Complete Consultation &amp; Save
-                    </button>
-                </div>
-            </form>
-        </main>
-
-        <!-- RIGHT COLUMN: AI CLINICAL COPILOT & ACTIVE THERAPY -->
-        <aside class="cockpit-col-right">
-            <!-- AI Copilot Card -->
-            <div class="pro-card pro-card-compact pro-card-ai mb-3">
-                <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom" style="border-color: var(--ai-border) !important;">
-                    <div class="d-flex align-items-center gap-1-5">
-                        <i class="bi bi-robot text-purple fs-6" style="color: var(--ai-accent);"></i>
-                        <h6 class="fw-bold mb-0" style="color: var(--ai-accent);">Clinical Copilot</h6>
-                    </div>
-                    @if (Model.LatestAiCaseSummary != null)
-                    {
-                        <span class="badge bg-purple bg-opacity-25 border text-purple" style="font-size: 0.7rem; border-color: var(--ai-border); color: var(--ai-accent);">
-                            @Model.LatestAiCaseSummary.Verdict
-                        </span>
-                    }
-                </div>
-
-                @if (Model.LatestAiCaseSummary != null)
-                {
-                    <div class="small" id="aiSummaryTextContainer" style="max-height: 220px; overflow-y: auto;">
-                        @{
-                            var vdAi = new ViewDataDictionary(ViewData) { ["ReturnUrl"] = Url.Action("Cockpit", "DoctorDashboard", new { id = Model.Appointment.Id }) };
-                        }
-                        <partial name="_SuggestionCardBody" model="Model.LatestAiCaseSummary" view-data="vdAi" />
-                    </div>
-                }
-                else
-                {
-                    <div class="text-center py-4 text-muted" style="font-size: 0.8125rem;">
-                        <i class="bi bi-sparkles fs-2 d-block mb-1 opacity-50" style="color: var(--ai-accent);"></i>
-                        <span>No AI case summary generated yet.</span>
-                    </div>
-                }
             </div>
 
-            <!-- Active Prescribed Regimens (Last 30 Days) -->
-            <div class="pro-card pro-card-compact">
-                <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
-                    <h6 class="fw-bold mb-0 text-strong">
-                        <i class="bi bi-capsule me-1 text-primary"></i>Active Regimens
-                    </h6>
-                    <span class="badge bg-secondary bg-opacity-10 text-muted font-mono-data">@Model.ActiveMedications.Count</span>
-                </div>
-
-                @if (Model.ActiveMedications.Any())
-                {
-                    <div class="d-flex flex-column gap-2" style="font-size: 0.8125rem;">
-                        @foreach (var med in Model.ActiveMedications)
-                        {
-                            <div class="p-2 rounded bg-surface-sunken border">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div>
-                                        <div class="fw-bold text-strong">@med.MedicineName</div>
-                                        <small class="text-muted d-block">@med.GenericName</small>
-                                    </div>
-                                    <form asp-controller="Prescriptions" asp-action="Discontinue" asp-route-id="@med.PrescriptionId" method="post" class="d-inline" onsubmit="return confirmDiscontinueActiveMed(this, '@med.MedicineName');">
-                                        <input type="hidden" name="reason" value="Discontinued during consultation" />
-                                        <button type="submit" class="btn btn-outline-warning btn-sm py-0 px-1" title="Discontinue Therapy" style="font-size: 0.7rem;">
-                                            Discontinue
-                                        </button>
-                                    </form>
-                                </div>
-                                <div class="d-flex justify-content-between align-items-center mt-1 text-muted" style="font-size: 0.72rem;">
-                                    <span>Dispensed @med.PrescribedOrDispensedAt.ToLocalTime().ToString("MMM dd")</span>
-                                    <span>@(med.DurationDays.HasValue ? $"{med.DurationDays}d course" : "Ongoing")</span>
-                                </div>
-                            </div>
-                        }
-                    </div>
-                }
-                else
-                {
-                    <div class="text-center py-3 text-muted" style="font-size: 0.8125rem;">
-                        <span>No active regimens in last 30 days.</span>
-                    </div>
-                }
+            <!-- 3. ACTION FOOTER (Pinned at bottom of workspace) -->
+            <div class="cockpit-footer-bar d-flex justify-content-between align-items-center bg-card border rounded p-2 px-3 mt-2">
+                <button type="button" class="btn btn-outline-secondary" id="btnCompleteNotesOnly">
+                    <i class="bi bi-file-earmark-check me-1"></i>Notes Only
+                </button>
+                <button type="submit" class="btn btn-success px-4 fw-semibold" id="btnSubmitEncounter">
+                    <i class="bi bi-check2-circle me-1"></i>Complete Consultation &amp; Save
+                </button>
             </div>
-        </aside>
+        </form>
     </div>
 </div>
 
@@ -440,9 +445,9 @@
                     <span class="input-group-text bg-light"><i class="bi bi-search text-muted"></i></span>
                     <input type="text" class="form-control medicine-search-input fw-bold" placeholder="Type medicine or generic name..." autocomplete="off" required />
                 </div>
-                <div class="list-group position-absolute w-100 shadow mt-1 medicine-search-results" style="z-index: 1050; display: none; max-height: 220px; overflow-y: auto;"></div>
+                <div class="list-group position-absolute w-100 shadow mt-1 medicine-search-results" style="z-index: 1060; display: none; max-height: 220px; overflow-y: auto;"></div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-4 text-end">
                 <span class="stock-badge badge bg-light text-secondary border border-secondary-subtle py-2 px-2 d-none"></span>
             </div>
             <div class="col-md-1 text-end">
@@ -453,19 +458,15 @@
         </div>
 
         <div class="row g-2 align-items-center mb-2">
-            <div class="col-md-2">
-                <label class="form-label small text-muted mb-0">Qty</label>
-                <input type="number" name="PrescriptionItems[{index}].Quantity" class="form-control form-control-sm text-center qty-input" min="1" value="10" required />
-            </div>
-            <div class="col-md-6">
-                <label class="form-label small text-muted mb-0">Dose (Morn + Aft + Eve)</label>
+            <div class="col-md-5">
+                <label class="form-label small text-muted mb-0" style="font-size: 0.72rem;">Dose (Morn + Aft + Eve)</label>
                 <div class="input-group input-group-sm">
-                    <input type="number" step="0.5" min="0" name="PrescriptionItems[{index}].DoseMorning" class="form-control text-center px-1" value="1" />
-                    <span class="input-group-text px-1">+</span>
-                    <input type="number" step="0.5" min="0" name="PrescriptionItems[{index}].DoseAfternoon" class="form-control text-center px-1" value="0" />
-                    <span class="input-group-text px-1">+</span>
-                    <input type="number" step="0.5" min="0" name="PrescriptionItems[{index}].DoseEvening" class="form-control text-center px-1" value="1" />
-                    <select name="PrescriptionItems[{index}].DoseUnit" class="form-select" style="max-width: 90px;">
+                    <input type="number" step="0.5" min="0" name="PrescriptionItems[{index}].DoseMorning" class="form-control text-center px-1" value="1" title="Morning" />
+                    <span class="input-group-text px-1 text-muted">+</span>
+                    <input type="number" step="0.5" min="0" name="PrescriptionItems[{index}].DoseAfternoon" class="form-control text-center px-1" value="0" title="Afternoon" />
+                    <span class="input-group-text px-1 text-muted">+</span>
+                    <input type="number" step="0.5" min="0" name="PrescriptionItems[{index}].DoseEvening" class="form-control text-center px-1" value="1" title="Evening" />
+                    <select name="PrescriptionItems[{index}].DoseUnit" class="form-select flex-grow-0" style="width: 80px;">
                         <option value="Tablet" selected>Tab</option>
                         <option value="Capsule">Cap</option>
                         <option value="Ml">ml</option>
@@ -475,11 +476,15 @@
                 </div>
             </div>
             <div class="col-md-2">
-                <label class="form-label small text-muted mb-0">Days</label>
-                <input type="number" name="PrescriptionItems[{index}].DurationDays" class="form-control form-control-sm text-center" min="1" value="5" />
+                <label class="form-label small text-muted mb-0" style="font-size: 0.72rem;">Quantity</label>
+                <input type="number" name="PrescriptionItems[{index}].Quantity" class="form-control form-control-sm text-center qty-input" min="1" value="10" required />
             </div>
             <div class="col-md-2">
-                <label class="form-label small text-muted mb-0">Route</label>
+                <label class="form-label small text-muted mb-0" style="font-size: 0.72rem;">Days</label>
+                <input type="number" name="PrescriptionItems[{index}].DurationDays" class="form-control form-control-sm text-center" min="1" value="5" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted mb-0" style="font-size: 0.72rem;">Route</label>
                 <select name="PrescriptionItems[{index}].Route" class="form-select form-select-sm">
                     <option value="Oral" selected>Oral</option>
                     <option value="IV">IV</option>

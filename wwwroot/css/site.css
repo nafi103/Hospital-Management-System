@@ -985,10 +985,77 @@ thead.table-light {
 }
 
 .cockpit-top-strip {
+    background: #ffffff;
+    color: var(--text-body);
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    padding: 0.75rem 1.25rem;
+}
+
+[data-bs-theme="dark"] .cockpit-top-strip {
     background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
     color: #f8fafc;
-    border-bottom: 1px solid var(--border-subtle);
-    padding: 0.75rem 1.25rem;
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.cockpit-top-strip,
+.cockpit-top-strip .text-light,
+.cockpit-top-strip .text-white-50,
+.cockpit-top-strip .opacity-75,
+.cockpit-top-strip small {
+    color: var(--text-muted, #475569) !important;
+}
+
+.cockpit-top-strip .text-white,
+.cockpit-top-strip strong:not(.text-danger),
+.cockpit-top-strip .font-mono-data:not(.text-success):not(.text-warning):not(.text-danger) {
+    color: var(--text-strong, #0f172a) !important;
+}
+
+.cockpit-top-strip .border-secondary {
+    border-color: #e2e8f0 !important;
+}
+
+[data-bs-theme="dark"] .cockpit-top-strip,
+[data-bs-theme="dark"] .cockpit-top-strip .text-light,
+[data-bs-theme="dark"] .cockpit-top-strip .text-white-50 {
+    color: rgba(255, 255, 255, 0.7) !important;
+}
+
+[data-bs-theme="dark"] .cockpit-top-strip .text-white,
+[data-bs-theme="dark"] .cockpit-top-strip strong:not(.text-danger) {
+    color: #ffffff !important;
+}
+
+[data-bs-theme="dark"] .cockpit-top-strip .border-secondary {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.vitals-tile {
+    background: var(--surface-sunken, #f8fafc) !important;
+    border: 1px solid var(--border-color, #e2e8f0) !important;
+    border-radius: 6px;
+    padding: 0.25rem 0.5rem;
+    text-align: center;
+}
+.vitals-tile .vitals-label {
+    color: var(--text-muted, #64748b);
+    font-size: 0.65rem;
+}
+.vitals-tile .vitals-val {
+    color: var(--text-strong, #0f172a);
+    font-size: 0.8rem;
+}
+
+[data-bs-theme="dark"] .vitals-tile {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+[data-bs-theme="dark"] .vitals-tile .vitals-label {
+    color: rgba(255, 255, 255, 0.6);
+}
+[data-bs-theme="dark"] .vitals-tile .vitals-val {
+    color: #ffffff;
 }
 
 .cockpit-columns-container {
@@ -999,7 +1066,27 @@ thead.table-light {
     flex: 1;
 }
 
-@media (min-width: 992px) and (max-width: 1279px) {
+.cockpit-workspace-form {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+}
+
+.cockpit-col-left,
+.cockpit-col-main {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}
+
+.cockpit-col-left > .pro-card:first-child,
+.cockpit-col-main > .pro-card:first-child {
+    margin-top: 0 !important;
+}
+
+@media (max-width: 1024px) {
     .cockpit-shell-locked {
         height: auto;
         overflow: visible;
@@ -1013,15 +1100,15 @@ thead.table-light {
     }
 
     .cockpit-col-left,
-    .cockpit-col-center,
-    .cockpit-col-right {
-        width: 100%;
+    .cockpit-workspace-form,
+    .cockpit-col-main {
+        width: 100% !important;
         height: auto;
         overflow: visible;
     }
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1025px) {
     .cockpit-shell-locked {
         height: calc(100vh - 56px);
         overflow: hidden;
@@ -1032,30 +1119,42 @@ thead.table-light {
         height: calc(100vh - 180px);
         overflow: hidden;
         padding: 0.85rem 1rem;
+        gap: 1.25rem;
+        align-items: flex-start;
     }
 
     .cockpit-col-left {
-        width: 27%;
+        width: 38%;
         height: 100%;
         overflow-y: auto;
         padding-right: 0.35rem;
     }
 
-    .cockpit-col-center {
-        width: 46%;
+    .cockpit-workspace-form {
+        width: 62%;
         height: 100%;
-        overflow-y: auto;
-        padding-right: 0.35rem;
         display: flex;
         flex-direction: column;
     }
 
-    .cockpit-col-right {
-        width: 27%;
+    .cockpit-col-main {
+        width: 100%;
         height: 100%;
         overflow-y: auto;
         padding-right: 0.35rem;
     }
+}
+
+.medicine-row {
+    background: var(--card-bg) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-primary);
+}
+
+[data-bs-theme="dark"] .medicine-row {
+    background: var(--card-bg) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary);
 }
 
 /* Timeline Track for Medical Records */
@@ -1107,16 +1206,13 @@ thead.table-light {
     transform: translateX(4px);
 }
 
-/* Sticky submit action bar at bottom of center column */
-.cockpit-sticky-footer {
-    position: sticky;
-    bottom: 0;
+/* Submit action bar at bottom of clinical workspace */
+.cockpit-footer-bar {
     background-color: var(--surface-card);
-    border-top: 1px solid var(--border-subtle);
+    border: 1px solid var(--border-subtle);
     padding: 0.75rem 1rem;
-    margin-top: auto;
-    z-index: 10;
-    box-shadow: 0 -4px 10px -2px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-sm);
+    flex-shrink: 0;
 }
 
 /* AI Streaming Cursor & Citation Pills */
@@ -1367,3 +1463,134 @@ thead.table-light {
         background: #ffffff !important;
     }
 }
+
+/* -------------------------------------------------------------
+   Doctor Dashboard: My Assistant Card Layout & Polish
+   ------------------------------------------------------------- */
+.pro-card.position-relative:has(.bi-person-badge) {
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.pro-card.position-relative:has(.bi-person-badge) > .position-absolute.top-0.end-0 {
+    position: static !important;
+    order: 4 !important;
+    margin: auto 0 0 0 !important;
+    padding-top: 0.75rem !important;
+    border-top: 1px solid var(--border-color, rgba(0, 0, 0, 0.08)) !important;
+    display: flex !important;
+    justify-content: flex-end !important;
+    width: 100% !important;
+}
+
+.pro-card.position-relative:has(.bi-person-badge) > .d-flex.align-items-center {
+    order: 1 !important;
+    margin-top: 0.25rem !important;
+    margin-bottom: 1rem !important;
+    padding-right: 0 !important;
+}
+
+.pro-card.position-relative:has(.bi-person-badge) > .bg-light {
+    order: 2 !important;
+}
+
+.pro-card.position-relative:has(.bi-person-badge) > div:last-child {
+    order: 3 !important;
+    margin-bottom: 0.75rem !important;
+}
+
+/* -------------------------------------------------------------
+   Formulary Autocomplete & Medicine Dropdown (Solid Opaque Styles)
+   Fixes transparency bleed-through where background form fields
+   (Qty, Dose, Days, Route) showed through the expanded dropdown.
+   ------------------------------------------------------------- */
+.medicine-search-results,
+.list-group.position-absolute,
+#SearchResults.list-group {
+    background-color: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.15) !important;
+    z-index: 1060 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 4px 0 !important;
+}
+
+.medicine-search-results .list-group-item,
+.list-group.position-absolute .list-group-item,
+#SearchResults.list-group .list-group-item {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    border: none !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    padding: 0.625rem 0.875rem !important;
+    transition: background-color 0.12s ease-in-out, color 0.12s ease-in-out;
+    cursor: pointer !important;
+}
+
+.medicine-search-results .list-group-item:last-child,
+.list-group.position-absolute .list-group-item:last-child,
+#SearchResults.list-group .list-group-item:last-child {
+    border-bottom: none !important;
+}
+
+.medicine-search-results .list-group-item:hover,
+.medicine-search-results .list-group-item:focus,
+.list-group.position-absolute .list-group-item:hover,
+.list-group.position-absolute .list-group-item:focus,
+#SearchResults.list-group .list-group-item:hover,
+#SearchResults.list-group .list-group-item:focus {
+    background-color: #f0fdf4 !important;
+    color: #047857 !important;
+}
+
+/* Dark Mode Overrides for Autocomplete Dropdowns */
+[data-bs-theme="dark"] .medicine-search-results,
+[data-bs-theme="dark"] .list-group.position-absolute,
+[data-bs-theme="dark"] #SearchResults.list-group {
+    background-color: #1e293b !important;
+    border-color: #334155 !important;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-bs-theme="dark"] .medicine-search-results .list-group-item,
+[data-bs-theme="dark"] .list-group.position-absolute .list-group-item,
+[data-bs-theme="dark"] #SearchResults.list-group .list-group-item {
+    background-color: #1e293b !important;
+    color: #f1f5f9 !important;
+    border-bottom: 1px solid #334155 !important;
+}
+
+[data-bs-theme="dark"] .medicine-search-results .list-group-item:hover,
+[data-bs-theme="dark"] .medicine-search-results .list-group-item:focus,
+[data-bs-theme="dark"] .list-group.position-absolute .list-group-item:hover,
+[data-bs-theme="dark"] .list-group.position-absolute .list-group-item:focus,
+[data-bs-theme="dark"] #SearchResults.list-group .list-group-item:hover,
+[data-bs-theme="dark"] #SearchResults.list-group .list-group-item:focus {
+    background-color: #273549 !important;
+    color: #38bdf8 !important;
+}
+
+[data-bs-theme="dark"] .medicine-search-results .text-muted,
+[data-bs-theme="dark"] .list-group.position-absolute .text-muted {
+    color: #94a3b8 !important;
+}
+
+[data-bs-theme="dark"] .medicine-search-results .badge.bg-light {
+    background-color: #334155 !important;
+    color: #cbd5e1 !important;
+    border-color: #475569 !important;
+}
+
+/* Scrollbar styling for autocomplete menus */
+.medicine-search-results::-webkit-scrollbar,
+.list-group.position-absolute::-webkit-scrollbar {
+    width: 6px;
+}
+.medicine-search-results::-webkit-scrollbar-thumb,
+.list-group.position-absolute::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.5);
+    border-radius: 4px;
+}
+

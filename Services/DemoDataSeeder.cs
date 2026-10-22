@@ -153,13 +153,15 @@ namespace HospitalManagementSystem.Services
             await db.ExecuteSqlRawAsync("DELETE FROM \"PatientVitals\"");
             await db.ExecuteSqlRawAsync("DELETE FROM \"PrescriptionItems\"");
             await db.ExecuteSqlRawAsync("DELETE FROM \"Prescriptions\"");
+            await db.ExecuteSqlRawAsync("DELETE FROM \"PaymentTransactions\"");
             await db.ExecuteSqlRawAsync("DELETE FROM \"BillItems\"");
             await db.ExecuteSqlRawAsync("DELETE FROM \"Bills\"");
             await db.ExecuteSqlRawAsync("DELETE FROM \"Operations\"");
             await db.ExecuteSqlRawAsync("DELETE FROM \"BedTransfers\"");
             await db.ExecuteSqlRawAsync("DELETE FROM \"Admissions\"");
-            await db.ExecuteSqlRawAsync("DELETE FROM \"Appointments\"");
             await db.ExecuteSqlRawAsync("DELETE FROM \"MedicalRecords\"");
+            await db.ExecuteSqlRawAsync("DELETE FROM \"Appointments\"");
+            await db.ExecuteSqlRawAsync("UPDATE \"Patients\" SET \"GuardianPatientId\" = NULL");
             await db.ExecuteSqlRawAsync("DELETE FROM \"Patients\"");
             // Patient-role logins only ever come from this seeder or the receptionist's
             // "issue portal login" action - safe to wipe and recreate every run so UHID
