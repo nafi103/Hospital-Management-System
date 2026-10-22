@@ -4,29 +4,23 @@
 
 @{
     ViewData["Title"] = $"Clinical Cockpit - {Model.Patient.FullName}";
+    ViewBag.FluidLayout = true;
     var dashboardUrl = Url.Action("Index", "DoctorDashboard");
     var hasAllergies = Model.Allergies != null && Model.Allergies.Any();
     var hasVitals = Model.LatestVitals != null;
     var isChild = Model.Patient.IsChild;
     var news2 = Model.News2Result;
+    var pastRecords = ViewBag.PastMedicalRecords as List<MedicalRecord> ?? new List<MedicalRecord>();
 }
 
 @section Styles {
     <style>
-        .cockpit-header {
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-            color: #f8fafc;
-            border-radius: 12px;
-            padding: 1.25rem 1.5rem;
-            margin-bottom: 1.5rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        }
-        .vitals-pill {
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 8px;
-            padding: 0.35rem 0.75rem;
-            font-size: 0.85rem;
+        .vitals-tile {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 0.25rem 0.5rem;
+            text-align: center;
         }
         .allergy-badge-danger {
             background-color: #fee2e2;
@@ -43,348 +37,397 @@
     </style>
 }
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <div>
-        <a asp-action="Index" class="text-decoration-none text-muted mb-1 d-inline-block small">
-            <i class="bi bi-arrow-left"></i> Back to Doctor's Desk
-        </a>
-        <h3 class="mb-0 fw-bold text-primary">
-            <i class="bi bi-person-workspace me-2"></i>Clinical Cockpit
-        </h3>
-    </div>
-    <div class="d-flex gap-2">
-        <form asp-action="ReturnToWaitingRoom" asp-route-id="@Model.Appointment.Id" method="post" class="d-inline" onsubmit="return confirm('Return this patient to the waiting room queue?');">
-            <button type="submit" class="btn btn-outline-warning btn-sm">
-                <i class="bi bi-arrow-return-left me-1"></i> Return to Queue
-            </button>
-        </form>
-        <button type="button" class="btn btn-outline-danger btn-sm" onclick="cancelWalkout(@Model.Appointment.Id)">
-            <i class="bi bi-x-circle me-1"></i> Patient Walkout / Cancel
-        </button>
-    </div>
-</div>
-
-<partial name="_ActionSuccessBanner" />
-
-@if (TempData["ErrorMessage"] != null)
-{
-    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-        <i class="bi bi-exclamation-triangle-fill me-2"></i> @TempData["ErrorMessage"]
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-}
-
-<!-- OMNIPRESENT PATIENT SAFETY HEADER BANNER -->
-<div class="cockpit-header">
-    <div class="row align-items-center g-3">
-        <!-- Patient Demographics -->
-        <div class="col-lg-4 col-md-6 border-end-lg border-secondary">
-            <div class="d-flex align-items-center gap-2 mb-1">
-                <h4 class="fw-bold mb-0 text-white">@Model.Patient.FullName</h4>
-                @if (isChild)
-                {
-                    <span class="badge bg-warning text-dark"><i class="bi bi-balloon me-1"></i>Child</span>
-                }
-            </div>
-            <div class="text-light opacity-75 small mb-2">
-                <span><i class="bi bi-person-badge me-1"></i>UHID: <strong>@Model.Patient.Uhid</strong></span> &middot;
-                <span>Age: <strong>@Model.AgeDisplay</strong></span> &middot;
-                <span>Gender: @Model.Patient.Gender</span> &middot;
-                <span>Blood: <strong class="text-danger">@Model.Patient.BloodGroup</strong></span>
-            </div>
-            @if (isChild && Model.Patient.GuardianPatient != null)
-            {
-                <div class="small text-info">
-                    <i class="bi bi-shield-lock me-1"></i>Guardian: @Model.Patient.GuardianPatient.FullName (@(Model.Patient.GuardianRelationship ?? "Parent"))
-                </div>
-            }
-        </div>
-
-        <!-- Allergies Banner -->
-        <div class="col-lg-4 col-md-6 border-end-lg border-secondary">
-            <div class="small text-uppercase tracking-wider opacity-75 mb-1 fw-bold text-white-50">
-                <i class="bi bi-shield-exclamation me-1"></i>Known Allergies
-            </div>
-            @if (hasAllergies)
-            {
-                <div class="d-flex flex-wrap gap-1">
-                    @foreach (var allergy in Model.Allergies)
+<div class="cockpit-shell cockpit-shell-locked">
+    <!-- SUB-NAV & SAFETY BANNER -->
+    <div class="d-flex justify-content-between align-items-center px-3 py-2 bg-surface-card border-bottom">
+        <div class="d-flex align-items-center gap-2">
+            <a asp-action="Index" class="btn btn-sm btn-outline-secondary px-2 py-1" title="Back to Doctor's Desk">
+                <i class="bi bi-arrow-left"></i>
+            </a>
+            <div class="line-height-1">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="fw-bold text-strong fs-6">@Model.Patient.FullName</span>
+                    <span class="uhid-badge">@Model.Patient.Uhid</span>
+                    @if (isChild)
                     {
-                        var isSevere = allergy.Severity == AllergySeverity.LifeThreatening || allergy.Severity == AllergySeverity.Severe;
-                        <span class="badge @(isSevere ? "allergy-badge-danger" : "bg-warning bg-opacity-25 text-warning border border-warning") py-1 px-2" title="@allergy.ReactionType">
-                            <i class="bi @(isSevere ? "bi-exclamation-octagon-fill" : "bi-exclamation-triangle") me-1"></i>
-                            @allergy.Substance (@allergy.Severity)
-                        </span>
+                        <span class="badge bg-warning text-dark"><i class="bi bi-balloon me-1"></i>Pediatric</span>
                     }
                 </div>
-            }
-            else
-            {
-                <span class="badge bg-success bg-opacity-25 text-success border border-success py-1 px-2">
-                    <i class="bi bi-check-circle me-1"></i>No Known Drug Allergies (NKDA)
-                </span>
-            }
-
-            <!-- Active Meds Drawer Toggle -->
-            <div class="mt-2">
-                <button class="btn btn-sm btn-outline-light py-0 px-2" type="button" data-bs-toggle="collapse" data-bs-target="#activeMedsCollapse">
-                    <i class="bi bi-capsule me-1"></i>Active Meds (@Model.ActiveMedications.Count)
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <form asp-action="ReturnToWaitingRoom" asp-route-id="@Model.Appointment.Id" method="post" class="d-inline" onsubmit="return confirm('Return this patient to the waiting room queue?');">
+                <button type="submit" class="btn btn-outline-warning btn-sm py-1">
+                    <i class="bi bi-arrow-return-left me-1"></i> Return to Queue
                 </button>
-            </div>
+            </form>
+            <button type="button" class="btn btn-outline-danger btn-sm py-1" onclick="cancelWalkout(@Model.Appointment.Id)">
+                <i class="bi bi-x-circle me-1"></i> Walkout / Cancel
+            </button>
         </div>
+    </div>
 
-        <!-- Vitals & NEWS2 Deterioration Strip -->
-        <div class="col-lg-4 col-12">
-            <div class="d-flex justify-content-between align-items-center mb-1">
-                <span class="small text-uppercase tracking-wider opacity-75 fw-bold text-white-50">
-                    <i class="bi bi-heart-pulse me-1"></i>Vitals &amp; Triage
-                </span>
-                @if (news2.HasValue)
+    <!-- OMNIPRESENT PATIENT SAFETY STRIP -->
+    <div class="cockpit-top-strip">
+        <div class="row align-items-center g-3">
+            <!-- Patient Demographics -->
+            <div class="col-lg-3 col-md-6 border-end-lg border-secondary">
+                <div class="small text-light opacity-75">
+                    <span>Age: <strong class="text-white">@Model.AgeDisplay</strong></span> &bull;
+                    <span>Gender: <strong class="text-white">@Model.Patient.Gender</strong></span> &bull;
+                    <span>Blood: <strong class="text-danger">@Model.Patient.BloodGroup</strong></span>
+                </div>
+                @if (isChild && Model.Patient.GuardianPatient != null)
                 {
-                    var nColor = news2.Value.Priority == TriagePriority.Emergency ? "bg-danger" : (news2.Value.Priority == TriagePriority.Urgent ? "bg-warning text-dark" : "bg-success");
-                    <span class="badge @nColor fs-6">
-                        NEWS2: @news2.Value.Score (@news2.Value.Priority Risk)
-                    </span>
+                    <div class="small text-info mt-1" style="font-size: 0.75rem;">
+                        <i class="bi bi-shield-lock me-1"></i>Guardian: @Model.Patient.GuardianPatient.FullName (@(Model.Patient.GuardianRelationship ?? "Parent"))
+                    </div>
                 }
-                else if (isChild)
+                @if (Model.ActiveMedications.Any())
                 {
-                    <span class="badge bg-info bg-opacity-25 text-info border border-info">
-                        Pediatric Protocol
-                    </span>
+                    <div class="mt-1">
+                        <span class="badge bg-secondary bg-opacity-25 text-light border border-secondary" style="font-size: 0.7rem;">
+                            <i class="bi bi-capsule me-1"></i>@Model.ActiveMedications.Count Active Regimens
+                        </span>
+                    </div>
                 }
             </div>
 
-            @if (hasVitals)
-            {
-                var v = Model.LatestVitals!;
-                <div class="d-flex flex-wrap gap-1">
-                    <span class="vitals-pill">BP: <strong>@v.SystolicBp/@v.DiastolicBp</strong></span>
-                    <span class="vitals-pill">HR: <strong>@v.HeartRate</strong> bpm</span>
-                    <span class="vitals-pill">SpO2: <strong>@v.Spo2%</strong></span>
-                    <span class="vitals-pill">Temp: <strong>@v.Temperature&deg;C</strong></span>
-                    <span class="vitals-pill">RR: <strong>@v.RespiratoryRate</strong></span>
-                    @if (v.WeightKg.HasValue)
-                    {
-                        <span class="vitals-pill bg-primary bg-opacity-25 border-primary text-info">
-                            <i class="bi bi-speedometer2 me-1"></i>Wt: <strong>@v.WeightKg kg</strong>
-                        </span>
-                    }
-                    @if (v.OnSupplementalOxygen)
-                    {
-                        <span class="vitals-pill text-warning"><i class="bi bi-lungs me-1"></i>On O2</span>
-                    }
+            <!-- Allergies Banner -->
+            <div class="col-lg-4 col-md-6 border-end-lg border-secondary">
+                <div class="small text-uppercase tracking-wider opacity-75 mb-1 fw-bold text-white-50" style="font-size: 0.7rem;">
+                    <i class="bi bi-shield-exclamation me-1"></i>Known Allergies
                 </div>
-            }
-            else
-            {
-                <span class="text-white-50 small">No triage vitals recorded for this visit.</span>
-            }
-
-            @if (ViewBag.DeltaNews2 != null)
-            {
-                var delta = (HospitalManagementSystem.Services.DeltaNews2Result)ViewBag.DeltaNews2;
-                var longVitals = ViewBag.LongitudinalVitals as List<HospitalManagementSystem.Models.PatientVital>;
-                <div class="mt-2 pt-2 border-top border-secondary">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <span class="small text-white-50" style="font-size: 0.75rem;">
-                            <i class="bi bi-graph-up me-1"></i>&Delta;NEWS2 Radar (12h)
-                        </span>
-                        @if (delta.IsRapidDeterioration)
+                @if (hasAllergies)
+                {
+                    <div class="d-flex flex-wrap gap-1">
+                        @foreach (var allergy in Model.Allergies)
                         {
-                            <span class="badge bg-danger animate-pulse" title="@delta.Message">
-                                <i class="bi bi-exclamation-triangle-fill me-1"></i>&Delta;+@delta.Delta ACUTE DETERIORATION
-                            </span>
-                        }
-                        else
-                        {
-                            <span class="badge bg-secondary bg-opacity-50 text-light" style="font-size: 0.7rem;">
-                                &Delta;@(delta.Delta > 0 ? $"+{delta.Delta}" : delta.Delta.ToString()) (Stable)
+                            var isSevere = allergy.Severity == AllergySeverity.LifeThreatening || allergy.Severity == AllergySeverity.Severe;
+                            <span class="badge @(isSevere ? "allergy-badge-danger" : "bg-warning bg-opacity-25 text-warning border border-warning") py-1 px-2" title="@allergy.ReactionType">
+                                <i class="bi @(isSevere ? "bi-exclamation-octagon-fill" : "bi-exclamation-triangle") me-1"></i>
+                                @allergy.Substance (@allergy.Severity)
                             </span>
                         }
                     </div>
-                    @if (longVitals != null && longVitals.Count > 1)
+                }
+                else
+                {
+                    <span class="badge bg-success bg-opacity-25 text-success border border-success py-1 px-2" style="font-size: 0.75rem;">
+                        <i class="bi bi-check-circle me-1"></i>No Known Drug Allergies (NKDA)
+                    </span>
+                }
+            </div>
+
+            <!-- Vitals Telemetry Grid -->
+            <div class="col-lg-5 col-12">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="small text-uppercase tracking-wider opacity-75 fw-bold text-white-50" style="font-size: 0.7rem;">
+                        <i class="bi bi-activity me-1"></i>Vitals &amp; &Delta;NEWS2
+                    </span>
+                    @if (news2.HasValue)
                     {
-                        var chrono = longVitals.OrderBy(x => x.CreatedAt).ToList();
-                        var points = new List<string>();
-                        for (int i = 0; i < chrono.Count; i++)
-                        {
-                            var s = HospitalManagementSystem.Services.News2Calculator.Calculate(
-                                chrono[i].RespiratoryRate, chrono[i].Spo2, chrono[i].OnSupplementalOxygen,
-                                chrono[i].Temperature, chrono[i].SystolicBp, chrono[i].HeartRate, chrono[i].Consciousness).Score;
-                            double px = 5 + (110.0 * i / Math.Max(1, chrono.Count - 1));
-                            double py = 20 - Math.Min(16, (s * 1.6));
-                            points.Add($"{px.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)},{py.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}");
-                        }
-                        var polylineStr = string.Join(" ", points);
-                        <div class="d-flex align-items-center gap-2">
-                            <svg width="120" height="24" class="overflow-visible" style="background: rgba(255,255,255,0.05); border-radius: 4px;">
-                                <polyline fill="none" stroke="@(delta.IsRapidDeterioration ? "#ff4d4f" : "#52c41a")" stroke-width="2" points="@polylineStr" />
-                                @foreach (var pt in points)
-                                {
-                                    var xy = pt.Split(',');
-                                    <circle cx="@xy[0]" cy="@xy[1]" r="2.5" fill="@(delta.IsRapidDeterioration ? "#ff4d4f" : "#52c41a")" />
-                                }
-                            </svg>
-                            <span class="text-white-50" style="font-size: 0.7rem;">@chrono.Count observations</span>
-                        </div>
+                        var nColor = news2.Value.Priority == TriagePriority.Emergency ? "bg-danger" : (news2.Value.Priority == TriagePriority.Urgent ? "bg-warning text-dark" : "bg-success");
+                        <span class="badge @nColor font-mono-data" style="font-size: 0.75rem;">
+                            NEWS2: @news2.Value.Score (@news2.Value.Priority)
+                        </span>
                     }
                 </div>
-            }
+
+                <div class="d-flex align-items-center gap-2">
+                    @if (hasVitals)
+                    {
+                        var v = Model.LatestVitals!;
+                        <div class="d-grid gap-1 flex-grow-1" style="grid-template-columns: repeat(5, 1fr);">
+                            <div class="vitals-tile">
+                                <div class="text-white-50" style="font-size: 0.65rem;">BP</div>
+                                <div class="font-mono-data fw-bold text-white" style="font-size: 0.8rem;">@v.SystolicBp/@v.DiastolicBp</div>
+                            </div>
+                            <div class="vitals-tile">
+                                <div class="text-white-50" style="font-size: 0.65rem;">HR</div>
+                                <div class="font-mono-data fw-bold text-white" style="font-size: 0.8rem;">@v.HeartRate</div>
+                            </div>
+                            <div class="vitals-tile">
+                                <div class="text-white-50" style="font-size: 0.65rem;">SpO2</div>
+                                <div class="font-mono-data fw-bold @(v.Spo2 < 95 ? "text-warning" : "text-success")" style="font-size: 0.8rem;">@v.Spo2%</div>
+                            </div>
+                            <div class="vitals-tile">
+                                <div class="text-white-50" style="font-size: 0.65rem;">Temp</div>
+                                <div class="font-mono-data fw-bold text-white" style="font-size: 0.8rem;">@v.Temperature&deg;</div>
+                            </div>
+                            <div class="vitals-tile">
+                                <div class="text-white-50" style="font-size: 0.65rem;">RR</div>
+                                <div class="font-mono-data fw-bold text-white" style="font-size: 0.8rem;">@v.RespiratoryRate</div>
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Area-Filled Delta-NEWS2 Sparkline -->
+                    @if (ViewBag.DeltaNews2 != null)
+                    {
+                        var delta = (HospitalManagementSystem.Services.DeltaNews2Result)ViewBag.DeltaNews2;
+                        var longVitals = ViewBag.LongitudinalVitals as List<HospitalManagementSystem.Models.PatientVital>;
+                        if (longVitals != null && longVitals.Count > 1)
+                        {
+                            var chrono = longVitals.OrderBy(x => x.CreatedAt).ToList();
+                            var points = new List<string>();
+                            for (int i = 0; i < chrono.Count; i++)
+                            {
+                                var s = HospitalManagementSystem.Services.News2Calculator.Calculate(
+                                    chrono[i].RespiratoryRate, chrono[i].Spo2, chrono[i].OnSupplementalOxygen,
+                                    chrono[i].Temperature, chrono[i].SystolicBp, chrono[i].HeartRate, chrono[i].Consciousness).Score;
+                                double px = 4 + (112.0 * i / Math.Max(1, chrono.Count - 1));
+                                double py = 22 - Math.Min(18, (s * 1.8));
+                                points.Add($"{px.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)},{py.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}");
+                            }
+                            var polylineStr = string.Join(" ", points);
+                            var firstPt = points.First().Split(',');
+                            var lastPt = points.Last().Split(',');
+                            var polygonStr = $"{polylineStr} {lastPt[0]},26 {firstPt[0]},26";
+
+                            <div class="d-flex flex-column align-items-end" title="@delta.Message">
+                                <svg width="125" height="28" class="overflow-visible" style="background: rgba(0,0,0,0.25); border-radius: 4px; padding: 1px;">
+                                    <defs>
+                                        <linearGradient id="cockpitSparkGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                                            <stop offset="0%" stop-color="@(delta.IsRapidDeterioration ? "#ef4444" : "#10b981")" stop-opacity="0.45" />
+                                            <stop offset="100%" stop-color="@(delta.IsRapidDeterioration ? "#ef4444" : "#10b981")" stop-opacity="0.0" />
+                                        </linearGradient>
+                                    </defs>
+                                    <polygon fill="url(#cockpitSparkGrad)" points="@polygonStr" />
+                                    <polyline fill="none" stroke="@(delta.IsRapidDeterioration ? "#ef4444" : "#10b981")" stroke-width="2" points="@polylineStr" />
+                                    @foreach (var pt in points)
+                                    {
+                                        var xy = pt.Split(',');
+                                        <circle cx="@xy[0]" cy="@xy[1]" r="2.5" fill="@(delta.IsRapidDeterioration ? "#ef4444" : "#10b981")" />
+                                    }
+                                </svg>
+                                <span class="badge @(delta.IsRapidDeterioration ? "bg-danger" : "bg-secondary bg-opacity-50") mt-1" style="font-size: 0.65rem;">
+                                    &Delta;@(delta.Delta > 0 ? $"+{delta.Delta}" : delta.Delta.ToString()) (12h)
+                                </span>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Active Medications Collapsible Drawer -->
-    <div class="collapse mt-3 pt-3 border-top border-secondary" id="activeMedsCollapse">
-        <h6 class="text-white-50 small fw-bold text-uppercase mb-2">Active Prescribed Regimens (Dispensed Last 30 Days)</h6>
-        @if (Model.ActiveMedications.Any())
-        {
-            <div class="table-responsive">
-                <table class="table table-sm table-dark table-striped mb-0 small">
-                    <thead>
-                        <tr>
-                            <th>Medication</th>
-                            <th>Generic</th>
-                            <th>Dispensed Date</th>
-                            <th>Duration</th>
-                            <th class="text-end">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var med in Model.ActiveMedications)
-                        {
-                            <tr>
-                                <td class="fw-bold">@med.MedicineName</td>
-                                <td class="text-white-50">@med.GenericName</td>
-                                <td>@med.PrescribedOrDispensedAt.ToLocalTime().ToString("MMM dd, yyyy")</td>
-                                <td>@(med.DurationDays.HasValue ? $"{med.DurationDays} days" : "Ongoing")</td>
-                                <td class="text-end">
-                                    <form asp-controller="Prescriptions" asp-action="Discontinue" asp-route-id="@med.PrescriptionId" method="post" class="d-inline" onsubmit="return confirmDiscontinueActiveMed(this, '@med.MedicineName');">
-                                        <input type="hidden" name="reason" value="Discontinued during consultation" />
-                                        <button type="submit" class="btn btn-outline-warning btn-sm py-0 px-2">
-                                            <i class="bi bi-slash-circle me-1"></i>Discontinue
-                                        </button>
-                                    </form>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
-        else
-        {
-            <div class="text-white-50 small">No active dispensed medications recorded for this patient.</div>
-        }
-    </div>
-</div>
-
-<!-- MAIN COCKPIT FORM -->
-<form asp-action="CompleteConsultation" method="post" id="cockpitForm">
-    @Html.AntiForgeryToken()
-    <input type="hidden" name="AppointmentId" value="@Model.Appointment.Id" />
-    <input type="hidden" name="PatientId" value="@Model.Patient.Id" />
-    <input type="hidden" name="SafetyOverrideReason" id="SafetyOverrideReasonInput" />
-
-    <div class="row g-4">
-        <!-- LEFT COLUMN: CLINICAL DOCUMENTATION -->
-        <div class="col-lg-5">
-            <div class="pro-card h-100 shadow-sm">
-                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
-                    <h5 class="card-title text-primary mb-0">
-                        <i class="bi bi-journal-medical me-2"></i>Clinical Encounter Notes
-                    </h5>
-                    @if (Model.LatestAiCaseSummary != null)
-                    {
-                        <button type="button" class="btn btn-sm btn-outline-info" id="btnInsertAiSummary" title="Auto-populate diagnosis and complaints from AI summary">
-                            <i class="bi bi-magic me-1"></i>Insert AI Summary
-                        </button>
-                    }
+    <!-- 3-COLUMN WORKSTATION CONTAINER -->
+    <div class="cockpit-columns-container">
+        <!-- LEFT COLUMN: PATIENT TIMELINE & MEDICAL HISTORY -->
+        <aside class="cockpit-col-left">
+            <div class="pro-card pro-card-compact mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="fw-bold mb-0 text-strong">
+                        <i class="bi bi-clock-history me-1 text-primary"></i>Encounter History
+                    </h6>
+                    <span class="badge bg-secondary bg-opacity-10 text-muted font-mono-data">@pastRecords.Count records</span>
                 </div>
 
-                <div class="bg-light p-3 rounded mb-3">
-                    <label class="text-muted small fw-bold text-uppercase d-block mb-1">Reason for Visit (From Queue):</label>
-                    <p class="mb-0 fw-medium text-dark">@(string.IsNullOrWhiteSpace(Model.Appointment.ReasonForVisit) ? "No presenting complaint specified." : Model.Appointment.ReasonForVisit)</p>
+                @if (pastRecords.Any())
+                {
+                    <div class="timeline-track mt-3">
+                        @foreach (var rec in pastRecords)
+                        {
+                            <div class="timeline-item">
+                                <div class="timeline-marker"></div>
+                                <div class="pro-card pro-card-compact record-highlight-target" id="record-card-@rec.Id" style="font-size: 0.8125rem;">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="fw-bold text-primary font-mono-data">@rec.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy")</span>
+                                        <small class="text-muted">Dr. @(rec.Doctor?.FullName ?? "Staff")</small>
+                                    </div>
+                                    <div class="fw-semibold text-strong mb-1">@rec.Diagnosis</div>
+                                    @if (!string.IsNullOrWhiteSpace(rec.ChiefComplaint))
+                                    {
+                                        <p class="text-muted mb-1" style="font-size: 0.75rem;">@rec.ChiefComplaint</p>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(rec.Treatment))
+                                    {
+                                        <div class="p-1 px-2 rounded bg-surface-sunken text-muted" style="font-size: 0.72rem;">
+                                            @rec.Treatment
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-journal-check fs-2 text-muted opacity-50 d-block mb-1"></i>
+                        <span class="small">First recorded clinical encounter for this patient.</span>
+                    </div>
+                }
+            </div>
+        </aside>
+
+        <!-- CENTER COLUMN: ACTIVE CONSULTATION & PRESCRIPTION WORKSPACE -->
+        <main class="cockpit-col-center">
+            <form asp-action="CompleteConsultation" method="post" id="cockpitForm" class="d-flex flex-column h-100">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="AppointmentId" value="@Model.Appointment.Id" />
+                <input type="hidden" name="PatientId" value="@Model.Patient.Id" />
+                <input type="hidden" name="SafetyOverrideReason" id="SafetyOverrideReasonInput" />
+
+                <!-- Clinical Encounter Notes -->
+                <div class="pro-card mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                        <h6 class="fw-bold mb-0 text-strong">
+                            <i class="bi bi-journal-medical me-1 text-primary"></i>Encounter Documentation
+                        </h6>
+                        @if (Model.LatestAiCaseSummary != null)
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-info py-0 px-2" id="btnInsertAiSummary" title="Auto-populate diagnosis and complaints from AI summary">
+                                <i class="bi bi-magic me-1"></i>Insert AI Summary
+                            </button>
+                        }
+                    </div>
+
+                    <div class="bg-surface-sunken p-2 rounded mb-2 border" style="font-size: 0.8125rem;">
+                        <span class="text-muted fw-bold text-uppercase d-block" style="font-size: 0.6875rem;">Queue Reason for Visit:</span>
+                        <span class="text-strong">@(string.IsNullOrWhiteSpace(Model.Appointment.ReasonForVisit) ? "Routine Consultation" : Model.Appointment.ReasonForVisit)</span>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">Chief Complaints</label>
+                        <textarea name="ChiefComplaint" id="chiefComplaintInput" class="form-control form-control-sm" rows="2" placeholder="e.g. High fever for 3 days, sore throat...">@Model.ChiefComplaint</textarea>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">Clinical Diagnosis <span class="text-danger">*</span></label>
+                        <textarea name="Diagnosis" id="diagnosisInput" class="form-control form-control-sm fw-bold" rows="2" placeholder="Clinical assessment / diagnosis (Required)..." required>@Model.Diagnosis</textarea>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">Treatment Plan &amp; Advice</label>
+                        <textarea name="Treatment" id="treatmentInput" class="form-control form-control-sm" rows="3" placeholder="Clinical advice, precautions, follow-up instructions...">@Model.Treatment</textarea>
+                    </div>
+                </div>
+
+                <!-- Prescription Formulary Builder -->
+                <div class="pro-card mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                        <h6 class="fw-bold mb-0 text-strong">
+                            <i class="bi bi-capsule me-1 text-primary"></i>Prescription Formulary
+                        </h6>
+                        <button type="button" class="btn btn-sm btn-primary py-0 px-2" id="btnAddMedicineRow">
+                            <i class="bi bi-plus-circle me-1"></i>Add Medication
+                        </button>
+                    </div>
+
+                    <!-- Prescribed Medicines Dynamic Rows -->
+                    <div id="medicinesListContainer" class="d-flex flex-column gap-2 mb-2"></div>
+
+                    <div id="emptyMedicinesNotice" class="text-center py-4 text-muted bg-surface-sunken rounded border border-dashed mb-2">
+                        <i class="bi bi-capsule fs-3 d-block mb-1 text-primary opacity-50"></i>
+                        <span class="fw-semibold small d-block">No Medications Added</span>
+                        <small class="text-muted">Click "Add Medication" to prescribe items from the formulary.</small>
+                    </div>
+
+                    <!-- Real-Time Safety Warnings Container -->
+                    <div id="safetyWarningsAlertBox" class="alert alert-warning border-start border-4 border-warning mb-2 py-2 px-3 d-none">
+                        <h6 class="fw-bold mb-1 fs-7"><i class="bi bi-shield-exclamation me-1"></i>Clinical Safety Review Required</h6>
+                        <ul id="safetyWarningsList" class="small ps-3 mb-2"></ul>
+                        <div class="mt-2 pt-2 border-top">
+                            <label class="form-label small fw-bold text-dark">Physician Override Rationale <span class="text-danger">*</span></label>
+                            <input type="text" id="safetyOverrideReasonField" class="form-control form-control-sm" placeholder="Clinical rationale for overriding warnings..." />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STICKY ACTION BAR -->
+                <div class="cockpit-sticky-footer d-flex justify-content-between align-items-center rounded">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnCompleteNotesOnly">
+                        <i class="bi bi-file-earmark-check me-1"></i>Notes Only
+                    </button>
+                    <button type="submit" class="btn btn-success px-4" id="btnSubmitEncounter">
+                        <i class="bi bi-check2-circle me-1"></i>Complete Consultation &amp; Save
+                    </button>
+                </div>
+            </form>
+        </main>
+
+        <!-- RIGHT COLUMN: AI CLINICAL COPILOT & ACTIVE THERAPY -->
+        <aside class="cockpit-col-right">
+            <!-- AI Copilot Card -->
+            <div class="pro-card pro-card-compact pro-card-ai mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom" style="border-color: var(--ai-border) !important;">
+                    <div class="d-flex align-items-center gap-1-5">
+                        <i class="bi bi-robot text-purple fs-6" style="color: var(--ai-accent);"></i>
+                        <h6 class="fw-bold mb-0" style="color: var(--ai-accent);">Clinical Copilot</h6>
+                    </div>
+                    @if (Model.LatestAiCaseSummary != null)
+                    {
+                        <span class="badge bg-purple bg-opacity-25 border text-purple" style="font-size: 0.7rem; border-color: var(--ai-border); color: var(--ai-accent);">
+                            @Model.LatestAiCaseSummary.Verdict
+                        </span>
+                    }
                 </div>
 
                 @if (Model.LatestAiCaseSummary != null)
                 {
-                    <div class="alert alert-info border-start border-4 border-info py-2 px-3 mb-3">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="small fw-bold text-info"><i class="bi bi-robot me-1"></i>AI Case Summary Review</span>
-                            <span class="badge bg-info bg-opacity-25 text-info">@Model.LatestAiCaseSummary.Verdict</span>
-                        </div>
-                        <div class="small text-muted" id="aiSummaryTextContainer" style="max-height: 140px; overflow-y: auto;">
-                            @{
-                                var vdAi = new ViewDataDictionary(ViewData) { ["ReturnUrl"] = Url.Action("Cockpit", "DoctorDashboard", new { id = Model.Appointment.Id }) };
-                            }
-                            <partial name="_SuggestionCardBody" model="Model.LatestAiCaseSummary" view-data="vdAi" />
-                        </div>
+                    <div class="small" id="aiSummaryTextContainer" style="max-height: 220px; overflow-y: auto;">
+                        @{
+                            var vdAi = new ViewDataDictionary(ViewData) { ["ReturnUrl"] = Url.Action("Cockpit", "DoctorDashboard", new { id = Model.Appointment.Id }) };
+                        }
+                        <partial name="_SuggestionCardBody" model="Model.LatestAiCaseSummary" view-data="vdAi" />
                     </div>
                 }
-
-                <div class="mb-3">
-                    <label class="form-label fw-bold small text-muted text-uppercase">Chief Complaints</label>
-                    <textarea name="ChiefComplaint" id="chiefComplaintInput" class="form-control" rows="2" placeholder="e.g. High fever for 3 days, dry cough, sore throat...">@Model.ChiefComplaint</textarea>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label fw-bold small text-muted text-uppercase">Clinical Diagnosis <span class="text-danger">*</span></label>
-                    <textarea name="Diagnosis" id="diagnosisInput" class="form-control fw-bold" rows="3" placeholder="Enter clinical assessment / diagnosis (Required)..." required>@Model.Diagnosis</textarea>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label fw-bold small text-muted text-uppercase">Treatment Plan &amp; Advice</label>
-                    <textarea name="Treatment" id="treatmentInput" class="form-control" rows="4" placeholder="Clinical advice, dietary precautions, follow-up instructions...">@Model.Treatment</textarea>
-                </div>
-            </div>
-        </div>
-
-        <!-- RIGHT COLUMN: PHARMACOTHERAPY & PRESCRIPTION -->
-        <div class="col-lg-7">
-            <div class="pro-card h-100 shadow-sm">
-                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
-                    <h5 class="card-title text-primary mb-0">
-                        <i class="bi bi-capsule me-2"></i>Prescription &amp; Formulary
-                    </h5>
-                    <button type="button" class="btn btn-sm btn-primary" id="btnAddMedicineRow">
-                        <i class="bi bi-plus-circle me-1"></i>Add Medication
-                    </button>
-                </div>
-
-                <!-- Prescribed Medicines Container -->
-                <div id="medicinesListContainer" class="d-flex flex-column gap-3 mb-3">
-                    <!-- Dynamic medicine rows appended here -->
-                </div>
-
-                <div id="emptyMedicinesNotice" class="text-center py-5 text-muted bg-light rounded border border-dashed mb-3">
-                    <i class="bi bi-capsule fs-2 d-block mb-2 text-primary opacity-50"></i>
-                    <h6 class="fw-bold mb-1">No Medications Prescribed Yet</h6>
-                    <p class="small mb-0">Click "Add Medication" to prescribe items from the hospital formulary, or complete consultation with notes only.</p>
-                </div>
-
-                <!-- Real-Time Safety Warnings Container -->
-                <div id="safetyWarningsAlertBox" class="alert alert-warning border-start border-4 border-warning mb-3 d-none">
-                    <h6 class="fw-bold mb-2"><i class="bi bi-shield-exclamation me-1"></i>Clinical Safety Review Required</h6>
-                    <ul id="safetyWarningsList" class="small ps-3 mb-2"></ul>
-                    <div class="mt-2 pt-2 border-top">
-                        <label class="form-label small fw-bold text-dark">Physician Override Rationale <span class="text-danger">*</span></label>
-                        <input type="text" id="safetyOverrideReasonField" class="form-control form-control-sm" placeholder="Explain clinical reason for overriding warnings..." />
+                else
+                {
+                    <div class="text-center py-4 text-muted" style="font-size: 0.8125rem;">
+                        <i class="bi bi-sparkles fs-2 d-block mb-1 opacity-50" style="color: var(--ai-accent);"></i>
+                        <span>No AI case summary generated yet.</span>
                     </div>
+                }
+            </div>
+
+            <!-- Active Prescribed Regimens (Last 30 Days) -->
+            <div class="pro-card pro-card-compact">
+                <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                    <h6 class="fw-bold mb-0 text-strong">
+                        <i class="bi bi-capsule me-1 text-primary"></i>Active Regimens
+                    </h6>
+                    <span class="badge bg-secondary bg-opacity-10 text-muted font-mono-data">@Model.ActiveMedications.Count</span>
                 </div>
 
-                <!-- ACTION FOOTER -->
-                <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
-                    <button type="button" class="btn btn-outline-secondary" id="btnCompleteNotesOnly">
-                        <i class="bi bi-file-earmark-check me-1"></i>Complete Notes Only (No Rx)
-                    </button>
-                    <button type="submit" class="btn btn-success btn-lg px-4" id="btnSubmitEncounter">
-                        <i class="bi bi-check2-circle me-1"></i>Complete Consultation &amp; Save
-                    </button>
-                </div>
+                @if (Model.ActiveMedications.Any())
+                {
+                    <div class="d-flex flex-column gap-2" style="font-size: 0.8125rem;">
+                        @foreach (var med in Model.ActiveMedications)
+                        {
+                            <div class="p-2 rounded bg-surface-sunken border">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <div class="fw-bold text-strong">@med.MedicineName</div>
+                                        <small class="text-muted d-block">@med.GenericName</small>
+                                    </div>
+                                    <form asp-controller="Prescriptions" asp-action="Discontinue" asp-route-id="@med.PrescriptionId" method="post" class="d-inline" onsubmit="return confirmDiscontinueActiveMed(this, '@med.MedicineName');">
+                                        <input type="hidden" name="reason" value="Discontinued during consultation" />
+                                        <button type="submit" class="btn btn-outline-warning btn-sm py-0 px-1" title="Discontinue Therapy" style="font-size: 0.7rem;">
+                                            Discontinue
+                                        </button>
+                                    </form>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-1 text-muted" style="font-size: 0.72rem;">
+                                    <span>Dispensed @med.PrescribedOrDispensedAt.ToLocalTime().ToString("MMM dd")</span>
+                                    <span>@(med.DurationDays.HasValue ? $"{med.DurationDays}d course" : "Ongoing")</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-3 text-muted" style="font-size: 0.8125rem;">
+                        <span>No active regimens in last 30 days.</span>
+                    </div>
+                }
             </div>
-        </div>
+        </aside>
     </div>
-</form>
+</div>
 
 <!-- HIDDEN MEDICINE ROW TEMPLATE -->
 <script type="text/template" id="medicineRowTemplate">

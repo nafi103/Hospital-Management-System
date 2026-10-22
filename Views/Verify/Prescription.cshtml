@@ -1,102 +1,297 @@
 @model HospitalManagementSystem.Controllers.PrescriptionVerificationViewModel
 @using HospitalManagementSystem.Models
 @{
-    ViewData["Title"] = "Digital Prescription Verification";
+    ViewData["Title"] = "Digital Prescription Certificate Verification";
     Layout = "_Layout";
 }
 
-<div class="container py-4" style="max-width: 800px;">
-    @if (!Model.IsValid)
+<div class="container py-4" style="max-width: 900px;">
+    @if (Model.IsInitialEntry)
     {
-        <div class="card border-danger shadow-sm mb-4">
-            <div class="card-header bg-danger text-white py-3">
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-shield-x fs-2 me-3"></i>
-                    <div>
-                        <h4 class="mb-0 fw-bold">Verification Failed</h4>
-                        <small class="text-white-50">Cryptographic authenticity could not be established</small>
+        <div class="mb-4">
+            <div class="d-flex align-items-center gap-3 mb-2">
+                <div class="icon-box bg-primary bg-opacity-10 text-primary mb-0" style="width: 48px; height: 48px; font-size: 1.5rem;">
+                    <i class="bi bi-patch-check"></i>
+                </div>
+                <div>
+                    <h3 class="mb-0 fw-bold text-strong">Prescription Verification Portal</h3>
+                    <p class="text-muted mb-0 small">HMAC-SHA256 Cryptographic Integrity &amp; Audit Registry</p>
+                </div>
+            </div>
+            <p class="text-muted small">
+                Every physical or digital prescription issued by Nexus Hospital contains an HMAC-SHA256 digital signature embedded in its QR code. 
+                Verify any prescription's authenticity by uploading its QR code image, pasting its verification link, or selecting one of your issued prescriptions below.
+            </p>
+        </div>
+
+        <!-- Verification Input Workstation -->
+        <div class="row g-4 mb-4">
+            <!-- Option 1: Paste Link or QR String -->
+            <div class="col-lg-7">
+                <div class="pro-card h-100 shadow-sm p-4">
+                    <h5 class="fw-bold mb-3 d-flex align-items-center gap-2">
+                        <i class="bi bi-link-45deg text-primary fs-5"></i>
+                        <span>Paste Verification Link or QR Payload</span>
+                    </h5>
+                    <p class="text-muted small mb-3">
+                        Paste the full URL from a scanned QR code (e.g., <code>https://.../Verify/Prescription?id=1&amp;...</code>) or the raw token parameters.
+                    </p>
+                    <form id="urlVerifyForm" onsubmit="handleUrlSubmit(event)">
+                        <div class="input-group mb-3">
+                            <span class="input-group-text bg-surface-sunken"><i class="bi bi-qr-code-scan"></i></span>
+                            <input type="text" id="rawUrlInput" class="form-control font-mono-data" placeholder="Paste verification URL or raw QR text..." required />
+                            <button type="submit" class="btn btn-primary px-3">
+                                <i class="bi bi-shield-check me-1"></i>Verify
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="border-top pt-3 mt-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted fw-semibold text-uppercase" style="font-size: 0.72rem;">Manual Parameter Check</small>
+                            <button class="btn btn-sm btn-link text-decoration-none p-0" type="button" data-bs-toggle="collapse" data-bs-target="#manualParamsCollapse" aria-expanded="false">
+                                <i class="bi bi-sliders me-1"></i>Toggle Manual Inputs
+                            </button>
+                        </div>
+                        <div class="collapse mt-3" id="manualParamsCollapse">
+                            <form method="get" asp-action="Prescription">
+                                <div class="row g-2 mb-2">
+                                    <div class="col-sm-6">
+                                        <label class="form-label small mb-1">Prescription ID</label>
+                                        <input type="number" name="id" class="form-control form-control-sm font-mono-data" placeholder="e.g. 1" required />
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <label class="form-label small mb-1">Patient UHID</label>
+                                        <input type="text" name="uhid" class="form-control form-control-sm font-mono-data" placeholder="e.g. UHID-1001" required />
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-sm-6">
+                                        <label class="form-label small mb-1">Timestamp Ticks</label>
+                                        <input type="number" name="ts" class="form-control form-control-sm font-mono-data" placeholder="e.g. 6384930..." required />
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <label class="form-label small mb-1">HMAC Signature</label>
+                                        <input type="text" name="sig" class="form-control form-control-sm font-mono-data" placeholder="Hex Digest" required />
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-sm btn-outline-primary w-100">
+                                    Verify Signature Manually
+                                </button>
+                            </form>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="card-body p-4 text-center">
+
+            <!-- Option 2: Upload or Scan QR Code File -->
+            <div class="col-lg-5">
+                <div class="pro-card h-100 shadow-sm p-4 d-flex flex-column justify-content-between">
+                    <div>
+                        <h5 class="fw-bold mb-3 d-flex align-items-center gap-2">
+                            <i class="bi bi-camera text-primary fs-5"></i>
+                            <span>Scan or Upload QR Image</span>
+                        </h5>
+                        <p class="text-muted small mb-3">
+                            Upload a photo, screenshot, or scan of the QR code from the printed prescription.
+                        </p>
+
+                        <div id="dropZone" class="border border-2 border-dashed rounded p-4 text-center cursor-pointer bg-surface-sunken" onclick="document.getElementById('qrFileInput').click()" style="cursor: pointer;">
+                            <i class="bi bi-cloud-arrow-up fs-2 text-primary d-block mb-2"></i>
+                            <div class="fw-semibold text-strong small">Click to upload QR image</div>
+                            <small class="text-muted d-block" style="font-size: 0.75rem;">PNG, JPG, or screenshot</small>
+                            <input type="file" id="qrFileInput" accept="image/*" class="d-none" onchange="handleQrFile(this.files[0])" />
+                        </div>
+                        <div id="scanFeedback" class="small text-center mt-2 text-muted"></div>
+                    </div>
+
+                    <div class="mt-3 text-center">
+                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" id="cameraScanBtn" onclick="toggleCameraScanner()">
+                            <i class="bi bi-webcam me-1"></i>Scan with Camera
+                        </button>
+                        <div id="cameraContainer" class="mt-2 d-none position-relative">
+                            <video id="cameraVideo" class="w-100 rounded border" playsinline></video>
+                            <canvas id="cameraCanvas" class="d-none"></canvas>
+                            <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-2 py-0 px-2" onclick="stopCamera()">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Option 3: If Logged-in Patient has issued prescriptions -->
+        @if (Model.PatientPrescriptions != null && Model.PatientPrescriptions.Any())
+        {
+            <div class="pro-card shadow-sm p-4 mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h5 class="fw-bold text-strong mb-1 d-flex align-items-center gap-2">
+                            <i class="bi bi-file-earmark-medical text-primary"></i>
+                            <span>Your Issued Prescriptions (One-Click Verification)</span>
+                        </h5>
+                        <small class="text-muted">Click any prescription below to view its verified cryptographic audit certificate:</small>
+                    </div>
+                    <a asp-controller="Portal" asp-action="Prescriptions" class="btn btn-sm btn-outline-secondary">
+                        View All
+                    </a>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr class="small text-uppercase text-muted">
+                                <th>Rx #</th>
+                                <th>Attending Doctor</th>
+                                <th>Diagnosis</th>
+                                <th>Date Issued</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.PatientPrescriptions)
+                            {
+                                <tr>
+                                    <td>
+                                        <span class="badge bg-primary bg-opacity-10 text-primary font-mono-data border border-primary-subtle">
+                                            RX-#@item.Prescription.Id
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold text-strong">Dr. @item.Prescription.Doctor?.FullName</div>
+                                        <small class="text-muted">@(item.Prescription.Doctor?.Category ?? "General Medicine")</small>
+                                    </td>
+                                    <td>
+                                        <span class="text-muted small">@(string.IsNullOrWhiteSpace(item.Prescription.Diagnosis) ? "General Consultation" : item.Prescription.Diagnosis)</span>
+                                    </td>
+                                    <td class="font-mono-data small text-muted">
+                                        @item.Prescription.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy")
+                                    </td>
+                                    <td class="text-end">
+                                        <a href="@item.VerificationUrl" class="btn btn-sm btn-outline-success me-1" title="Verify HMAC-SHA256 Certificate">
+                                            <i class="bi bi-patch-check me-1"></i>Verify Certificate
+                                        </a>
+                                        <a asp-controller="Prescriptions" asp-action="Print" asp-route-id="@item.Prescription.Id" target="_blank" class="btn btn-sm btn-outline-secondary" title="View Print Document">
+                                            <i class="bi bi-printer"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    }
+    else if (!Model.IsValid)
+    {
+        <div class="pro-card border-danger shadow mb-4">
+            <div class="d-flex align-items-center gap-3 p-3 border-bottom border-danger-subtle bg-danger bg-opacity-10 rounded-top">
+                <div class="icon-box bg-danger bg-opacity-25 text-danger mb-0" style="width: 52px; height: 52px; font-size: 1.75rem;">
+                    <i class="bi bi-shield-x"></i>
+                </div>
+                <div>
+                    <h4 class="mb-0 fw-bold text-danger">Digital Verification Failed</h4>
+                    <small class="text-muted">Cryptographic authenticity could not be established</small>
+                </div>
+            </div>
+            <div class="p-4 text-center">
                 <div class="text-danger mb-3">
                     <i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i>
                 </div>
-                <h5 class="fw-bold text-danger mb-3">@Model.ErrorMessage</h5>
-                <p class="text-muted mb-4">
-                    The digital signature does not match the hospital authority registry or the record has been tampered with.
-                    Do not dispense controlled medications against an unverified prescription.
+                <h5 class="fw-bold text-danger mb-2">@Model.ErrorMessage</h5>
+                <p class="text-muted mb-4 max-w-600 mx-auto">
+                    The presented HMAC-SHA256 signature does not match the central hospital cryptographic registry. 
+                    The prescription record may have been altered or issued outside authorized authority.
+                    <strong>Do not dispense medications against an unverified prescription.</strong>
                 </p>
-                <div class="bg-light p-3 rounded font-monospace small text-break text-start mb-4 border">
-                    <div><strong>Prescription ID:</strong> @Model.PrescriptionId</div>
-                    <div><strong>Claimed UHID:</strong> @Model.Uhid</div>
-                    <div><strong>Presented Signature:</strong> @Model.Signature</div>
+                <div class="bg-surface-sunken p-3 rounded font-mono-data small text-break text-start mb-4 border">
+                    <div><span class="text-muted">Prescription ID:</span> <strong>#@Model.PrescriptionId</strong></div>
+                    <div><span class="text-muted">Claimed UHID:</span> <strong>@Model.Uhid</strong></div>
+                    <div><span class="text-muted">Presented Digest:</span> <span class="text-danger">@Model.Signature</span></div>
                 </div>
-                <a href="/" class="btn btn-secondary px-4">
-                    <i class="bi bi-arrow-left me-1"></i> Return to Home
-                </a>
+                <div class="d-flex justify-content-center gap-2">
+                    <a asp-action="Prescription" class="btn btn-primary px-4">
+                        <i class="bi bi-arrow-repeat me-1"></i> Try Another Verification
+                    </a>
+                    <a href="/" class="btn btn-outline-secondary px-4">
+                        <i class="bi bi-house me-1"></i> Return Home
+                    </a>
+                </div>
             </div>
         </div>
     }
     else if (Model.Prescription != null)
     {
         var rx = Model.Prescription;
-        <div class="card border-success shadow-sm mb-4">
-            <div class="card-header bg-success text-white py-3">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-shield-check fs-2 me-3"></i>
-                        <div>
-                            <h4 class="mb-0 fw-bold">Authentic Prescription Verified</h4>
-                            <small class="text-white-50">Cryptographically Signed via HMAC-SHA256 Authority</small>
-                        </div>
+        <div class="pro-card shadow-lg mb-4 position-relative overflow-hidden border-2" style="border-color: rgba(16, 185, 129, 0.4) !important;">
+            <!-- Certificate Header Banner -->
+            <div class="d-flex justify-content-between align-items-center p-3 border-bottom" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(30, 91, 184, 0.08) 100%);">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="icon-box bg-success bg-opacity-20 text-success mb-0" style="width: 52px; height: 52px; font-size: 1.75rem;">
+                        <i class="bi bi-shield-check"></i>
                     </div>
-                    <span class="badge bg-white text-success fs-6 px-3 py-2 fw-bold">
-                        <i class="bi bi-check-circle-fill me-1"></i> GENUINE
+                    <div>
+                        <h4 class="mb-0 fw-bold text-strong">Cryptographic Audit Certificate</h4>
+                        <small class="text-muted">HMAC-SHA256 Digital Signature Verified &bull; Nexus Authority</small>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-success text-white fs-7 px-3 py-2 fw-bold font-mono-data shadow-xs">
+                        <i class="bi bi-patch-check-fill me-1"></i> AUTHENTIC RECORD
                     </span>
                 </div>
             </div>
-            <div class="card-body p-4">
-                <div class="alert alert-success bg-opacity-10 border-success-subtle d-flex align-items-center mb-4">
+
+            <div class="p-4">
+                <!-- Seal guarantee banner -->
+                <div class="alert alert-success bg-opacity-10 border border-success-subtle d-flex align-items-center mb-4 py-2 px-3">
                     <i class="bi bi-lock-fill text-success fs-4 me-3"></i>
                     <div class="small">
-                        <strong>Tamper-Proof Guarantee:</strong> This prescription was issued by an authorized doctor
-                        and verified against the central hospital clinical ledger.
+                        <strong>Tamper-Evident Ledger Integrity:</strong> This prescription payload corresponds bit-for-bit with the cryptographic hash generated upon consultation sign-off by the licensed attending physician.
                     </div>
                 </div>
 
+                <!-- Patient & Clinician Dossier Cards -->
                 <div class="row g-3 mb-4 pb-3 border-bottom">
                     <div class="col-sm-6">
-                        <div class="text-muted small text-uppercase fw-semibold">Patient Information</div>
-                        <div class="fs-5 fw-bold text-dark">@(rx.Patient?.FullName ?? "N/A")</div>
-                        <div class="small text-muted">
-                            <span class="fw-semibold">UHID:</span> <span class="badge bg-secondary">@(rx.Patient?.Uhid ?? Model.Uhid)</span> &middot;
-                            <span>@(rx.Patient?.Gender ?? "N/A")</span> &middot;
-                            <span>DOB: @(rx.Patient?.DateOfBirth.ToString("MMM dd, yyyy") ?? "N/A")</span>
+                        <div class="p-3 rounded bg-surface-sunken border h-100">
+                            <span class="text-muted small text-uppercase fw-bold d-block mb-1" style="font-size: 0.7rem;">Verified Patient</span>
+                            <div class="fs-5 fw-bold text-strong mb-1">@(rx.Patient?.FullName ?? "N/A")</div>
+                            <div class="d-flex flex-wrap gap-2 align-items-center small text-muted">
+                                <span class="uhid-badge">@(rx.Patient?.Uhid ?? Model.Uhid)</span>
+                                <span>@(rx.Patient?.Gender ?? "N/A")</span>
+                                <span>DOB: @(rx.Patient?.DateOfBirth.ToString("MMM dd, yyyy") ?? "N/A")</span>
+                            </div>
                         </div>
                     </div>
                     <div class="col-sm-6">
-                        <div class="text-muted small text-uppercase fw-semibold">Prescribing Clinician</div>
-                        <div class="fs-5 fw-bold text-primary">Dr. @(rx.Doctor?.FullName ?? "Hospital Physician")</div>
-                        <div class="small text-muted">
-                            <span>Specialization: @(rx.Doctor?.Category ?? "General Medicine")</span>
-                        </div>
-                        <div class="small text-muted">
-                            <span>Issued Date: <strong>@(rx.CreatedAt.ToString("MMM dd, yyyy hh:mm tt"))</strong></span>
+                        <div class="p-3 rounded bg-surface-sunken border h-100">
+                            <span class="text-muted small text-uppercase fw-bold d-block mb-1" style="font-size: 0.7rem;">Prescribing Attending</span>
+                            <div class="fs-5 fw-bold text-primary mb-1">Dr. @(rx.Doctor?.FullName ?? "Hospital Physician")</div>
+                            <div class="small text-muted mb-1">
+                                <span>Department: <strong>@(rx.Doctor?.Category ?? "Clinical Medicine")</strong></span>
+                            </div>
+                            <div class="small text-muted font-mono-data">
+                                <span>Signed: <strong>@(rx.CreatedAt.ToString("MMM dd, yyyy HH:mm:ss")) UTC</strong></span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <h5 class="fw-bold mb-3"><i class="bi bi-capsule me-2 text-primary"></i>Prescribed Medications</h5>
+                <!-- Prescribed Medications Table -->
+                <h5 class="fw-bold mb-3 text-strong d-flex align-items-center gap-2">
+                    <i class="bi bi-capsule text-primary"></i>
+                    <span>Authorized Regimens</span>
+                </h5>
                 <div class="table-responsive mb-4">
-                    <table class="table table-bordered align-middle">
+                    <table class="table table-bordered table-striped align-middle mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th>#</th>
-                                <th>Medication</th>
+                                <th style="width: 45px;">#</th>
+                                <th>Medication &amp; Strength</th>
                                 <th>Generic Name</th>
-                                <th>Dosage & Instructions</th>
-                                <th class="text-center">Quantity</th>
+                                <th>Regimen &amp; Instructions</th>
+                                <th class="text-center" style="width: 90px;">Quantity</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -106,14 +301,20 @@
                                 foreach (var item in rx.PrescriptionItems)
                                 {
                                     <tr>
-                                        <td>@(idx++)</td>
-                                        <td class="fw-bold text-dark">@(item.Medicine?.Name ?? "Item #" + item.MedicineId)</td>
+                                        <td class="font-mono-data text-muted">@(idx++)</td>
+                                        <td>
+                                            <div class="fw-bold text-strong">@(item.Medicine?.Name ?? "Item #" + item.MedicineId)</div>
+                                            @if (!string.IsNullOrWhiteSpace(item.Medicine?.Strength))
+                                            {
+                                                <small class="badge bg-secondary bg-opacity-10 text-muted font-mono-data">@item.Medicine.Strength</small>
+                                            }
+                                        </td>
                                         <td class="text-muted small">@(item.Medicine?.GenericName ?? "N/A")</td>
                                         <td>
-                                            <div><strong>@item.DoseDisplay</strong> @(item.DurationDays.HasValue ? $"({item.DurationDays} days)" : "")</div>
-                                            <small class="text-muted">@(string.IsNullOrWhiteSpace(item.Instructions) ? $"Route: {item.Route}" : $"{item.Instructions} &middot; Route: {item.Route}")</small>
+                                            <div class="fw-bold font-mono-data">@item.DoseDisplay @(item.DurationDays.HasValue ? $"({item.DurationDays} days)" : "")</div>
+                                            <small class="text-muted">@(string.IsNullOrWhiteSpace(item.Instructions) ? $"Route: {item.Route}" : $"{item.Instructions} &bull; Route: {item.Route}")</small>
                                         </td>
-                                        <td class="text-center fw-bold">@item.Quantity</td>
+                                        <td class="text-center font-mono-data fw-bold">@item.Quantity</td>
                                     </tr>
                                 }
                             }
@@ -127,27 +328,43 @@
                     </table>
                 </div>
 
-                <div class="bg-light p-3 rounded font-monospace small border mb-4">
-                    <div class="text-muted fw-bold mb-1">Cryptographic Audit Certificate:</div>
-                    <div><strong>Prescription ID:</strong> #@rx.Id</div>
-                    <div><strong>Digital HMAC-SHA256:</strong> <span class="text-break text-success">@Model.Signature</span></div>
-                    <div><strong>Timestamp (UTC):</strong> @Model.IssuedAt.ToString("o")</div>
-                    <div><strong>Dispensation Status:</strong> <span class="badge @(rx.Status == PrescriptionStatus.Dispensed ? "bg-success" : "bg-warning text-dark")">@rx.Status</span></div>
+                <!-- Cryptographic Block Stamp -->
+                <div class="p-3 rounded bg-surface-sunken border font-mono-data small mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted fw-bold text-uppercase" style="font-size: 0.7rem;">HMAC-SHA256 Cryptographic Digest:</span>
+                        <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 font-sans" onclick="copyDigestHash('@Model.Signature')" title="Copy SHA-256 Digest">
+                            <i class="bi bi-clipboard me-1"></i>Copy Hash
+                        </button>
+                    </div>
+                    <div class="ledger-hash text-break text-success bg-surface-card p-2 rounded border mb-2" style="font-size: 0.8125rem;">
+                        @Model.Signature
+                    </div>
+                    <div class="row g-2 text-muted" style="font-size: 0.75rem;">
+                        <div class="col-sm-4"><strong>Prescription ID:</strong> #@rx.Id</div>
+                        <div class="col-sm-4"><strong>Issued Timestamp:</strong> @Model.IssuedAt.ToString("o")</div>
+                        <div class="col-sm-4"><strong>Dispense Status:</strong> <span class="badge @(rx.Status == PrescriptionStatus.Dispensed ? "bg-success" : "bg-warning text-dark")">@rx.Status</span></div>
+                    </div>
                 </div>
 
-                <div class="d-flex justify-content-between align-items-center">
-                    <a href="/" class="btn btn-outline-secondary">
-                        <i class="bi bi-arrow-left me-1"></i> Home
-                    </a>
+                <!-- Certificate Footer Navigation -->
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex gap-2">
+                        <a asp-action="Prescription" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i> Verify Another Rx
+                        </a>
+                        <a href="/" class="btn btn-outline-secondary">
+                            <i class="bi bi-house me-1"></i> Home
+                        </a>
+                    </div>
                     <div class="d-flex gap-2">
                         @if (Model.IsPharmacistOrDoctor)
                         {
                             <a asp-controller="Prescriptions" asp-action="Dispense" asp-route-id="@rx.Id" class="btn btn-primary">
-                                <i class="bi bi-cart-check me-1"></i> Open in Dispense Counter
+                                <i class="bi bi-cart-check me-1"></i> Open Dispense Desk
                             </a>
                         }
                         <a asp-controller="Prescriptions" asp-action="Print" asp-route-id="@rx.Id" target="_blank" class="btn btn-outline-dark">
-                            <i class="bi bi-printer me-1"></i> Print Formal Copy
+                            <i class="bi bi-printer me-1"></i> Print Formal Document
                         </a>
                     </div>
                 </div>
@@ -155,3 +372,156 @@
         </div>
     }
 </div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script>
+        function copyDigestHash(hash) {
+            navigator.clipboard.writeText(hash).then(function() {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Digest Copied!',
+                    text: 'HMAC-SHA256 cryptographic digest copied to clipboard.',
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+            });
+        }
+
+        function handleUrlSubmit(e) {
+            e.preventDefault();
+            var input = document.getElementById('rawUrlInput').value.trim();
+            if (!input) return;
+
+            if (input.includes('?')) {
+                var queryString = input.substring(input.indexOf('?'));
+                window.location.href = '/Verify/Prescription' + queryString;
+                return;
+            }
+
+            // If user pasted bare query string
+            if (input.includes('id=') && input.includes('sig=')) {
+                window.location.href = '/Verify/Prescription?' + input.replace(/^\?/, '');
+                return;
+            }
+
+            Swal.fire({
+                icon: 'warning',
+                title: 'Invalid Verification Link',
+                text: 'Please paste the complete verification URL or query string from the scanned QR code.'
+            });
+        }
+
+        function handleQrFile(file) {
+            if (!file) return;
+            var feedback = document.getElementById('scanFeedback');
+            feedback.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Analyzing QR code image...';
+
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var img = new Image();
+                img.onload = function() {
+                    var canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    var ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    if (typeof jsQR !== 'undefined') {
+                        var code = jsQR(imgData.data, imgData.width, imgData.height);
+                        if (code && code.data) {
+                            feedback.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>QR Code Found! Validating...</span>';
+                            if (code.data.includes('?')) {
+                                window.location.href = '/Verify/Prescription' + code.data.substring(code.data.indexOf('?'));
+                            } else {
+                                window.location.href = code.data;
+                            }
+                            return;
+                        }
+                    }
+                    feedback.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>No QR code detected in this image. Please ensure the QR is sharp and in good lighting.</span>';
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Camera QR scanning
+        var cameraStream = null;
+        var cameraInterval = null;
+
+        function toggleCameraScanner() {
+            var container = document.getElementById('cameraContainer');
+            var btn = document.getElementById('cameraScanBtn');
+            var video = document.getElementById('cameraVideo');
+            var canvas = document.getElementById('cameraCanvas');
+
+            if (cameraStream) {
+                stopCamera();
+                return;
+            }
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Camera Not Supported',
+                    text: 'Your browser or device does not support webcam streaming.'
+                });
+                return;
+            }
+
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                .then(function(stream) {
+                    cameraStream = stream;
+                    video.srcObject = stream;
+                    video.setAttribute("playsinline", true);
+                    video.play();
+                    container.classList.remove('d-none');
+                    btn.innerHTML = '<i class="bi bi-stop-circle me-1"></i>Stop Camera';
+
+                    cameraInterval = setInterval(function() {
+                        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                            canvas.height = video.videoHeight;
+                            canvas.width = video.videoWidth;
+                            var ctx = canvas.getContext("2d");
+                            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                            var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                            if (typeof jsQR !== 'undefined') {
+                                var code = jsQR(imageData.data, imageData.width, imageData.height);
+                                if (code && code.data) {
+                                    stopCamera();
+                                    if (code.data.includes('?')) {
+                                        window.location.href = '/Verify/Prescription' + code.data.substring(code.data.indexOf('?'));
+                                    } else {
+                                        window.location.href = code.data;
+                                    }
+                                }
+                            }
+                        }
+                    }, 300);
+                })
+                .catch(function(err) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Camera Access Denied',
+                        text: 'Unable to access camera: ' + err.message
+                    });
+                });
+        }
+
+        function stopCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(function(track) { track.stop(); });
+                cameraStream = null;
+            }
+            if (cameraInterval) {
+                clearInterval(cameraInterval);
+                cameraInterval = null;
+            }
+            var container = document.getElementById('cameraContainer');
+            if (container) container.classList.add('d-none');
+            var btn = document.getElementById('cameraScanBtn');
+            if (btn) btn.innerHTML = '<i class="bi bi-webcam me-1"></i>Scan with Camera';
+        }
+    </script>
+}

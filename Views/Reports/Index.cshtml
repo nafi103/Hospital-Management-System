@@ -77,6 +77,66 @@
     </div>
 </div>
 
+@{
+    var recentBlocks = ViewBag.RecentLedgerBlocks as List<HospitalManagementSystem.Models.PaymentTransaction> ?? new List<HospitalManagementSystem.Models.PaymentTransaction>();
+}
+
+<!-- CRYPTOGRAPHIC FINANCIAL LEDGER BLOCKCHAIN -->
+<div class="pro-card mb-4 border-2" style="border-color: rgba(16, 185, 129, 0.35) !important;">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 border-bottom pb-3 mb-3">
+        <div class="d-flex align-items-center gap-2">
+            <div class="icon-box bg-success bg-opacity-20 text-success mb-0" style="width: 42px; height: 42px; font-size: 1.3rem;">
+                <i class="bi bi-link-45deg"></i>
+            </div>
+            <div>
+                <h5 class="mb-0 fw-bold text-strong">Cryptographic Ledger Chain (SHA-256)</h5>
+                <small class="text-muted">Tamper-evident hash chain securing all transaction entries against manual database edits</small>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span id="ledgerAuditStatusBadge" class="badge bg-success bg-opacity-10 text-success border border-success-subtle font-mono-data px-2 py-1">
+                <i class="bi bi-shield-check me-1"></i>Chain Verified
+            </span>
+            <button type="button" id="btnLiveVerifyLedger" class="btn btn-sm btn-outline-success font-sans">
+                <i class="bi bi-arrow-repeat me-1"></i> Verify Ledger Integrity
+            </button>
+        </div>
+    </div>
+
+    @if (recentBlocks.Any())
+    {
+        <div class="d-flex align-items-center gap-2 overflow-auto py-2">
+            @for (int b = recentBlocks.Count - 1; b >= 0; b--)
+            {
+                var blk = recentBlocks[b];
+                var shortPrev = !string.IsNullOrEmpty(blk.PreviousHash) && blk.PreviousHash.Length >= 8 ? blk.PreviousHash[..8] : "GENESIS";
+                var shortHash = !string.IsNullOrEmpty(blk.RowHash) && blk.RowHash.Length >= 8 ? blk.RowHash[..8] : "UNHASHED";
+
+                <div class="ledger-block-card p-3 rounded bg-surface-sunken border font-mono-data flex-shrink-0 transition-all" id="ledger-block-@blk.Id" style="min-width: 220px; font-size: 0.75rem;">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="badge bg-primary bg-opacity-10 text-primary fw-bold">BLOCK #@blk.Id</span>
+                        <span class="text-success fw-bold font-mono-data">৳@blk.Amount.ToString("N0")</span>
+                    </div>
+                    <div class="text-muted" style="font-size: 0.7rem;">Prev: <span class="text-secondary">@shortPrev...</span></div>
+                    <div class="text-muted" style="font-size: 0.7rem;">Hash: <span class="text-primary fw-bold">@shortHash...</span></div>
+                    <div class="text-muted mt-1" style="font-size: 0.6875rem;">@blk.PaymentMethod &bull; @blk.TransactionDate.ToLocalTime().ToString("MMM dd HH:mm")</div>
+                </div>
+
+                @if (b > 0)
+                {
+                    <div class="text-muted fs-5 px-1 blockchain-arrow">&rarr;</div>
+                }
+            }
+        </div>
+    }
+    else
+    {
+        <div class="text-center py-3 text-muted small">
+            No transactions in the cryptographic ledger yet. Transactions booked via Cash, Card, or bKash appear here as immutable blocks.
+        </div>
+    }
+</div>
+
 <div class="row g-4 mb-4">
     <div class="col-md-6">
         <div class="pro-card h-100">
@@ -434,6 +494,71 @@
                         plugins: { legend: { display: false } },
                         scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
                     }
+                });
+            }
+
+            // Live Ledger Verification Sweep
+            const btnVerify = document.getElementById('btnLiveVerifyLedger');
+            if (btnVerify) {
+                btnVerify.addEventListener('click', function () {
+                    const btn = this;
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Auditing Chain...';
+                    
+                    document.querySelectorAll('.ledger-block-card').forEach(function(el) {
+                        el.style.borderColor = 'var(--status-warn-border)';
+                    });
+
+                    fetch('/Reports/LedgerStatus')
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data && data.isValid) {
+                                document.querySelectorAll('.ledger-block-card').forEach(function(el, i) {
+                                    setTimeout(function() {
+                                        el.style.borderColor = '#10b981';
+                                        el.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+                                    }, i * 150);
+                                });
+                                const badge = document.getElementById('ledgerAuditStatusBadge');
+                                if (badge) {
+                                    badge.className = 'badge bg-success text-white font-mono-data px-2 py-1';
+                                    badge.innerHTML = '<i class="bi bi-shield-fill-check me-1"></i>All ' + data.verifiedTransactions + ' Blocks Valid';
+                                }
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Cryptographic Ledger Verified',
+                                    text: 'SHA-256 chain is intact across all ' + data.verifiedTransactions + ' financial transactions. Zero database tampering detected.',
+                                    timer: 2500,
+                                    showConfirmButton: false
+                                });
+                            } else {
+                                document.querySelectorAll('.ledger-block-card').forEach(function(el) {
+                                    el.style.borderColor = '#ef4444';
+                                    el.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                                });
+                                const badge = document.getElementById('ledgerAuditStatusBadge');
+                                if (badge) {
+                                    badge.className = 'badge bg-danger text-white font-mono-data px-2 py-1';
+                                    badge.innerHTML = '<i class="bi bi-shield-fill-x me-1"></i>Tamper Flagged';
+                                }
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Ledger Audit Failure',
+                                    text: data ? data.failureReason : 'Tamper detected in payment ledger.'
+                                });
+                            }
+                        })
+                        .catch(err => {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Verification Error',
+                                text: 'Failed to complete ledger verification.'
+                            });
+                        })
+                        .finally(() => {
+                            btn.disabled = false;
+                            btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Verify Ledger Integrity';
+                        });
                 });
             }
         })();

@@ -166,8 +166,21 @@ $(document).ready(function () {
             panel.querySelector(".ai-review-empty").classList.remove("d-none");
         });
 
+        connection.onreconnecting(function () {
+            if (window.updateSignalRStatus) window.updateSignalRStatus('reconnecting');
+        });
+
+        connection.onreconnected(function () {
+            if (window.updateSignalRStatus) window.updateSignalRStatus('connected');
+        });
+
+        connection.onclose(function () {
+            if (window.updateSignalRStatus) window.updateSignalRStatus('disconnected');
+        });
+
         connection.start().then(function () {
             console.log("Connected to SignalR Notification Hub.");
+            if (window.updateSignalRStatus) window.updateSignalRStatus('connected');
             // Join the specific doctor's group
             connection.invoke("JoinDoctorGroup", window.MySignalRGroupId.toString())
                 .catch(function (err) {
@@ -175,6 +188,7 @@ $(document).ready(function () {
                 });
         }).catch(function (err) {
             console.error("SignalR Connection Error: ", err.toString());
+            if (window.updateSignalRStatus) window.updateSignalRStatus('disconnected');
         });
     }
 });

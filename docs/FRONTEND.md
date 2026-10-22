@@ -201,12 +201,20 @@ Provides an interactive appointment booking and rescheduling calendar in the Pat
   - **Unavailable / Colliding:** Strikethrough disabled button (`btn-light opacity-50 text-decoration-line-through`) with a native HTML `title` indicating the conflict reason (e.g., "Doctor already booked", "Slot in the past").
 * **Reason-for-Visit Quick Chips:** Clickable symptoms (`Fever`, `Cough`, `Chest Pain`, `Follow-up`) that automatically concatenate into the clinical intake text area.
 
-### B. Dependent & Pediatric Profile Switcher (`_Layout.cshtml`)
-Supports multi-patient family account management directly from the top navigation bar.
+### B. Unified Sidebar Shell & Family Profile Switcher (`_Layout.cshtml`)
+The application implements a unified navigation architecture where **all authenticated roles** (Doctor, Assistant, Pharmacist, Receptionist, Admin, and **Patient**) share the same fixed 240px left sidebar and responsive frosted-glass topbar, while unauthenticated visitors receive a public guest navbar.
 
-* **Contextual State:** Primary patients with linked dependent children (`ViewBag.Dependents`) see a dedicated profile switcher dropdown.
-* **Claims-Safe Profile Switch:** Selecting a child executes a POST to `/Portal/SwitchProfile`, securely switching the active patient context via claims without exposing cross-patient IDOR vulnerabilities.
-* **Visual Distinction:** When managing a child's profile, the profile pill transitions from primary blue to an alert cyan-info pill (`btn-info text-dark`) with an icon (`bi-person-heart`) to prevent accidental clinical actions under the wrong identity.
+* **Role-Specific Left Sidebar:**
+  - **Doctor / Assistant:** Consultations, OT, Medical Records, Prescriptions, Triage.
+  - **Pharmacist:** Prescriptions, Drug Inventory, Batches.
+  - **Receptionist / Admin:** Front Desk, Patient Registry, Bed Allocations, Finance, Staff Directory, AI Providers.
+  - **Patient:** *My Health Portal* (Appointments, Book Visit, Find Doctors), *Clinical History* (Records, Prescriptions), *Billing & Account* (Invoices & Bills), and *Verification* (Verify Rx QR).
+* **Contextual Topbar with Family Switcher:**
+  - **Quick Jump Search:** Staff search patients by UHID or name; patients search doctors and specialties (both triggered with `Ctrl+K`).
+  - **Pediatric & Dependent Profile Switcher:** When a patient manages dependent family members (`ViewBag.Dependents`), a segmented pill bar (`[ (You) John Doe | Family (2) ▾ ]`) mounts in the topbar.
+  - **Claims-Safe Profile Switch:** Selecting a child executes a POST to `/Portal/SwitchProfile`, securely switching the active patient context via claims without exposing cross-patient IDOR vulnerabilities.
+  - **Visual Distinction:** When managing a child's profile, the profile pill transitions from primary blue to an alert cyan-info pill (`btn-info text-dark`) with an icon (`bi-person-heart`) to prevent accidental clinical actions under the wrong identity.
+* **Mobile Responsiveness:** On viewports `< 992px`, the left sidebar collapses into an off-canvas drawer with a frosted backdrop (`#sidebarBackdrop`) triggered by `#sidebarToggleBtn`.
 
 ---
 

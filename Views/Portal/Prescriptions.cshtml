@@ -1,5 +1,6 @@
 @model IEnumerable<HospitalManagementSystem.Models.Prescription>
 @using HospitalManagementSystem.Models
+@inject HospitalManagementSystem.Services.IPrescriptionSecurityService SecurityService
 @{
     ViewData["Title"] = "My Prescriptions";
     var patient = (Patient)ViewBag.Patient;
@@ -37,6 +38,12 @@
                                     <i class="bi bi-check2-all me-1"></i> Dispensed
                                 </span>
                             }
+                            @{
+                                var vData = SecurityService.GenerateVerificationData(prescription, $"{Context.Request.Scheme}://{Context.Request.Host}");
+                            }
+                            <a href="@vData.VerificationUrl" class="btn btn-sm btn-outline-success" title="Verify HMAC-SHA256 Cryptographic Certificate">
+                                <i class="bi bi-shield-check me-1"></i>Verify Rx
+                            </a>
                             <a asp-action="Print" asp-controller="Prescriptions" asp-route-id="@prescription.Id" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print">
                                 <i class="bi bi-printer"></i>
                             </a>

@@ -32,6 +32,10 @@ namespace HospitalManagementSystem.Controllers
         public async Task<IActionResult> Index(DateTime? from, DateTime? to)
         {
             var model = await BuildModelAsync(from, to);
+            ViewBag.RecentLedgerBlocks = await _context.PaymentTransactions
+                .OrderByDescending(t => t.Id)
+                .Take(4)
+                .ToListAsync();
             return View(model);
         }
 

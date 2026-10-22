@@ -57,3 +57,89 @@
         }
     });
 })();
+
+// ==========================================================================
+// Staff Shell Interactions (Shortcuts, Mobile Sidebar, Quick Search)
+// ==========================================================================
+(function () {
+    document.addEventListener('DOMContentLoaded', function () {
+        // 1. Mobile Sidebar Toggle
+        var toggleBtn = document.getElementById('sidebarToggleBtn');
+        var backdrop = document.getElementById('sidebarBackdrop');
+
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function () {
+                document.body.classList.toggle('sidebar-open');
+            });
+        }
+
+        if (backdrop) {
+            backdrop.addEventListener('click', function () {
+                document.body.classList.remove('sidebar-open');
+            });
+        }
+
+        // Close sidebar on navigation
+        document.querySelectorAll('.sidebar-nav-link').forEach(function (link) {
+            link.addEventListener('click', function () {
+                document.body.classList.remove('sidebar-open');
+            });
+        });
+
+        // 2. Quick Patient / Doctor Jump Input
+        var quickSearchInput = document.getElementById('quickPatientSearchInput');
+        if (quickSearchInput) {
+            quickSearchInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    var query = this.value.trim();
+                    if (query.length > 0) {
+                        window.location.href = '/Patients?searchQuery=' + encodeURIComponent(query);
+                    }
+                }
+            });
+        }
+
+        var quickDocSearch = document.getElementById('quickDoctorSearchInput');
+        if (quickDocSearch) {
+            quickDocSearch.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    var query = this.value.trim();
+                    if (query.length > 0) {
+                        window.location.href = '/Portal/Doctors?specialty=' + encodeURIComponent(query);
+                    }
+                }
+            });
+        }
+
+        // 3. Global Shortcut: Ctrl+K or Cmd+K
+        document.addEventListener('keydown', function (e) {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                var input = document.getElementById('quickPatientSearchInput') || document.getElementById('quickDoctorSearchInput');
+                if (input) {
+                    e.preventDefault();
+                    input.focus();
+                    input.select();
+                }
+            }
+        });
+    });
+
+    // 4. SignalR Status Global Helper
+    window.updateSignalRStatus = function (status) {
+        var indicator = document.getElementById('signalrStatusIndicator');
+        if (!indicator) return;
+        var dot = indicator.querySelector('.signalr-dot');
+        var label = indicator.querySelector('.signalr-label');
+        if (dot) {
+            dot.className = 'signalr-dot ' + status;
+        }
+        if (label) {
+            if (status === 'connected') label.textContent = 'Live';
+            else if (status === 'reconnecting') label.textContent = 'Reconnecting';
+            else label.textContent = 'Offline';
+        }
+    };
+})();
+

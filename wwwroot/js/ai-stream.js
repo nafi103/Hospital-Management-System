@@ -14,7 +14,7 @@ $(document).ready(function () {
 
     function stripMarkers(text) {
         return text.replace(/\[\[rec:(\d+)\]\]/g, function (_, id) {
-            return ' <sup class="text-muted">[' + id + ']</sup>';
+            return '<a href="#record-card-' + id + '" class="ai-cite-pill" data-record-id="' + id + '" title="Highlight Medical Record #' + id + '"><i class="bi bi-file-earmark-medical"></i>Rec #' + id + '</a>';
         });
     }
 
@@ -22,6 +22,22 @@ $(document).ready(function () {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-magic me-1"></i> Generate Case Summary';
     }
+
+    // Interactive Hover/Click linking AI citation badges to Medical Record cards
+    $(document).on("mouseenter", ".ai-cite-pill", function () {
+        var recId = $(this).data("record-id");
+        var target = document.getElementById("record-card-" + recId);
+        if (target) {
+            target.classList.add("highlighted");
+            target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+    }).on("mouseleave", ".ai-cite-pill", function () {
+        var recId = $(this).data("record-id");
+        var target = document.getElementById("record-card-" + recId);
+        if (target) {
+            target.classList.remove("highlighted");
+        }
+    });
 
     btn.addEventListener("click", function () {
         const tokenEl = document.querySelector('input[name="__RequestVerificationToken"]');
@@ -55,7 +71,7 @@ $(document).ready(function () {
             buffer += delta;
             placeholder.classList.add("d-none");
             feed.classList.remove("d-none");
-            feed.innerHTML = stripMarkers(buffer);
+            feed.innerHTML = stripMarkers(buffer) + '<span class="ai-stream-cursor">▍</span>';
         });
 
         connection.on("StreamRestarted", function (message) {
@@ -99,6 +115,7 @@ $(document).ready(function () {
                     .then(html => {
                         placeholder.classList.add("d-none");
                         feed.classList.add("d-none");
+                        feed.innerHTML = stripMarkers(buffer); // Clean up cursor on complete
                         const wrapper = document.createElement("div");
                         wrapper.innerHTML = html;
                         listContainer.prepend(wrapper.firstElementChild);

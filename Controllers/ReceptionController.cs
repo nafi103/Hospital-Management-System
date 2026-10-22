@@ -69,7 +69,57 @@ namespace HospitalManagementSystem.Controllers
                 .Take(5)
                 .ToListAsync();
 
+            // Load visual bed grid for front-desk occupancy map
+            var activeTransfers = await _context.BedTransfers
+                .Where(bt => bt.EndDate == null)
+                .Include(bt => bt.Admission)
+                    .ThenInclude(a => a.Patient)
+                .ToListAsync();
+
+            var allBeds = await _context.Beds
+                .OrderBy(b => b.Category)
+                .ThenBy(b => b.BedNumber)
+                .Take(12)
+                .ToListAsync();
+
+            var now = DateTime.UtcNow;
+            var bedGrid = allBeds.Select(b => {
+                var transfer = activeTransfers.FirstOrDefault(t => t.BedId == b.Id);
+                var admitted = transfer?.Admission?.AdmissionDate;
+                var losDays = admitted.HasValue ? Math.Max(1, (int)(now - admitted.Value).TotalDays) : 0;
+
+                return new ReceptionBedCardDto
+                {
+                    BedId = b.Id,
+                    BedNumber = b.BedNumber,
+                    Ward = b.Category.ToString(),
+                    Category = b.Category,
+                    IsOccupied = transfer != null,
+                    PatientName = transfer?.Admission?.Patient?.FullName,
+                    Uhid = transfer?.Admission?.Patient?.Uhid,
+                    AdmissionId = transfer?.AdmissionId,
+                    AdmittedAt = admitted,
+                    LengthOfStayDays = losDays
+                };
+            }).ToList();
+
+            ViewBag.BedGrid = bedGrid;
+
             return View();
         }
+    }
+
+    public class ReceptionBedCardDto
+    {
+        public int BedId { get; set; }
+        public string BedNumber { get; set; } = string.Empty;
+        public string Ward { get; set; } = string.Empty;
+        public BedCategory Category { get; set; }
+        public bool IsOccupied { get; set; }
+        public string? PatientName { get; set; }
+        public string? Uhid { get; set; }
+        public int? AdmissionId { get; set; }
+        public DateTime? AdmittedAt { get; set; }
+        public int LengthOfStayDays { get; set; }
     }
 }

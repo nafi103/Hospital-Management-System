@@ -9,8 +9,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace HospitalManagementSystem.Controllers
 {
+    public class PatientPrescriptionItem
+    {
+        public Prescription Prescription { get; set; } = null!;
+        public string VerificationUrl { get; set; } = string.Empty;
+        public string Signature { get; set; } = string.Empty;
+    }
+
     public class PrescriptionVerificationViewModel
     {
+        public bool IsInitialEntry { get; set; }
         public bool IsValid { get; set; }
         public string? ErrorMessage { get; set; }
         public int PrescriptionId { get; set; }
@@ -19,6 +27,7 @@ namespace HospitalManagementSystem.Controllers
         public string Signature { get; set; } = string.Empty;
         public Prescription? Prescription { get; set; }
         public bool IsPharmacistOrDoctor { get; set; }
+        public List<PatientPrescriptionItem>? PatientPrescriptions { get; set; }
     }
 
     [AllowAnonymous]
@@ -36,13 +45,54 @@ namespace HospitalManagementSystem.Controllers
         [HttpGet]
         public async Task<IActionResult> Prescription(int id, string? uhid, long? ts, string? sig)
         {
+            var isInitial = (id <= 0 && string.IsNullOrWhiteSpace(uhid) && ts == null && string.IsNullOrWhiteSpace(sig));
+
             var vm = new PrescriptionVerificationViewModel
             {
+                IsInitialEntry = isInitial,
                 PrescriptionId = id,
                 Uhid = uhid ?? "",
                 Signature = sig ?? "",
                 IsPharmacistOrDoctor = User?.Identity?.IsAuthenticated == true && (User.IsInRole("Pharmacist") || User.IsInRole("Doctor") || User.IsInRole("Admin"))
             };
+
+            if (isInitial)
+            {
+                if (User?.Identity?.IsAuthenticated == true && User.IsInRole("Patient"))
+                {
+                    var userIdClaim = User.FindFirst("UserId")?.Value;
+                    if (int.TryParse(userIdClaim, out int userId))
+                    {
+                        var patient = await _context.Patients.FirstOrDefaultAsync(p => p.UserId == userId);
+                        if (patient != null)
+                        {
+                            var rxList = await _context.Prescriptions
+                                .Include(p => p.Doctor)
+                                .Include(p => p.Patient)
+                                .Include(p => p.PrescriptionItems)
+                                    .ThenInclude(pi => pi.Medicine)
+                                .Where(p => p.PatientId == patient.Id || (p.Patient != null && p.Patient.GuardianPatientId == patient.Id))
+                                .OrderByDescending(p => p.CreatedAt)
+                                .Take(6)
+                                .ToListAsync();
+
+                            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+                            vm.PatientPrescriptions = rxList.Select(rx =>
+                            {
+                                var vData = _securityService.GenerateVerificationData(rx, baseUrl);
+                                return new PatientPrescriptionItem
+                                {
+                                    Prescription = rx,
+                                    VerificationUrl = vData.VerificationUrl,
+                                    Signature = vData.Signature
+                                };
+                            }).ToList();
+                        }
+                    }
+                }
+
+                return View(vm);
+            }
 
             if (id <= 0 || string.IsNullOrWhiteSpace(uhid) || ts == null || string.IsNullOrWhiteSpace(sig))
             {

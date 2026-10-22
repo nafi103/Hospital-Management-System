@@ -294,6 +294,15 @@ namespace HospitalManagementSystem.Controllers
             ViewBag.DeltaNews2 = deltaNews2;
             ViewBag.LongitudinalVitals = longitudinalVitals;
 
+            // Load past medical records for timeline track in left column
+            var pastRecords = await _context.MedicalRecords
+                .Include(r => r.Doctor)
+                .Where(r => r.PatientId == patient.Id && r.AppointmentId != appointment.Id)
+                .OrderByDescending(r => r.CreatedAt)
+                .Take(6)
+                .ToListAsync();
+            ViewBag.PastMedicalRecords = pastRecords;
+
             // Load active medications
             var activeMeds = await GetActiveMedicationsAsync(patient.Id);
 

@@ -27,11 +27,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
-    <!-- Bengali fallback for AI-generated patient instruction sheets, rendered inline in the
-         review UI before printing - browsers pick this up automatically for Bengali-script
-         characters via font fallback, without needing per-element font overrides. -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap">
 
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <!-- Bootstrap Icons -->
@@ -47,227 +43,361 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     @await RenderSectionAsync("Styles", required: false)
 </head>
+@{
+    var isAuthenticated = User.Identity?.IsAuthenticated == true;
+    var isPatient = User.IsInRole("Patient");
+    var isFluid = ViewBag.FluidLayout == true;
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString() ?? "";
+    var currentAction = ViewContext.RouteData.Values["action"]?.ToString() ?? "";
+}
 <body>
-    <header>
-        <nav class="navbar navbar-expand-sm mb-4">
-            <div class="container">
-                <a class="navbar-brand d-flex align-items-center gap-2" asp-area="" asp-controller="Home" asp-action="Index">
+@if (isAuthenticated)
+{
+    <div class="staff-app-container">
+        <!-- Mobile Sidebar Backdrop -->
+        <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+
+        <!-- Fixed Sidebar (240px) -->
+        <aside class="staff-sidebar">
+            <div class="staff-sidebar-brand">
+                <a class="brand-logo text-decoration-none" asp-area="" asp-controller="@(isPatient ? "Portal" : "Home")" asp-action="Index">
                     <i class="bi bi-hospital"></i>
-                    Nexus Hospital
+                    <span>Nexus HMS</span>
                 </a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
-                        aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
-                    <ul class="navbar-nav flex-grow-1 ms-4 gap-1">
-                        @if (User.IsInRole("Doctor"))
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="DoctorDashboard" asp-action="Index">Active Consultations</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="DoctorDashboard" asp-action="MyAssistant">My Assistant</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Prescriptions" asp-action="Index">Prescriptions</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Patients" asp-action="Index">Patients</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="MedicalRecords" asp-action="Index">Medical Records</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Operations" asp-action="Index">Operations</a>
-                            </li>
-                        }
-                        else if (User.IsInRole("Assistant"))
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Home" asp-action="Index">Dashboard</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Appointments" asp-action="Index">Consultations</a>
-                            </li>
-                        }
-                        else if (User.IsInRole("Pharmacist"))
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Prescriptions" asp-action="Index">Prescriptions</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Medicines" asp-action="Index">Inventory</a>
-                            </li>
-                        }
-                        else if (User.IsInRole("Receptionist"))
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Reception" asp-action="Index">Front Desk</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Patients" asp-action="Index">Patients</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Appointments" asp-action="Index">Consultations</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Admissions" asp-action="Index">Admissions</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Beds" asp-action="Index">Beds</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Bills" asp-action="Index">Bills</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Operations" asp-action="Index">Operations</a>
-                            </li>
-                        }
-                        else if (User.IsInRole("Patient"))
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Portal" asp-action="Index">My Appointments</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Portal" asp-action="Doctors">Find Doctors</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link text-primary fw-medium" asp-area="" asp-controller="Portal" asp-action="Book">
-                                    <i class="bi bi-calendar-plus me-1"></i>Book Visit
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Portal" asp-action="Records">My Records</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Portal" asp-action="Prescriptions">My Prescriptions</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Portal" asp-action="Bills">My Bills</a>
-                            </li>
-                        }
-                        else if (User.IsInRole("Admin"))
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Home" asp-action="Index">Dashboard</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Patients" asp-action="Index">Patients</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Beds" asp-action="Index">Beds</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Admissions" asp-action="Index">Admissions</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Bills" asp-action="Index">Bills</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Operations" asp-action="Index">Operations</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Medicines" asp-action="Index">Inventory</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Staff" asp-action="Index">Staff</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="AiProviderSettings" asp-action="Index">AI Providers</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-controller="Reports" asp-action="Index">Reports</a>
-                            </li>
-                        }
-                    </ul>
-                    <div class="d-flex align-items-center gap-3">
-                        <button type="button" id="themeToggleBtn" class="theme-toggle" title="Theme: auto">
-                            <i class="bi bi-circle-half"></i>
-                        </button>
-                        @if (User.Identity.IsAuthenticated)
-                        {
-                            @if (User.IsInRole("Patient") && ViewBag.Dependents is List<HospitalManagementSystem.Models.Patient> dependents && dependents.Any())
+                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle text-uppercase font-mono-data" style="font-size: 0.65rem; padding: 0.2rem 0.45rem;">
+                    @User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Role)?.Value
+                </span>
+            </div>
+
+            <nav class="staff-sidebar-nav">
+                @if (User.IsInRole("Doctor"))
+                {
+                    <div class="nav-section-title">Clinical Care</div>
+                    <a class="sidebar-nav-link @(currentController == "DoctorDashboard" && currentAction == "Index" ? "active" : "")" asp-controller="DoctorDashboard" asp-action="Index">
+                        <i class="bi bi-activity"></i>
+                        <span>Consultations</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "DoctorDashboard" && currentAction == "MyAssistant" ? "active" : "")" asp-controller="DoctorDashboard" asp-action="MyAssistant">
+                        <i class="bi bi-person-badge"></i>
+                        <span>My Assistant</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Prescriptions" ? "active" : "")" asp-controller="Prescriptions" asp-action="Index">
+                        <i class="bi bi-file-earmark-medical"></i>
+                        <span>Prescriptions</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "MedicalRecords" ? "active" : "")" asp-controller="MedicalRecords" asp-action="Index">
+                        <i class="bi bi-clipboard2-pulse"></i>
+                        <span>Medical Records</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Operations" ? "active" : "")" asp-controller="Operations" asp-action="Index">
+                        <i class="bi bi-heart-pulse"></i>
+                        <span>Operations / OT</span>
+                    </a>
+
+                    <div class="nav-section-title mt-2">Patients</div>
+                    <a class="sidebar-nav-link @(currentController == "Patients" ? "active" : "")" asp-controller="Patients" asp-action="Index">
+                        <i class="bi bi-people"></i>
+                        <span>Patient Directory</span>
+                    </a>
+                }
+                else if (User.IsInRole("Assistant"))
+                {
+                    <div class="nav-section-title">Workflow</div>
+                    <a class="sidebar-nav-link @(currentController == "Home" ? "active" : "")" asp-controller="Home" asp-action="Index">
+                        <i class="bi bi-speedometer2"></i>
+                        <span>Dashboard</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Appointments" ? "active" : "")" asp-controller="Appointments" asp-action="Index">
+                        <i class="bi bi-calendar2-check"></i>
+                        <span>Consultations</span>
+                    </a>
+                }
+                else if (User.IsInRole("Pharmacist"))
+                {
+                    <div class="nav-section-title">Pharmacy</div>
+                    <a class="sidebar-nav-link @(currentController == "Prescriptions" ? "active" : "")" asp-controller="Prescriptions" asp-action="Index">
+                        <i class="bi bi-file-earmark-medical"></i>
+                        <span>Prescriptions</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Medicines" ? "active" : "")" asp-controller="Medicines" asp-action="Index">
+                        <i class="bi bi-capsule"></i>
+                        <span>Drug Inventory</span>
+                    </a>
+                }
+                else if (User.IsInRole("Receptionist"))
+                {
+                    <div class="nav-section-title">Front Desk</div>
+                    <a class="sidebar-nav-link @(currentController == "Reception" ? "active" : "")" asp-controller="Reception" asp-action="Index">
+                        <i class="bi bi-front"></i>
+                        <span>Front Desk & Triage</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Patients" ? "active" : "")" asp-controller="Patients" asp-action="Index">
+                        <i class="bi bi-people"></i>
+                        <span>Patient Registry</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Appointments" ? "active" : "")" asp-controller="Appointments" asp-action="Index">
+                        <i class="bi bi-calendar-event"></i>
+                        <span>Appointments</span>
+                    </a>
+
+                    <div class="nav-section-title mt-2">Inpatient & Surgery</div>
+                    <a class="sidebar-nav-link @(currentController == "Admissions" ? "active" : "")" asp-controller="Admissions" asp-action="Index">
+                        <i class="bi bi-door-open"></i>
+                        <span>Admissions</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Beds" ? "active" : "")" asp-controller="Beds" asp-action="Index">
+                        <i class="bi bi-hospital"></i>
+                        <span>Ward Beds</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Operations" ? "active" : "")" asp-controller="Operations" asp-action="Index">
+                        <i class="bi bi-heart-pulse"></i>
+                        <span>Operations / OT</span>
+                    </a>
+
+                    <div class="nav-section-title mt-2">Finance</div>
+                    <a class="sidebar-nav-link @(currentController == "Bills" ? "active" : "")" asp-controller="Bills" asp-action="Index">
+                        <i class="bi bi-receipt"></i>
+                        <span>Bills & Cashier</span>
+                    </a>
+                }
+                else if (User.IsInRole("Admin"))
+                {
+                    <div class="nav-section-title">Overview</div>
+                    <a class="sidebar-nav-link @(currentController == "Home" ? "active" : "")" asp-controller="Home" asp-action="Index">
+                        <i class="bi bi-speedometer2"></i>
+                        <span>Dashboard</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Reports" ? "active" : "")" asp-controller="Reports" asp-action="Index">
+                        <i class="bi bi-bar-chart-line"></i>
+                        <span>Audit & Reports</span>
+                    </a>
+
+                    <div class="nav-section-title mt-2">Hospital Operations</div>
+                    <a class="sidebar-nav-link @(currentController == "Patients" ? "active" : "")" asp-controller="Patients" asp-action="Index">
+                        <i class="bi bi-people"></i>
+                        <span>Patients</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Appointments" ? "active" : "")" asp-controller="Appointments" asp-action="Index">
+                        <i class="bi bi-calendar2-check"></i>
+                        <span>Appointments</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Admissions" ? "active" : "")" asp-controller="Admissions" asp-action="Index">
+                        <i class="bi bi-door-open"></i>
+                        <span>Admissions</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Beds" ? "active" : "")" asp-controller="Beds" asp-action="Index">
+                        <i class="bi bi-hospital"></i>
+                        <span>Bed Allocation</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Operations" ? "active" : "")" asp-controller="Operations" asp-action="Index">
+                        <i class="bi bi-heart-pulse"></i>
+                        <span>Operations</span>
+                    </a>
+
+                    <div class="nav-section-title mt-2">Pharmacy & Billing</div>
+                    <a class="sidebar-nav-link @(currentController == "Medicines" ? "active" : "")" asp-controller="Medicines" asp-action="Index">
+                        <i class="bi bi-capsule"></i>
+                        <span>Medicines</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Bills" ? "active" : "")" asp-controller="Bills" asp-action="Index">
+                        <i class="bi bi-receipt"></i>
+                        <span>Billing</span>
+                    </a>
+
+                    <div class="nav-section-title mt-2">Administration</div>
+                    <a class="sidebar-nav-link @(currentController == "Staff" ? "active" : "")" asp-controller="Staff" asp-action="Index">
+                        <i class="bi bi-person-workspace"></i>
+                        <span>Staff Directory</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "AiProviderSettings" ? "active" : "")" asp-controller="AiProviderSettings" asp-action="Index">
+                        <i class="bi bi-cpu"></i>
+                        <span>AI Providers</span>
+                    </a>
+                }
+                else if (User.IsInRole("Patient"))
+                {
+                    <div class="nav-section-title">My Health Portal</div>
+                    <a class="sidebar-nav-link @(currentController == "Portal" && currentAction == "Index" ? "active" : "")" asp-controller="Portal" asp-action="Index">
+                        <i class="bi bi-calendar2-check"></i>
+                        <span>My Appointments</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Portal" && currentAction == "Book" ? "active" : "")" asp-controller="Portal" asp-action="Book">
+                        <i class="bi bi-calendar-plus text-primary"></i>
+                        <span class="fw-medium">Book Visit</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Portal" && currentAction == "Doctors" ? "active" : "")" asp-controller="Portal" asp-action="Doctors">
+                        <i class="bi bi-search-heart"></i>
+                        <span>Find Doctors</span>
+                    </a>
+
+                    <div class="nav-section-title mt-2">Clinical History</div>
+                    <a class="sidebar-nav-link @(currentController == "Portal" && currentAction == "Records" ? "active" : "")" asp-controller="Portal" asp-action="Records">
+                        <i class="bi bi-clipboard2-pulse"></i>
+                        <span>Medical Records</span>
+                    </a>
+                    <a class="sidebar-nav-link @(currentController == "Portal" && currentAction == "Prescriptions" ? "active" : "")" asp-controller="Portal" asp-action="Prescriptions">
+                        <i class="bi bi-file-earmark-medical"></i>
+                        <span>Prescriptions</span>
+                    </a>
+
+                    <div class="nav-section-title mt-2">Billing & Account</div>
+                    <a class="sidebar-nav-link @(currentController == "Portal" && currentAction == "Bills" ? "active" : "")" asp-controller="Portal" asp-action="Bills">
+                        <i class="bi bi-receipt"></i>
+                        <span>Invoices & Bills</span>
+                    </a>
+
+                    <div class="nav-section-title mt-2">Verification</div>
+                    <a class="sidebar-nav-link @(currentController == "Verify" ? "active" : "")" asp-controller="Verify" asp-action="Prescription">
+                        <i class="bi bi-patch-check"></i>
+                        <span>Verify Rx QR</span>
+                    </a>
+                }
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <div class="staff-main-wrapper">
+            <header class="staff-topbar">
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" id="sidebarToggleBtn" class="btn btn-sm btn-outline-secondary d-lg-none" aria-label="Toggle Navigation">
+                        <i class="bi bi-list fs-5"></i>
+                    </button>
+                    @if (isPatient)
+                    {
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="quick-jump-box d-none d-md-flex">
+                                <i class="bi bi-search search-icon"></i>
+                                <input type="text" id="quickDoctorSearchInput" class="quick-jump-input font-mono-data" placeholder="Search doctor or specialty..." autocomplete="off">
+                                <kbd class="shortcut-kbd"><span class="cmd-icon">Ctrl</span> K</kbd>
+                            </div>
+                            @if (ViewBag.Dependents is List<HospitalManagementSystem.Models.Patient> dependents && dependents.Any())
                             {
                                 var activePatient = ViewBag.Patient as HospitalManagementSystem.Models.Patient;
                                 var primaryPatient = ViewBag.PrimaryPatient as HospitalManagementSystem.Models.Patient;
                                 var isChildActive = activePatient?.Id != primaryPatient?.Id;
 
-                                <div class="dropdown me-1">
-                                    <button class="btn btn-sm @(isChildActive ? "btn-info text-dark" : "btn-outline-primary") dropdown-toggle d-flex align-items-center gap-1 shadow-xs fw-medium" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                        <i class="bi @(isChildActive ? "bi-person-heart" : "bi-people-fill")"></i>
-                                        <span>@(isChildActive ? activePatient?.FullName : "My Profile")</span>
-                                    </button>
-                                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 py-2" style="min-width: 250px;">
-                                        <li class="dropdown-header text-uppercase fs-7 fw-bold text-muted px-3">Primary Account</li>
-                                        <li>
-                                            <form asp-controller="Portal" asp-action="SwitchProfile" method="post" class="m-0">
-                                                <input type="hidden" name="patientId" value="@primaryPatient?.Id" />
-                                                <button type="submit" class="dropdown-item py-2 px-3 d-flex align-items-center justify-content-between @(!isChildActive ? "active fw-bold" : "")">
-                                                    <div class="d-flex align-items-center gap-2">
-                                                        <i class="bi bi-person-fill"></i>
-                                                        <div>
-                                                            <div>@primaryPatient?.FullName (You)</div>
-                                                            <small class="text-muted d-block font-monospace">@primaryPatient?.Uhid</small>
-                                                        </div>
-                                                    </div>
-                                                    @if (!isChildActive)
-                                                    {
-                                                        <i class="bi bi-check-lg text-primary ms-2"></i>
-                                                    }
-                                                </button>
-                                            </form>
-                                        </li>
-                                        <li><hr class="dropdown-divider my-2"></li>
-                                        <li class="dropdown-header text-uppercase fs-7 fw-bold text-muted px-3">Dependents & Children</li>
-                                        @foreach (var dep in dependents)
-                                        {
-                                            var isThisActive = activePatient?.Id == dep.Id;
-                                            <li>
-                                                <form asp-controller="Portal" asp-action="SwitchProfile" method="post" class="m-0">
-                                                    <input type="hidden" name="patientId" value="@dep.Id" />
-                                                    <button type="submit" class="dropdown-item py-2 px-3 d-flex align-items-center justify-content-between @(isThisActive ? "active fw-bold" : "")">
-                                                        <div class="d-flex align-items-center gap-2">
-                                                            <i class="bi bi-person-heart text-info"></i>
-                                                            <div>
-                                                                <div>@dep.FullName</div>
-                                                                <small class="text-muted d-block">
-                                                                    <span class="font-monospace">@dep.Uhid</span> • @(dep.GuardianRelationship ?? "Child")
-                                                                </small>
+                                <div class="family-pill-bar ms-1">
+                                    <form asp-controller="Portal" asp-action="SwitchProfile" method="post" class="m-0">
+                                        <input type="hidden" name="patientId" value="@primaryPatient?.Id" />
+                                        <button type="submit" class="family-pill @(!isChildActive ? "active" : "")" title="Switch to @primaryPatient?.FullName (You)">
+                                            <i class="bi bi-person-fill"></i>
+                                            <span class="family-pill-name">@(primaryPatient?.FullName ?? "You")</span>
+                                        </button>
+                                    </form>
+                                    <div class="dropdown d-inline-flex">
+                                        <button class="family-pill dropdown-toggle @(isChildActive ? "active child-active" : "")" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Switch Patient Profile">
+                                            <i class="bi bi-people-fill"></i>
+                                            <span class="family-pill-name">@(isChildActive ? activePatient?.FullName : "Family (" + dependents.Count + ")")</span>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-start shadow border-0 py-2" style="min-width: 250px;">
+                                            <li class="dropdown-header text-uppercase fs-8 fw-bold text-muted px-3">Switch Patient Profile</li>
+                                            @foreach (var dep in dependents)
+                                            {
+                                                var isThisActive = activePatient?.Id == dep.Id;
+                                                <li>
+                                                    <form asp-controller="Portal" asp-action="SwitchProfile" method="post" class="m-0">
+                                                        <input type="hidden" name="patientId" value="@dep.Id" />
+                                                        <button type="submit" class="dropdown-item py-2 px-3 d-flex align-items-center justify-content-between @(isThisActive ? "active fw-bold" : "")">
+                                                            <div class="d-flex align-items-center gap-2">
+                                                                <i class="bi bi-person-heart text-info"></i>
+                                                                <div>
+                                                                    <div>@dep.FullName</div>
+                                                                    <small class="text-muted d-block font-mono-data">@dep.Uhid &bull; @(dep.GuardianRelationship ?? "Child")</small>
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                        @if (isThisActive)
-                                                        {
-                                                            <i class="bi bi-check-lg text-primary ms-2"></i>
-                                                        }
-                                                    </button>
-                                                </form>
-                                            </li>
-                                        }
-                                    </ul>
+                                                            @if (isThisActive)
+                                                            {
+                                                                <i class="bi bi-check-lg text-primary ms-2"></i>
+                                                            }
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                            }
+                                        </ul>
+                                    </div>
                                 </div>
                             }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="quick-jump-box">
+                            <i class="bi bi-search search-icon"></i>
+                            <input type="text" id="quickPatientSearchInput" class="quick-jump-input font-mono-data" placeholder="Jump to patient UHID or name..." autocomplete="off">
+                            <kbd class="shortcut-kbd"><span class="cmd-icon">Ctrl</span> K</kbd>
+                        </div>
+                    }
+                </div>
 
-                            <div class="d-flex align-items-center text-muted gap-2">
-                                <i class="bi bi-person-circle fs-5"></i>
-                                <span class="fw-medium">@User.Identity.Name</span>
-                                <span class="badge bg-secondary">@User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Role)?.Value</span>
-                            </div>
-                            <form asp-controller="Auth" asp-action="Logout" method="post" class="m-0">
-                                <button type="submit" class="btn btn-sm btn-outline-danger">Log Out</button>
-                            </form>
-                        }
-                        else
-                        {
-                            <a class="btn btn-sm btn-primary" asp-controller="Auth" asp-action="Login">Log In</a>
-                        }
+                <div class="d-flex align-items-center gap-2 gap-sm-3">
+                    @if (User.IsInRole("Doctor") || User.IsInRole("Assistant"))
+                    {
+                        <div id="signalrStatusIndicator" class="signalr-status d-none d-sm-flex align-items-center gap-1" title="Real-time Notification link">
+                            <span class="signalr-dot"></span>
+                            <span class="signalr-label">Offline</span>
+                        </div>
+                    }
+                    <button type="button" id="themeToggleBtn" class="theme-toggle" title="Theme: auto">
+                        <i class="bi bi-circle-half"></i>
+                    </button>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="d-none d-md-block text-end" style="line-height: 1.2;">
+                            <div class="fw-semibold text-strong" style="font-size: 0.8125rem;">@User.Identity.Name</div>
+                            <small class="text-muted font-mono-data" style="font-size: 0.7rem;">@User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Role)?.Value</small>
+                        </div>
+                        <form asp-controller="Auth" asp-action="Logout" method="post" class="m-0">
+                            <button type="submit" class="btn btn-sm btn-outline-danger px-2 py-1" title="Log Out">
+                                <i class="bi bi-box-arrow-right"></i>
+                            </button>
+                        </form>
                     </div>
                 </div>
+            </header>
+
+            <main role="main" class="@(isFluid ? "staff-workspace-fluid" : "staff-workspace")">
+                @RenderBody()
+            </main>
+
+            @if (!isFluid)
+            {
+                <footer class="staff-footer text-center">
+                    <small>&copy; 2026 - Nexus Hospital Management System &bull; <a asp-controller="Home" asp-action="Privacy">Privacy Policy</a></small>
+                </footer>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <!-- Public Guest Header (Unauthenticated) -->
+    <header class="consumer-navbar sticky-top">
+        <div class="container d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-3">
+                <a class="navbar-brand d-flex align-items-center gap-2 mb-0" asp-controller="Home" asp-action="Index">
+                    <i class="bi bi-hospital"></i>
+                    <span>Nexus Hospital</span>
+                </a>
+                <nav class="d-none d-md-flex align-items-center gap-2 ms-3">
+                    <a class="nav-link @(currentController == "Portal" && currentAction == "Doctors" ? "active" : "")" asp-controller="Portal" asp-action="Doctors">Find Doctors</a>
+                    <a class="nav-link @(currentController == "Verify" && currentAction == "Prescription" ? "active" : "")" asp-controller="Verify" asp-action="Prescription">
+                        <i class="bi bi-patch-check me-1"></i>Verify Prescription
+                    </a>
+                </nav>
             </div>
-        </nav>
+
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" id="themeToggleBtn" class="theme-toggle" title="Theme: auto">
+                    <i class="bi bi-circle-half"></i>
+                </button>
+                <a class="btn btn-sm btn-outline-secondary d-none d-sm-inline-flex" asp-controller="Verify" asp-action="Prescription">
+                    <i class="bi bi-patch-check me-1"></i>Verify Rx
+                </a>
+                <a class="btn btn-sm btn-primary" asp-controller="Auth" asp-action="Login">Log In</a>
+            </div>
+        </div>
     </header>
 
-    <div class="container">
+    <div class="container py-3">
         <main role="main">
             @RenderBody()
         </main>
@@ -278,6 +408,7 @@
             <small>&copy; 2026 - Nexus Hospital Management System - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy Policy</a></small>
         </div>
     </footer>
+}
 
     <!-- Global Toast Container -->
     <div class="toast-container position-fixed bottom-0 end-0 p-4" style="z-index: 1055;">
