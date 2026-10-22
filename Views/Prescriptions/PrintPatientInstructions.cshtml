@@ -157,7 +157,7 @@
                 </div>
             </div>
             <div class="text-end">
-                <h5 class="fw-bold mb-1">Dr. @Model.Doctor.FullName</h5>
+                <h5 class="fw-bold mb-1">@Model.Doctor.ToDoctorTitle()</h5>
                 <div class="text-muted small">Patient Instruction Sheet</div>
             </div>
         </header>
@@ -205,7 +205,7 @@
 
         <div class="footer-signature">
             <div class="signature-line">
-                Dr. @Model.Doctor.FullName
+                @Model.Doctor.ToDoctorTitle()
             </div>
             <div class="small text-muted">Signature & Seal</div>
         </div>

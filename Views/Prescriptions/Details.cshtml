@@ -238,7 +238,7 @@
                     <form asp-action="Discontinue" method="post" class="d-inline" id="discontinuePrescriptionForm">
                         <input type="hidden" name="id" value="@Model.Id" />
                         <input type="hidden" name="reason" id="discontinueReasonInput" />
-                        <button type="button" class="btn btn-outline-warning text-dark px-4" onclick="confirmDiscontinuePrescription()">
+                        <button type="button" class="btn btn-outline-warning px-4" onclick="confirmDiscontinuePrescription()">
                             <i class="bi bi-slash-circle me-1"></i> Discontinue Therapy
                         </button>
                     </form>

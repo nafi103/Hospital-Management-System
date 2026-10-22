@@ -168,7 +168,7 @@
                             {
                                 <tr>
                                     <td>@pt.TransactionDate.ToLocalTime().ToString("MMM dd, yyyy hh:mm tt")</td>
-                                    <td><span class="badge bg-light text-dark border">@pt.PaymentMethod</span></td>
+                                    <td><span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle">@pt.PaymentMethod</span></td>
                                     <td>@(pt.ProcessedBy?.FullName ?? "Front Desk")</td>
                                     <td class="text-muted small">@(string.IsNullOrWhiteSpace(pt.Notes) ? "—" : pt.Notes)</td>
                                     <td class="text-end fw-bold text-success">৳@pt.Amount.ToString("0.00")</td>

@@ -23,7 +23,7 @@
                     <div class="d-flex justify-content-between align-items-start mb-3">
                         <div>
                             <h5 class="mb-1">@(string.IsNullOrEmpty(prescription.Diagnosis) ? "Prescription #" + prescription.Id : prescription.Diagnosis)</h5>
-                            <small class="text-muted">@prescription.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy") &middot; Dr. @prescription.Doctor?.FullName</small>
+                            <small class="text-muted">@prescription.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy") &middot; @prescription.Doctor.ToDoctorTitle()</small>
                         </div>
                         <div class="d-flex align-items-center gap-2">
                             @if (prescription.Status == PrescriptionStatus.PendingPharmacy)

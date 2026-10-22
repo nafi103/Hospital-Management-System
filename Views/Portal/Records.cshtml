@@ -22,7 +22,7 @@
                     <div class="d-flex justify-content-between align-items-start mb-3">
                         <div>
                             <h5 class="mb-1">@record.Diagnosis</h5>
-                            <small class="text-muted">@record.RecordedAt.ToLocalTime().ToString("MMM dd, yyyy") &middot; Dr. @record.Doctor?.FullName</small>
+                            <small class="text-muted">@record.RecordedAt.ToLocalTime().ToString("MMM dd, yyyy") &middot; @record.Doctor.ToDoctorTitle()</small>
                         </div>
                     </div>
                     @if (!string.IsNullOrWhiteSpace(record.ChiefComplaint))

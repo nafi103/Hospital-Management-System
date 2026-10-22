@@ -10,7 +10,7 @@
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4 border-bottom pb-3">
     <div>
         <h2 class="mb-1"><i class="bi bi-clock-history text-primary me-2"></i>Reschedule Appointment</h2>
-        <p class="text-muted mb-0">Select a new date and available time slot for your consultation with Dr. @Model.DoctorName.</p>
+        <p class="text-muted mb-0">Select a new date and available time slot for your consultation with @Model.DoctorName.ToDoctorTitle().</p>
     </div>
     <div>
         <a asp-action="Index" class="btn btn-outline-secondary">
@@ -39,13 +39,13 @@
     <div class="row g-4">
         <div class="col-lg-8">
             <!-- Current Appointment Reference Card -->
-            <div class="pro-card mb-4 p-4 border-start border-4 border-warning bg-light bg-opacity-25">
+            <div class="pro-card mb-4 p-4 border-start border-4 border-warning bg-surface-sunken">
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div>
                         <span class="text-muted small text-uppercase fw-bold">Currently Scheduled For:</span>
-                        <h4 class="mb-1 text-dark">@Model.CurrentDatetimeDisplay</h4>
+                        <h4 class="mb-1 text-strong">@Model.CurrentDatetimeDisplay</h4>
                         <p class="text-muted mb-0">
-                            Dr. @Model.DoctorName <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-1">@Model.DoctorCategory</span>
+                            @Model.DoctorName.ToDoctorTitle() <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-1">@Model.DoctorCategory</span>
                         </p>
                     </div>
                     <span class="badge bg-warning bg-opacity-10 text-warning border border-warning-subtle px-3 py-2">
@@ -76,11 +76,13 @@
                         <span class="badge bg-primary rounded-circle me-1">2</span> Select New Available Slot
                     </h5>
                     <div class="small d-flex align-items-center gap-3">
-                        <span class="d-flex align-items-center gap-1">
-                            <span class="badge bg-primary p-1 rounded-circle" style="width:10px;height:10px;"> </span> Available
+                        <span class="d-flex align-items-center gap-1.5 fw-medium">
+                            <span class="badge bg-primary p-1 rounded-circle" style="width:8px;height:8px;"> </span>
+                            <span class="text-body">Available</span>
                         </span>
-                        <span class="d-flex align-items-center gap-1 text-muted text-decoration-line-through">
-                            <span class="badge bg-secondary p-1 rounded-circle opacity-50" style="width:10px;height:10px;"> </span> Booked / Past
+                        <span class="d-flex align-items-center gap-1.5">
+                            <span class="badge bg-secondary p-1 rounded-circle opacity-75" style="width:8px;height:8px;"> </span>
+                            <span class="text-muted text-decoration-line-through">Booked / Past</span>
                         </span>
                     </div>
                 </div>
@@ -101,20 +103,20 @@
 
                 <!-- Morning Shift -->
                 <div class="mb-4">
-                    <h6 class="text-muted fw-semibold d-flex align-items-center gap-2 mb-2">
+                    <h6 class="text-strong fw-semibold d-flex align-items-center gap-2 mb-2">
                         <i class="bi bi-sun text-warning"></i> Morning Shift (09:00 AM – 12:45 PM)
                     </h6>
-                    <div id="morningSlotsContainer" class="p-2 border rounded bg-light bg-opacity-50">
+                    <div id="morningSlotsContainer" class="slot-group-container p-3 border rounded">
                         <span class="text-muted small">Loading slots...</span>
                     </div>
                 </div>
 
                 <!-- Afternoon Shift -->
                 <div>
-                    <h6 class="text-muted fw-semibold d-flex align-items-center gap-2 mb-2">
+                    <h6 class="text-strong fw-semibold d-flex align-items-center gap-2 mb-2">
                         <i class="bi bi-brightness-high text-primary"></i> Afternoon Shift (01:00 PM – 05:00 PM)
                     </h6>
-                    <div id="afternoonSlotsContainer" class="p-2 border rounded bg-light bg-opacity-50">
+                    <div id="afternoonSlotsContainer" class="slot-group-container p-3 border rounded">
                         <span class="text-muted small">Loading slots...</span>
                     </div>
                 </div>
@@ -140,7 +142,7 @@
 
                 <div class="mb-3">
                     <small class="text-muted d-block">Specialist:</small>
-                    <strong class="fs-6">Dr. @Model.DoctorName</strong>
+                    <strong class="fs-6">@Model.DoctorName.ToDoctorTitle()</strong>
                 </div>
 
                 <div class="mb-3">

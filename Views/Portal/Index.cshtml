@@ -30,11 +30,11 @@
 @if (next != null)
 {
     var nextLocal = next.AppointmentDatetime.ToHospitalTime();
-    <div class="pro-card mb-4 border-start border-4 border-primary p-4 bg-light bg-opacity-25">
+    <div class="pro-card mb-4 border-start border-4 border-primary p-4 bg-surface-sunken">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
             <div>
                 <span class="text-primary text-uppercase fw-bold small"><i class="bi bi-bell-fill me-1"></i>Next Upcoming Consultation</span>
-                <h3 class="mb-1 mt-1">Dr. @next.Doctor.FullName</h3>
+                <h3 class="mb-1 mt-1">@next.Doctor.ToDoctorTitle()</h3>
                 <span class="badge bg-secondary bg-opacity-10 text-secondary border mb-2">@(string.IsNullOrEmpty(next.Doctor.Category) ? "General Medicine" : next.Doctor.Category)</span>
             </div>
             @if (next.Status == AppointmentStatus.InConsultation)
@@ -52,14 +52,14 @@
         </div>
 
         <div class="d-flex align-items-center gap-3 text-muted mb-3 flex-wrap">
-            <span class="fw-semibold text-dark"><i class="bi bi-calendar3 me-1 text-primary"></i>@nextLocal.ToString("dddd, MMM dd, yyyy")</span>
+            <span class="fw-semibold text-strong"><i class="bi bi-calendar3 me-1 text-primary"></i>@nextLocal.ToString("dddd, MMM dd, yyyy")</span>
             <span class="fw-semibold text-primary"><i class="bi bi-clock-history me-1"></i>@nextLocal.ToString("hh:mm tt") (15 mins)</span>
             <span><i class="bi bi-geo-alt me-1"></i>OPD Doctor Chamber</span>
         </div>
 
         @if (!string.IsNullOrWhiteSpace(next.ReasonForVisit))
         {
-            <p class="mb-3 text-secondary small bg-white p-2 rounded border">
+            <p class="mb-3 text-secondary small bg-surface-sunken p-2 rounded border">
                 <strong>Reason:</strong> @next.ReasonForVisit
             </p>
         }
@@ -107,7 +107,7 @@ else
                         <div class="list-group-item px-0 py-3 border-bottom">
                             <div class="d-flex justify-content-between align-items-start mb-1">
                                 <div>
-                                    <h6 class="fw-bold mb-0">Dr. @a.Doctor.FullName</h6>
+                                    <h6 class="fw-bold mb-0">@a.Doctor.ToDoctorTitle()</h6>
                                     <small class="text-muted">@(string.IsNullOrEmpty(a.Doctor.Category) ? "General Physician" : a.Doctor.Category)</small>
                                 </div>
                                 @if (a.Status == AppointmentStatus.InConsultation)
@@ -120,7 +120,7 @@ else
                                 }
                             </div>
                             <div class="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
-                                <span class="small fw-medium text-dark">
+                                <span class="small fw-medium text-strong">
                                     <i class="bi bi-clock me-1 text-muted"></i>@aLocal.ToString("MMM dd, yyyy - hh:mm tt")
                                 </span>
                                 @if (a.Status == AppointmentStatus.Scheduled)
@@ -168,23 +168,35 @@ else
                     {
                         var aLocal = a.AppointmentDatetime.ToHospitalTime();
                         <div class="list-group-item px-0 py-3 border-bottom">
-                            <div class="d-flex justify-content-between align-items-center">
+                            <div class="d-flex justify-content-between align-items-start gap-2">
                                 <div>
-                                    <h6 class="fw-bold mb-0">Dr. @a.Doctor.FullName</h6>
-                                    <small class="text-muted">@aLocal.ToString("MMM dd, yyyy - hh:mm tt")</small>
+                                    <h6 class="fw-bold mb-1 text-strong">@a.Doctor.ToDoctorTitle()</h6>
+                                    <div class="small text-muted d-flex align-items-center flex-wrap gap-2">
+                                        <span><i class="bi bi-calendar3 me-1"></i>@aLocal.ToString("MMM dd, yyyy - hh:mm tt")</span>
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border font-sans fw-normal" style="font-size: 0.72rem;">@(string.IsNullOrEmpty(a.Doctor.Category) ? "General Medicine" : a.Doctor.Category)</span>
+                                    </div>
                                 </div>
-                                @if (a.Status == AppointmentStatus.Cancelled)
-                                {
-                                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle">Cancelled</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Completed</span>
-                                }
+                                <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                    @if (a.Status == AppointmentStatus.Cancelled)
+                                    {
+                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle">Cancelled</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Completed</span>
+                                        <a asp-action="Book" asp-route-doctorId="@a.DoctorId" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 0.75rem;" title="Book follow-up consultation">
+                                            <i class="bi bi-calendar-plus me-1"></i>Book Again
+                                        </a>
+                                    }
+                                </div>
                             </div>
                             @if (!string.IsNullOrWhiteSpace(a.ReasonForVisit))
                             {
-                                <small class="text-muted d-block mt-1">Reason: @a.ReasonForVisit</small>
+                                <div class="mt-2">
+                                    <span class="badge bg-surface-sunken text-muted border font-sans fw-normal text-wrap text-start" style="font-size: 0.78rem;">
+                                        <i class="bi bi-chat-left-text me-1"></i>Reason: @a.ReasonForVisit
+                                    </span>
+                                </div>
                             }
                         </div>
                     }
@@ -217,7 +229,7 @@ else
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body py-3">
-                        <p class="mb-2">Are you sure you want to cancel your consultation with <strong>Dr. @a.Doctor.FullName</strong>?</p>
+                        <p class="mb-2">Are you sure you want to cancel your consultation with <strong>@a.Doctor.ToDoctorTitle()</strong>?</p>
                         <div class="p-3 bg-light rounded border text-muted small mb-3">
                             <div><i class="bi bi-calendar3 me-1"></i>Date: @aLocal.ToString("dddd, MMM dd, yyyy")</div>
                             <div><i class="bi bi-clock me-1"></i>Time: @aLocal.ToString("hh:mm tt")</div>

@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', function () {
         slots.forEach(s => {
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = `btn btn-sm ${s.isAvailable ? 'btn-outline-primary slot-chip' : 'btn-light text-muted border text-decoration-line-through opacity-50 disabled'}`;
+            btn.className = `btn btn-sm slot-chip ${s.isAvailable ? 'slot-chip-available' : 'slot-chip-booked disabled'}`;
             btn.textContent = s.timeDisplay;
             btn.setAttribute('data-utc', s.slotStartUtc);
             btn.setAttribute('data-display', s.timeDisplay);
@@ -128,13 +128,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 btn.addEventListener('click', function () {
                     // Deselect previous
                     document.querySelectorAll('.slot-chip').forEach(b => {
-                        b.classList.remove('btn-primary', 'text-white', 'active');
-                        b.classList.add('btn-outline-primary');
+                        b.classList.remove('active');
                     });
 
                     // Select current
-                    this.classList.remove('btn-outline-primary');
-                    this.classList.add('btn-primary', 'text-white', 'active');
+                    this.classList.add('active');
 
                     // Bind to hidden input
                     slotTimeInput.value = this.getAttribute('data-utc');

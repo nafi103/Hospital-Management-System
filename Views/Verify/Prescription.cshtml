@@ -157,7 +157,7 @@
                                         </span>
                                     </td>
                                     <td>
-                                        <div class="fw-semibold text-strong">Dr. @item.Prescription.Doctor?.FullName</div>
+                                        <div class="fw-semibold text-strong">@item.Prescription.Doctor.ToDoctorTitle()</div>
                                         <small class="text-muted">@(item.Prescription.Doctor?.Category ?? "General Medicine")</small>
                                     </td>
                                     <td>
@@ -267,7 +267,7 @@
                     <div class="col-sm-6">
                         <div class="p-3 rounded bg-surface-sunken border h-100">
                             <span class="text-muted small text-uppercase fw-bold d-block mb-1" style="font-size: 0.7rem;">Prescribing Attending</span>
-                            <div class="fs-5 fw-bold text-primary mb-1">Dr. @(rx.Doctor?.FullName ?? "Hospital Physician")</div>
+                            <div class="fs-5 fw-bold text-primary mb-1">@(rx.Doctor != null ? rx.Doctor.ToDoctorTitle() : "Hospital Physician")</div>
                             <div class="small text-muted mb-1">
                                 <span>Department: <strong>@(rx.Doctor?.Category ?? "Clinical Medicine")</strong></span>
                             </div>

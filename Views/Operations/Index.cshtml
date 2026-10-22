@@ -50,7 +50,7 @@
                                 <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle">@item.Patient?.Uhid</span>
                             </td>
                             <td>
-                                <div class="fw-semibold">Dr. @item.Surgeon?.FullName</div>
+                                <div class="fw-semibold">@item.Surgeon.ToDoctorTitle()</div>
                                 <small class="text-muted">@(item.Surgeon?.Category ?? "Surgery")</small>
                             </td>
                             <td>

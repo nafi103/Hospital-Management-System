@@ -234,7 +234,7 @@
                                 <div class="pro-card pro-card-compact record-highlight-target" id="record-card-@rec.Id" style="font-size: 0.8125rem;">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
                                         <span class="fw-bold text-primary font-mono-data">@rec.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy")</span>
-                                        <small class="text-muted">Dr. @(rec.Doctor?.FullName ?? "Staff")</small>
+                                        <small class="text-muted">@(rec.Doctor != null ? rec.Doctor.ToDoctorTitle() : "Staff")</small>
                                     </div>
                                     <div class="fw-semibold text-strong mb-1">@rec.Diagnosis</div>
                                     @if (!string.IsNullOrWhiteSpace(rec.ChiefComplaint))

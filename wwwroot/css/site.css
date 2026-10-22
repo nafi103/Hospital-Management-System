@@ -216,6 +216,19 @@ table td.numeric,
     box-shadow: 0 0 0 1px var(--ai-border), var(--shadow-card);
 }
 
+/* Flush List Groups inside Cards */
+.list-group-flush > .list-group-item {
+    background-color: transparent !important;
+    border-color: var(--border-subtle);
+    color: var(--text-body);
+}
+
+.list-group-item {
+    background-color: transparent;
+    border-color: var(--border-subtle);
+    color: var(--text-body);
+}
+
 /* Icon Box Shape */
 .icon-box {
     width: 44px;
@@ -1114,6 +1127,185 @@ thead.table-light {
     background-color: var(--ai-accent);
     color: #ffffff;
     box-shadow: 0 2px 4px rgba(167, 139, 250, 0.3);
+}
+
+/* ==========================================================================
+   Global Dark Mode Legibility & Contrast Normalizations
+   ========================================================================== */
+
+[data-bs-theme="dark"] .text-dark {
+    color: var(--text-strong) !important;
+}
+
+/* Ensure bright warning backgrounds retain dark legible text */
+[data-bs-theme="dark"] .bg-warning.text-dark,
+[data-bs-theme="dark"] .badge.bg-warning.text-dark,
+[data-bs-theme="dark"] .btn-warning.text-dark,
+[data-bs-theme="dark"] .alert-warning .text-dark {
+    color: #0f172a !important;
+}
+
+[data-bs-theme="dark"] .bg-light {
+    background-color: var(--surface-sunken) !important;
+    color: var(--text-body);
+}
+
+[data-bs-theme="dark"] .bg-light.bg-opacity-25,
+[data-bs-theme="dark"] .bg-light.bg-opacity-50 {
+    background-color: rgba(30, 41, 59, 0.45) !important;
+}
+
+[data-bs-theme="dark"] .bg-white {
+    background-color: var(--surface-card) !important;
+    color: var(--text-body);
+}
+
+[data-bs-theme="dark"] .input-group-text.bg-white,
+[data-bs-theme="dark"] .input-group-text.bg-light {
+    background-color: var(--surface-sunken) !important;
+    border-color: var(--border-strong) !important;
+    color: var(--text-muted) !important;
+}
+
+[data-bs-theme="dark"] .btn-light {
+    background-color: var(--surface-sunken);
+    border-color: var(--border-strong);
+    color: var(--text-strong);
+}
+
+[data-bs-theme="dark"] .btn-light:hover,
+[data-bs-theme="dark"] .btn-light:focus {
+    background-color: var(--border-strong);
+    border-color: var(--border-strong);
+    color: #ffffff;
+}
+
+[data-bs-theme="dark"] .btn-outline-primary {
+    --bs-btn-color: #93c5fd;
+    --bs-btn-border-color: rgba(96, 165, 250, 0.45);
+    --bs-btn-hover-bg: var(--accent);
+    --bs-btn-hover-border-color: var(--accent);
+    --bs-btn-hover-color: #ffffff;
+    --bs-btn-active-bg: #2563eb;
+    --bs-btn-active-border-color: #60a5fa;
+    --bs-btn-active-color: #ffffff;
+    color: #93c5fd;
+    border-color: rgba(96, 165, 250, 0.45);
+}
+
+[data-bs-theme="dark"] .alert-light {
+    background-color: var(--surface-sunken);
+    border-color: var(--border-subtle);
+    color: var(--text-body);
+}
+
+[data-bs-theme="dark"] .badge.bg-light {
+    background-color: var(--surface-sunken) !important;
+    border-color: var(--border-strong) !important;
+    color: var(--text-strong) !important;
+}
+
+/* ==========================================================================
+   Interactive Slot Picker & Booking Components
+   ========================================================================== */
+
+.slot-group-container {
+    background-color: var(--surface-sunken);
+    border: 1px solid var(--border-subtle) !important;
+    min-height: 58px;
+    border-radius: var(--radius-md, 8px);
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.slot-chip {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 0.45rem 0.8rem;
+    border-radius: var(--radius-sm, 6px);
+    transition: all 0.15s ease-in-out;
+    letter-spacing: 0.02em;
+}
+
+.slot-chip-available {
+    background-color: var(--surface-card);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+}
+
+.slot-chip-available:hover {
+    background-color: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.12);
+}
+
+.slot-chip-available.active {
+    background-color: var(--accent) !important;
+    border-color: var(--accent) !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 0 3px var(--accent-soft), 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.slot-chip-booked {
+    background-color: rgba(0, 0, 0, 0.04);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    text-decoration: line-through;
+    opacity: 0.7;
+    cursor: not-allowed !important;
+    pointer-events: none;
+}
+
+.quick-reason-chip {
+    font-size: 0.8125rem;
+    border-radius: 9999px;
+    transition: all 0.15s ease;
+}
+
+[data-bs-theme="dark"] .slot-group-container {
+    background-color: rgba(15, 23, 42, 0.6);
+    border-color: var(--border-subtle) !important;
+}
+
+[data-bs-theme="dark"] .slot-chip-available {
+    background-color: rgba(59, 130, 246, 0.12);
+    border-color: rgba(96, 165, 250, 0.45);
+    color: #93c5fd; /* Soft, highly legible bright pastel blue (WCAG AAA contrast) */
+}
+
+[data-bs-theme="dark"] .slot-chip-available:hover {
+    background-color: #2563eb;
+    border-color: #60a5fa;
+    color: #ffffff !important;
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+}
+
+[data-bs-theme="dark"] .slot-chip-available.active {
+    background-color: #2563eb !important;
+    border-color: #93c5fd !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35), 0 0 12px rgba(59, 130, 246, 0.4);
+}
+
+[data-bs-theme="dark"] .slot-chip-booked {
+    background-color: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #64748b; /* Slate 500: clearly booked/disabled, yet distinctly readable without eye strain */
+    opacity: 0.75;
+}
+
+[data-bs-theme="dark"] .quick-reason-chip {
+    background-color: var(--surface-sunken);
+    border-color: var(--border-strong);
+    color: var(--text-body);
+}
+
+[data-bs-theme="dark"] .quick-reason-chip:hover {
+    background-color: var(--accent-soft);
+    border-color: var(--accent);
+    color: #93c5fd;
 }
 
 /* ==========================================================================
