@@ -1,4 +1,9 @@
 $(document).ready(function () {
+    let audioUnlocked = false;
+    const unlockAudio = function () { audioUnlocked = true; };
+    window.addEventListener('pointerdown', unlockAudio, { once: true });
+    window.addEventListener('keydown', unlockAudio, { once: true });
+
     if (window.MySignalRGroupId && window.MySignalRGroupId !== "") {
         const connection = new signalR.HubConnectionBuilder()
             .withUrl("/notificationHub")
@@ -6,11 +11,10 @@ $(document).ready(function () {
             .build();
 
         connection.on("ReceiveNotification", function (appointmentId, patientName) {
-            // 1. Play Ding Sound
+            // 1. Play Ding Sound (guarded by user interaction to prevent autoplay warnings)
             const ding = document.getElementById("dingSound");
-            if (ding) {
-                // We use catch to prevent uncaught exceptions if browser blocks autoplay
-                ding.play().catch(e => console.log("Audio play blocked by browser."));
+            if (ding && (audioUnlocked || (navigator.userActivation && navigator.userActivation.hasBeenActive))) {
+                ding.play().catch(function () { /* Audio blocked gracefully */ });
             }
 
             // 2. Set Message and Show Toast

@@ -141,5 +141,13 @@
             else label.textContent = 'Offline';
         }
     };
+
+    // 5. Global Modal Input Auto-Focus
+    document.addEventListener('shown.bs.modal', function (event) {
+        var focusTarget = event.target.querySelector('textarea, input:not([type="hidden"]):not([disabled])');
+        if (focusTarget) {
+            focusTarget.focus();
+        }
+    });
 })();
 

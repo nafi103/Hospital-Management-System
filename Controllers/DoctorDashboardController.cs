@@ -389,6 +389,19 @@ namespace HospitalManagementSystem.Controllers
                 return RedirectToAction(nameof(Cockpit), new { id = model.AppointmentId });
             }
 
+            // Defensive model binding verification: prevent silent loss of prescribed medications
+            if (model.PrescriptionItems == null || model.PrescriptionItems.Count == 0)
+            {
+                var hasRawMedicineInputs = Request.HasFormContentType && Request.Form.Keys.Any(k => 
+                    k.StartsWith("PrescriptionItems[") && k.EndsWith(".MedicineId") && !string.IsNullOrWhiteSpace(Request.Form[k]));
+                
+                if (hasRawMedicineInputs)
+                {
+                    TempData["ErrorMessage"] = "A technical error occurred while binding prescription items. Please re-check prescribed items and submit again.";
+                    return RedirectToAction(nameof(Cockpit), new { id = model.AppointmentId });
+                }
+            }
+
             // Deduplication safety check: each medicine can only be prescribed once per prescription
             if (model.PrescriptionItems != null && model.PrescriptionItems.Count > 0)
             {

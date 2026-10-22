@@ -432,6 +432,7 @@
 <!-- HIDDEN MEDICINE ROW TEMPLATE -->
 <script type="text/template" id="medicineRowTemplate">
     <div class="medicine-row bg-white border rounded-3 p-3 shadow-sm transition-all hover-border-primary" data-index="{index}">
+        <input type="hidden" name="PrescriptionItems.Index" value="{index}" />
         <div class="row g-2 align-items-center mb-2">
             <div class="col-md-7 position-relative">
                 <input type="hidden" name="PrescriptionItems[{index}].MedicineId" class="medicine-id-input" required />
@@ -527,9 +528,10 @@
         function reindexRows() {
             $('#medicinesListContainer .medicine-row').each(function(i) {
                 $(this).attr('data-index', i);
+                $(this).find('input[name="PrescriptionItems.Index"]').val(i);
                 $(this).find('input, select').each(function() {
                     var name = $(this).attr('name');
-                    if (name) {
+                    if (name && name !== 'PrescriptionItems.Index') {
                         name = name.replace(/\[\d+\]/, '[' + i + ']');
                         $(this).attr('name', name);
                     }
@@ -589,12 +591,23 @@
             } else {
                 matches.slice(0, 10).forEach(function(m) {
                     var isAlreadySelected = selectedIds.includes(m.id);
-                    var stockBadge = m.stock > 0
+                    var isOutOfStock = m.stock <= 0;
+                    var stockBadge = !isOutOfStock
                         ? '<span class="badge bg-light text-secondary border">Stock: ' + m.stock + '</span>'
-                        : '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">Out of Stock</span>';
+                        : '<span class="badge bg-danger text-white"><i class="bi bi-x-circle me-1"></i>Out of Stock</span>';
 
-                    var $item = $('<a href="#" class="list-group-item list-group-item-action py-2 d-flex justify-content-between align-items-center"></a>')
-                        .html('<div><strong>' + m.name + '</strong> <small class="text-muted">(' + m.generic + ')</small></div> ' + stockBadge)
+                    var altHtml = '';
+                    if (isOutOfStock) {
+                        var alt = allMedicines.find(function(a) {
+                            return a.generic && m.generic && a.generic.toLowerCase() === m.generic.toLowerCase() && a.stock > 0 && a.id !== m.id;
+                        });
+                        if (alt) {
+                            altHtml = '<div class="small text-success mt-1"><i class="bi bi-arrow-right-circle me-1"></i>In-stock alternative: <strong>' + alt.name + '</strong> (' + alt.stock + ' in stock)</div>';
+                        }
+                    }
+
+                    var $item = $('<a href="#" class="list-group-item list-group-item-action py-2"></a>')
+                        .html('<div class="d-flex justify-content-between align-items-center"><div><strong>' + m.name + '</strong> <small class="text-muted">(' + m.generic + ')</small></div> ' + stockBadge + '</div>' + altHtml)
                         .click(function(e) {
                             e.preventDefault();
                             if (isAlreadySelected) {
@@ -716,6 +729,7 @@
 
         // Form Submit & Double-Click Prevention
         $('#cockpitForm').on('submit', function(e) {
+            reindexRows();
             var hasWarnings = !$('#safetyWarningsAlertBox').hasClass('d-none');
             if (hasWarnings) {
                 var overrideVal = $('#safetyOverrideReasonField').val().trim();

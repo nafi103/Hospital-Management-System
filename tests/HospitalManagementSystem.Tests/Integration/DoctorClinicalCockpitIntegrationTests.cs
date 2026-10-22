@@ -392,5 +392,100 @@ namespace HospitalManagementSystem.Tests.Integration
             Assert.Contains(model, a => a.Id == freshAppt.Id);
             Assert.DoesNotContain(model, a => a.Id == staleAppt.Id);
         }
+
+        [Fact]
+        public async Task CompleteConsultation_WithPrescriptionItems_PersistsBothRecordsAndCompletesAppointment()
+        {
+            var (context, dashboardCtrl, _) = await CreateSetupAsync(10);
+
+            var appt = new Appointment
+            {
+                PatientId = 100,
+                DoctorId = 10,
+                AppointmentDatetime = DateTime.UtcNow,
+                EndTime = DateTime.UtcNow.AddMinutes(15),
+                Status = AppointmentStatus.InConsultation,
+                ReasonForVisit = "Follow-up",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            context.Appointments.Add(appt);
+            await context.SaveChangesAsync();
+
+            var submitModel = new ClinicalCockpitSubmitModel
+            {
+                AppointmentId = appt.Id,
+                PatientId = 100,
+                Diagnosis = "Essential Hypertension",
+                ChiefComplaint = "Headache",
+                Treatment = "Rest and medication",
+                PrescriptionItems = new List<CockpitPrescriptionItemInput>
+                {
+                    new() { MedicineId = 1, Quantity = 10, DoseMorning = 1, DoseAfternoon = 0, DoseEvening = 1, DoseUnit = DoseUnit.Tablet, DurationDays = 5 }
+                }
+            };
+
+            var result = await dashboardCtrl.CompleteConsultation(submitModel);
+
+            var redirect = Assert.IsType<RedirectToActionResult>(result);
+            Assert.Equal("Index", redirect.ActionName);
+
+            var updatedAppt = await context.Appointments.FindAsync(appt.Id);
+            Assert.Equal(AppointmentStatus.Completed, updatedAppt!.Status);
+
+            var record = await context.MedicalRecords.FirstOrDefaultAsync(r => r.AppointmentId == appt.Id);
+            Assert.NotNull(record);
+            Assert.Equal("Essential Hypertension", record.Diagnosis);
+
+            var prescription = await context.Prescriptions
+                .Include(p => p.PrescriptionItems)
+                .FirstOrDefaultAsync(p => p.AppointmentId == appt.Id);
+            Assert.NotNull(prescription);
+            Assert.Single(prescription.PrescriptionItems);
+            Assert.Equal(1, prescription.PrescriptionItems.First().MedicineId);
+        }
+
+        [Fact]
+        public async Task CompleteConsultation_RawFormMedicineMismatch_RejectsAndReturnsWarning()
+        {
+            var (context, dashboardCtrl, _) = await CreateSetupAsync(10);
+
+            var appt = new Appointment
+            {
+                PatientId = 100,
+                DoctorId = 10,
+                AppointmentDatetime = DateTime.UtcNow,
+                EndTime = DateTime.UtcNow.AddMinutes(15),
+                Status = AppointmentStatus.InConsultation,
+                ReasonForVisit = "Consultation",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            context.Appointments.Add(appt);
+            await context.SaveChangesAsync();
+
+            // Simulate raw form having medicine inputs, but model binding resulted in empty PrescriptionItems
+            var httpContext = dashboardCtrl.ControllerContext.HttpContext;
+            httpContext.Request.ContentType = "application/x-www-form-urlencoded";
+            httpContext.Request.Form = new Microsoft.AspNetCore.Http.FormCollection(new Dictionary<string, Microsoft.Extensions.Primitives.StringValues>
+            {
+                ["PrescriptionItems[0].MedicineId"] = "1"
+            });
+
+            var submitModel = new ClinicalCockpitSubmitModel
+            {
+                AppointmentId = appt.Id,
+                PatientId = 100,
+                Diagnosis = "Mild Fever",
+                PrescriptionItems = new List<CockpitPrescriptionItemInput>() // Empty due to binding drop
+            };
+
+            var result = await dashboardCtrl.CompleteConsultation(submitModel);
+
+            var redirect = Assert.IsType<RedirectToActionResult>(result);
+            Assert.Equal("Cockpit", redirect.ActionName);
+            Assert.NotNull(dashboardCtrl.TempData["ErrorMessage"]);
+            Assert.Contains("error occurred while binding prescription items", dashboardCtrl.TempData["ErrorMessage"]!.ToString()!);
+        }
     }
 }

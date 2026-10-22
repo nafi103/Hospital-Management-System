@@ -107,7 +107,7 @@ namespace HospitalManagementSystem.Controllers
             return RedirectAfterLogin(user.Role.RoleName);
         }
 
-        [HttpPost]
+        [AcceptVerbs("GET", "POST")]
         public async Task<IActionResult> Logout()
         {
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
