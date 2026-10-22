@@ -184,6 +184,56 @@ namespace HospitalManagementSystem.Controllers
 
             if (record == null) return NotFound();
 
+            if (!await CanAccessRecordAsync(record))
+            {
+                return Forbid();
+            }
+
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest" || Request.Query.ContainsKey("partial"))
+            {
+                if (record.AppointmentId.HasValue)
+                {
+                    ViewBag.Prescriptions = await _context.Prescriptions
+                        .Include(p => p.PrescriptionItems)
+                            .ThenInclude(pi => pi.Medicine)
+                        .Where(p => p.AppointmentId == record.AppointmentId.Value)
+                        .ToListAsync();
+                }
+                return PartialView("_RecordQuickViewModalBody", record);
+            }
+
+            return View(record);
+        }
+
+        // GET: MedicalRecords/QuickView/5
+        public async Task<IActionResult> QuickView(int id)
+        {
+            var record = await _context.MedicalRecords
+                .Include(r => r.Patient)
+                .Include(r => r.Doctor)
+                .FirstOrDefaultAsync(r => r.Id == id);
+
+            if (record == null) return NotFound();
+
+            if (!await CanAccessRecordAsync(record))
+            {
+                return Forbid();
+            }
+
+            if (record.AppointmentId.HasValue)
+            {
+                ViewBag.Prescriptions = await _context.Prescriptions
+                    .Include(p => p.PrescriptionItems)
+                        .ThenInclude(pi => pi.Medicine)
+                    .Where(p => p.AppointmentId == record.AppointmentId.Value)
+                    .ToListAsync();
+            }
+
+            return PartialView("_RecordQuickViewModalBody", record);
+        }
+
+        private async Task<bool> CanAccessRecordAsync(MedicalRecord record)
+        {
             // Verify clinical care relationship if caller is a Doctor or Assistant
             if (User.IsInRole("Doctor") || User.IsInRole("Assistant"))
             {
@@ -211,17 +261,17 @@ namespace HospitalManagementSystem.Controllers
 
                         if (!hasCareRelationship)
                         {
-                            return Forbid();
+                            return false;
                         }
                     }
                 }
                 else
                 {
-                    return Forbid();
+                    return false;
                 }
             }
 
-            return View(record);
+            return true;
         }
 
         // GET: MedicalRecords/Delete/5

@@ -312,6 +312,7 @@ namespace HospitalManagementSystem.Services
 
             var specs = new List<RecordSpec>
             {
+                new("rahim",   "Routine screening, polyuria, elevated home BP", "Type-2 Diabetes Mellitus & Essential Hypertension", "Metformin 500mg once daily with meals, dietary counseling, monitor BP & glucose", 90),
                 new("rahim",   "Fever and body ache for 3 days",        "Viral fever",                        "Paracetamol 500mg, rest and fluids",              10),
                 new("rahim",   "Follow-up, mild residual fatigue",      "Post-viral fatigue, resolving",       "Continue paracetamol PRN, review in a week",       2),
                 new("fatema",  "Burning epigastric pain after meals",   "Acute gastritis",                     "Omeprazole 20mg once daily before breakfast",       5),
@@ -422,6 +423,7 @@ namespace HospitalManagementSystem.Services
             // deliberately stay unmatched - the check has nothing to compare them against.
             var specs = new List<AllergySpec>
             {
+                new("rahim",   "Penicillin",   "Urticarial rash & facial swelling", AllergySeverity.Severe),
                 new("karim",   "Penicillin",   "Skin rash",        AllergySeverity.Moderate),
                 new("nasrin",  "Azithromycin", "Nausea and hives", AllergySeverity.Moderate, "Azithromycin"),
                 new("abdul",   "Sulfa drugs",  "Severe skin reaction", AllergySeverity.Severe),
@@ -815,10 +817,12 @@ namespace HospitalManagementSystem.Services
             var latestRecordId = records[^1].Id;
 
             var narrative =
-                "**Follow-up for viral fever, now with resolving fatigue**\n\n" +
-                $"- Diagnosis: Viral fever with body ache [[rec:{firstRecordId}]]\n" +
-                $"- Treatment: Paracetamol 500mg and supportive care [[rec:{firstRecordId}]]\n" +
-                $"- Status: Fever resolved, mild residual fatigue on follow-up [[rec:{latestRecordId}]]";
+                "**Patient Clinical History & Risk Briefing**\n\n" +
+                $"- Chronic Conditions: Type-2 Diabetes Mellitus & Essential Hypertension [[rec:{firstRecordId}]]\n" +
+                "- Surgical History: Laparoscopic Appendectomy (Completed 2025, uneventful recovery)\n" +
+                "- Allergies & Sensitivities: Penicillin (Severe - Urticarial rash & facial swelling)\n" +
+                "- Vitals & Acuity Alert: Blood Pressure 95/60 mmHg, NEWS2 Score 5 (Urgent clinical review)\n" +
+                $"- Active Regimens: Metformin 500mg daily; Napa 500mg (Paracetamol) PRN for post-viral fatigue [[rec:{latestRecordId}]]";
 
             var draft = new CaseSummaryDraft
             {
@@ -926,8 +930,10 @@ namespace HospitalManagementSystem.Services
                 var draft = new CaseSummaryDraft
                 {
                     NarrativeText =
-                        $"**Case summary for {patients[spec.PatientKey].FullName}**\n\n" +
-                        $"- Summary generated from recent chart review [[rec:{recordId}]]",
+                        $"**Patient Clinical History & Risk Briefing**\n\n" +
+                        $"- Chronic & Relevant History: Verified chart record [[rec:{recordId}]]\n" +
+                        "- Allergies & Sensitivities: No known drug allergies (NKDA)\n" +
+                        "- Surgical History: No prior surgical operations recorded",
                     CitedRecordIds = new List<int> { recordId }
                 };
 
@@ -1071,7 +1077,19 @@ namespace HospitalManagementSystem.Services
                 UpdatedAt = now.AddMinutes(-30)
             };
 
-            _context.Operations.AddRange(op1, op2);
+            var opRahim = new Operation
+            {
+                PatientId = patients["rahim"].Id,
+                SurgeonId = drOneId,
+                OtRoom = "OT-1 (General Surgery)",
+                OperationDatetime = now.AddYears(-1).AddMonths(-2),
+                Status = OperationStatus.Completed,
+                PreparationChecklist = "Laparoscopic Appendectomy; Uncomplicated acute appendicitis; Uneventful recovery [Discharged stable]",
+                CreatedAt = now.AddYears(-1).AddMonths(-2),
+                UpdatedAt = now.AddYears(-1).AddMonths(-2)
+            };
+
+            _context.Operations.AddRange(op1, op2, opRahim);
             await _context.SaveChangesAsync();
         }
 

@@ -41,37 +41,34 @@ namespace HospitalManagementSystem.Services
             _resolver = resolver;
         }
 
-        // Fetches the patient's comprehensive clinical profile (allergies, latest vitals, active
-        // prescriptions, and medical records) and scrubs them for the model, caching the
-        // scrubbed text. The cache key bakes in the count and latest UpdatedAt/CreatedAt ticks
-        // across all 4 entity sets so any edit, addition, or status change immediately invalidates the cache.
         private async Task<(Patient Patient, List<MedicalRecord> Records, ScrubResult Scrubbed)> BuildScrubbedPatientContextAsync(int patientId, CancellationToken ct)
         {
-            var patient = await _context.Patients.FindAsync(new object?[] { patientId }, ct)
+            var patient = await _context.Patients
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == patientId, ct)
                 ?? throw new ClinicalAiException(AiFailureReason.InvalidResponse, $"Patient {patientId} not found.");
 
             var records = await _context.MedicalRecords
+                .AsNoTracking()
                 .Where(r => r.PatientId == patientId)
                 .OrderByDescending(r => r.RecordedAt)
-                .Take(10)
+                .Take(15) // Expanded window so chronic conditions (DM, HTN, IHD) aren't pushed out by minor visits
                 .ToListAsync(ct);
 
-            if (records.Count == 0)
-            {
-                throw new ClinicalAiException(AiFailureReason.InvalidResponse, "This patient has no medical records to summarize yet.");
-            }
-
             var allergies = await _context.PatientAllergies
+                .AsNoTracking()
                 .Where(a => a.PatientId == patientId)
                 .OrderByDescending(a => a.CreatedAt)
                 .ToListAsync(ct);
 
             var latestVital = await _context.PatientVitals
+                .AsNoTracking()
                 .Where(v => v.PatientId == patientId)
                 .OrderByDescending(v => v.CreatedAt)
                 .FirstOrDefaultAsync(ct);
 
             var prescriptions = await _context.Prescriptions
+                .AsNoTracking()
                 .Include(p => p.PrescriptionItems)
                     .ThenInclude(pi => pi.Medicine)
                 .Where(p => p.PatientId == patientId)
@@ -79,23 +76,40 @@ namespace HospitalManagementSystem.Services
                 .Take(5)
                 .ToListAsync(ct);
 
-            // Composite timestamp across all clinical domains ensures edits to existing records
-            // immediately result in a cache miss rather than serving stale prompt context.
+            var operations = await _context.Operations
+                .AsNoTracking()
+                .Where(o => o.PatientId == patientId)
+                .OrderByDescending(o => o.OperationDatetime)
+                .Take(10)
+                .ToListAsync(ct);
+
+            if (records.Count == 0 && allergies.Count == 0 && prescriptions.Count == 0 && operations.Count == 0 && latestVital == null)
+            {
+                throw new ClinicalAiException(AiFailureReason.InvalidResponse, "This patient has no clinical history, allergies, operations, or vitals to summarize yet.");
+            }
+
+            // Composite cache key across all 5 clinical domains
             var recordsTimestamp = records.Select(r => r.UpdatedAt.Ticks).DefaultIfEmpty(0).Max();
             var allergiesTimestamp = allergies.Select(a => a.CreatedAt.Ticks).DefaultIfEmpty(0).Max();
             var vitalsTimestamp = latestVital?.CreatedAt.Ticks ?? 0;
             var presTimestamp = prescriptions.Select(p => p.UpdatedAt.Ticks).DefaultIfEmpty(0).Max();
+            var opsTimestamp = operations.Select(o => o.OperationDatetime.Ticks).DefaultIfEmpty(0).Max();
 
-            var compositeKey = $"ai-ctx-{patientId}-{records.Count}-{recordsTimestamp}-{allergies.Count}-{allergiesTimestamp}-{vitalsTimestamp}-{prescriptions.Count}-{presTimestamp}";
+            var compositeKey = $"ai-ctx-v2-{patientId}-{records.Count}-{recordsTimestamp}-{allergies.Count}-{allergiesTimestamp}-{vitalsTimestamp}-{prescriptions.Count}-{presTimestamp}-{operations.Count}-{opsTimestamp}";
 
             if (!_cache.TryGetValue(compositeKey, out ScrubResult? scrubbed) || scrubbed is null)
             {
                 var sb = new StringBuilder();
 
-                // 1. Allergies section
+                // 0. Non-Identifying Biological Profile (Crucial for cardiovascular/metabolic & pediatric context)
+                var ageYears = patient.DateOfBirth != default ? (int)((DateTime.UtcNow - patient.DateOfBirth).TotalDays / 365.25) : 0;
+                sb.AppendLine($"Patient Demographics: Age {Math.Max(0, ageYears)} years, Gender: {patient.Gender}, Blood Group: {patient.BloodGroup ?? "Unknown"}");
+                sb.AppendLine();
+
+                // 1. Allergies & Contraindications (Highest Safety Priority)
                 if (allergies.Count > 0)
                 {
-                    sb.AppendLine("Patient Known Allergies:");
+                    sb.AppendLine("CRITICAL - Patient Known Allergies:");
                     foreach (var a in allergies)
                     {
                         var genericPart = !string.IsNullOrEmpty(a.AllergenGenericName) ? $" (Generic: {a.AllergenGenericName})" : "";
@@ -106,52 +120,69 @@ namespace HospitalManagementSystem.Services
                 }
                 else
                 {
-                    sb.AppendLine("Patient Known Allergies: None recorded.\n");
+                    sb.AppendLine("Patient Known Allergies: No known allergies recorded.\n");
                 }
 
-                // 2. Latest Vitals & NEWS2 Priority section
+                // 2. Past Operations & Surgical History
+                if (operations.Count > 0)
+                {
+                    sb.AppendLine("Surgical & Operation History:");
+                    foreach (var op in operations)
+                    {
+                        var details = !string.IsNullOrWhiteSpace(op.PreparationChecklist) ? $": {op.PreparationChecklist}" : "";
+                        sb.AppendLine($"- Operation in {op.OtRoom} ({op.OperationDatetime:yyyy-MM-dd}, Status: {op.Status}){details}");
+                    }
+                    sb.AppendLine();
+                }
+
+                // 3. Latest Vitals & NEWS2 Acuity
                 if (latestVital != null)
                 {
                     sb.AppendLine($"Latest Vital Signs ({latestVital.CreatedAt:yyyy-MM-dd HH:mm} UTC):");
                     sb.AppendLine($"- Blood Pressure: {latestVital.SystolicBp}/{latestVital.DiastolicBp} mmHg");
                     sb.AppendLine($"- Heart Rate: {latestVital.HeartRate} bpm, Respiratory Rate: {latestVital.RespiratoryRate}/min");
                     sb.AppendLine($"- SpO2: {latestVital.Spo2}%, Temperature: {latestVital.Temperature}°C, Supplemental O2: {(latestVital.OnSupplementalOxygen ? "Yes" : "No")}");
-                    sb.AppendLine($"- Consciousness: {latestVital.Consciousness}, Blood Sugar: {(latestVital.BloodSugar.HasValue ? $"{latestVital.BloodSugar.Value} mmol/L" : "N/A")}");
+                    sb.AppendLine($"- Consciousness: {latestVital.Consciousness}, Blood Sugar: {(latestVital.BloodSugar.HasValue ? $"{latestVital.BloodSugar.Value} mmol/L" : "N/A")}, Weight: {(latestVital.WeightKg.HasValue ? $"{latestVital.WeightKg.Value} kg" : "N/A")}");
                     if (latestVital.TriagePriority.HasValue)
                     {
-                        sb.AppendLine($"- Triage Priority: {latestVital.TriagePriority.Value}");
+                        sb.AppendLine($"- NEWS2 Triage Priority: {latestVital.TriagePriority.Value}");
                     }
                     sb.AppendLine();
                 }
 
-                // 3. Active & Recent Prescriptions section
+                // 4. Active & Recent Prescriptions (Explicitly distinguishing Discontinued vs Active)
                 if (prescriptions.Count > 0)
                 {
-                    sb.AppendLine("Active & Recent Prescriptions:");
+                    sb.AppendLine("Active & Recent Medications:");
                     foreach (var p in prescriptions)
                     {
-                        var statusStr = p.Status == PrescriptionStatus.Dispensed ? "Dispensed" : "Pending Pharmacy";
+                        var statusStr = p.DiscontinuedById.HasValue
+                            ? "DISCONTINUED"
+                            : (p.Status == PrescriptionStatus.Dispensed ? "Active / Dispensed" : "Prescribed (Pending Dispense)");
                         var dateStr = (p.DispensedAt ?? p.CreatedAt).ToString("yyyy-MM-dd");
                         sb.AppendLine($"Prescription #{p.Id} ({dateStr}, Status: {statusStr}):");
-                        if (!string.IsNullOrWhiteSpace(p.Diagnosis)) sb.AppendLine($"  Diagnosis: {p.Diagnosis}");
+                        if (!string.IsNullOrWhiteSpace(p.Diagnosis)) sb.AppendLine($"  Indication/Diagnosis: {p.Diagnosis}");
                         foreach (var item in p.PrescriptionItems)
                         {
                             var medName = item.Medicine?.Name ?? $"Medicine #{item.MedicineId}";
                             var genName = item.Medicine?.GenericName;
                             var genericStr = !string.IsNullOrWhiteSpace(genName) ? $" ({genName})" : "";
-                            sb.AppendLine($"  - {medName}{genericStr}: {item.DoseDisplay}, {(item.DurationDays.HasValue ? $"{item.DurationDays} days" : "unspecified duration")}");
+                            sb.AppendLine($"  - {medName}{genericStr}: {item.DoseDisplay}, {(item.DurationDays.HasValue ? $"{item.DurationDays} days" : "ongoing")}");
                         }
                     }
                     sb.AppendLine();
                 }
 
-                // 4. Medical Record History
-                sb.AppendLine("Medical Record History:");
-                sb.Append(string.Join("\n\n", records.Select(r =>
-                    $"Record #{r.Id} ({r.RecordedAt:yyyy-MM-dd}):\n" +
-                    $"Chief complaint: {r.ChiefComplaint}\n" +
-                    $"Diagnosis: {r.Diagnosis}\n" +
-                    $"Treatment: {r.Treatment}")));
+                // 5. Longitudinal Medical Record History
+                if (records.Count > 0)
+                {
+                    sb.AppendLine("Longitudinal Medical Records:");
+                    sb.Append(string.Join("\n\n", records.Select(r =>
+                        $"Record #{r.Id} ({r.RecordedAt:yyyy-MM-dd}):\n" +
+                        $"Chief complaint: {r.ChiefComplaint}\n" +
+                        $"Diagnosis: {r.Diagnosis}\n" +
+                        $"Treatment/Notes: {r.Treatment}")));
+                }
 
                 scrubbed = _scrubber.Scrub(sb.ToString(), patient);
                 _cache.Set(compositeKey, scrubbed, TimeSpan.FromMinutes(10));
@@ -160,17 +191,10 @@ namespace HospitalManagementSystem.Services
             return (patient, records, scrubbed);
         }
 
-        // A pseudonym occurrence can straddle a chunk boundary, from any provider.
-        // Rehydration must always run over the FULL raw buffer (never a truncated prefix
-        // - Replace() needs every character of a match to even recognize it, so
-        // truncating the input can silently skip a match that's actually complete).
-        // What's withheld instead is a margin of trailing OUTPUT characters sized to the
-        // longest pseudonym: an unresolved partial match can occupy at most that many
-        // characters at the tail, so holding them back guarantees everything already
-        // sent is final and can never be reshaped by a later chunk completing a match.
         private async Task<string> ConsumeAndStreamAsync(
             IAsyncEnumerable<AiStreamChunk> chunks,
             ScrubResult scrubbed,
+            HashSet<int>? validRecordIds,
             int maxPseudonymLength,
             Func<string, CancellationToken, Task> sendDelta,
             Action<AiStreamChunk> onMeta,
@@ -179,6 +203,20 @@ namespace HospitalManagementSystem.Services
             var rawBuffer = new StringBuilder();
             var sentLength = 0;
             var holdBackMargin = Math.Max(maxPseudonymLength, 32);
+
+            string SanitizeAndRehydrate(string raw)
+            {
+                var rehydrated = _scrubber.Rehydrate(raw, scrubbed.Map);
+                if (validRecordIds == null) return rehydrated;
+
+                // Strip hallucinated record citations on the fly before they ever hit the WebSocket
+                return CitationPattern.Replace(rehydrated, match =>
+                {
+                    return int.TryParse(match.Groups[1].Value, out var id) && validRecordIds.Contains(id)
+                        ? match.Value
+                        : string.Empty;
+                });
+            }
 
             await foreach (var chunk in chunks.WithCancellation(ct))
             {
@@ -189,36 +227,44 @@ namespace HospitalManagementSystem.Services
                 }
                 rawBuffer.Append(chunk.Text);
 
-                var fullyRehydrated = _scrubber.Rehydrate(rawBuffer.ToString(), scrubbed.Map);
-                var safeLength = Math.Min(fullyRehydrated.Length, Math.Max(sentLength, fullyRehydrated.Length - holdBackMargin));
+                var processed = SanitizeAndRehydrate(rawBuffer.ToString());
+                var safeLength = Math.Min(processed.Length, Math.Max(sentLength, processed.Length - holdBackMargin));
 
-                // Stateful lookahead buffer: hold back incomplete bracket sequences ('[' or '[[')
-                // so split tokens (e.g. [PATIENT_NAME] or [[rec:12]]) never leak across chunk boundaries
+                // Stateful lookahead buffer: properly handles both single '[...]' pseudonyms
+                // and double '[[rec:12]]' citation markers so neither splits across chunks.
                 if (safeLength > sentLength)
                 {
-                    var candidate = fullyRehydrated[..safeLength];
-                    var lastOpenBracket = candidate.LastIndexOf('[');
-                    if (lastOpenBracket >= sentLength)
+                    var candidate = processed[..safeLength];
+                    var lastDoubleOpen = candidate.LastIndexOf("[[", StringComparison.Ordinal);
+                    var lastSingleOpen = candidate.LastIndexOf('[');
+
+                    if (lastDoubleOpen >= sentLength)
                     {
-                        var lastCloseBracket = candidate.LastIndexOf(']');
-                        if (lastCloseBracket < lastOpenBracket)
+                        var closeDouble = candidate.IndexOf("]]", lastDoubleOpen + 2, StringComparison.Ordinal);
+                        if (closeDouble == -1)
                         {
-                            safeLength = lastOpenBracket;
+                            safeLength = lastDoubleOpen;
+                        }
+                    }
+                    else if (lastSingleOpen >= sentLength)
+                    {
+                        var closeSingle = candidate.IndexOf(']', lastSingleOpen + 1);
+                        if (closeSingle == -1)
+                        {
+                            safeLength = lastSingleOpen;
                         }
                     }
                 }
 
                 if (safeLength > sentLength)
                 {
-                    var delta = fullyRehydrated[sentLength..safeLength];
+                    var delta = processed[sentLength..safeLength];
                     sentLength = safeLength;
                     await sendDelta(delta, ct);
                 }
             }
 
-            var finalText = _scrubber.Rehydrate(rawBuffer.ToString(), scrubbed.Map);
-            // Flush whatever the withhold margin kept back at the very end of the stream -
-            // otherwise the live view visibly falls short of the final saved text.
+            var finalText = SanitizeAndRehydrate(rawBuffer.ToString());
             if (finalText.Length > sentLength)
             {
                 await sendDelta(finalText[sentLength..], CancellationToken.None);
@@ -228,15 +274,13 @@ namespace HospitalManagementSystem.Services
 
         private sealed record ProviderStreamResult(string FinalText, string ModelId, int InputTokens, int OutputTokens, int CachedTokens, int LatencyMs);
 
-        // The provider-fallback loop shared by every AI feature: walk the admin-configured
-        // providers in priority order, stream and rehydrate each chunk to the group as it
-        // arrives, retry once on the primary before moving on, and surface a typed failure
-        // if every provider is exhausted. Callers own everything before this (building and
-        // scrubbing their own context) and everything after (turning FinalText into their
-        // own payload shape and persisting the AiSuggestion) - this only knows how to talk
-        // to the provider chain, not what the result means.
         private async Task<ProviderStreamResult> RunProviderStreamAsync(
-            IClientProxy group, string systemInstruction, string userContent, ScrubResult scrubbed, CancellationToken ct)
+            IClientProxy group,
+            string systemInstruction,
+            string userContent,
+            ScrubResult scrubbed,
+            HashSet<int>? validRecordIds,
+            CancellationToken ct)
         {
             Task SendChunk(string text, CancellationToken token) => group.SendAsync("ReceiveChunk", text, token);
             var maxPseudonymLength = scrubbed.Map.Count > 0 ? scrubbed.Map.Keys.Max(k => k.Length) : 0;
@@ -256,8 +300,6 @@ namespace HospitalManagementSystem.Services
             for (var i = 0; i < providers.Count && finalText == null; i++)
             {
                 var rp = providers[i];
-                // One quick retry on the primary provider absorbs a short transient blip;
-                // every other provider in the chain gets a single try before moving on.
                 var maxAttempts = i == 0 ? 2 : 1;
 
                 for (var attempt = 1; attempt <= maxAttempts && finalText == null; attempt++)
@@ -268,8 +310,8 @@ namespace HospitalManagementSystem.Services
                     }
                     else if (attempt > 1)
                     {
-                        await group.SendAsync("StreamRestarted", "Retrying...", CancellationToken.None);
-                        await Task.Delay(TimeSpan.FromSeconds(3), ct);
+                        await group.SendAsync("StreamRestarted", "Retrying primary AI provider...", CancellationToken.None);
+                        await Task.Delay(TimeSpan.FromSeconds(1.5), ct);
                     }
 
                     try
@@ -277,7 +319,7 @@ namespace HospitalManagementSystem.Services
                         resolvedModelId = rp.ModelId;
                         finalText = await ConsumeAndStreamAsync(
                             rp.Provider.StreamAsync(rp.ApiKey, rp.ModelId, systemInstruction, userContent, ct),
-                            scrubbed, maxPseudonymLength, SendChunk,
+                            scrubbed, validRecordIds, maxPseudonymLength, SendChunk,
                             chunk =>
                             {
                                 if (chunk.ModelId != null) resolvedModelId = chunk.ModelId;
@@ -290,9 +332,13 @@ namespace HospitalManagementSystem.Services
                     catch (ClinicalAiException ex)
                     {
                         lastFailure = ex;
-                        if (ex.Reason != AiFailureReason.RateLimited)
+                        // If rate-limited or unauthorized, fail over immediately to the next provider
+                        // rather than sleeping when another vendor is available.
+                        if (ex.Reason == AiFailureReason.Unauthorized ||
+                            ex.Reason == AiFailureReason.InvalidResponse ||
+                            (ex.Reason == AiFailureReason.RateLimited && providers.Count > 1))
                         {
-                            break; // this provider is out - move to the next one, not just retry
+                            break;
                         }
                     }
                 }
@@ -322,23 +368,33 @@ namespace HospitalManagementSystem.Services
             var validRecordIds = records.Select(r => r.Id).ToHashSet();
 
             const string systemInstruction =
-                "You are a clinical documentation assistant inside a hospital management system. " +
-                "You will be given a patient's recent medical record entries, each labeled 'Record #<id>'. " +
-                "Produce a scannable pre-visit summary a doctor can read in a few seconds, in this exact " +
-                "format and nothing else: first, one headline sentence synthesizing why the patient is " +
-                "being seen, wrapped in double asterisks like **this**, on its own line, with no citation " +
-                "marker on it. Then, on their own lines, 3 to 6 bullet points, each starting with '- ', " +
-                "each stating one self-contained clinical fact (a diagnosis, a treatment, or a current " +
-                "status) - ordered chronologically, with the most recent/current status last. Immediately " +
-                "after any bullet that draws on a specific record, insert a citation marker in the exact " +
-                "form [[rec:<id>]] using that record's real id - never invent an id and never cite a " +
-                "record you weren't given. Only use information present in the records - never invent " +
-                "findings, medications, or dates. Refer to the patient only by the pseudonymous identifier " +
-                "given, never assume a real name. Use no markdown beyond the headline's ** and the bullets' '- '.";
+                "You are a senior clinical decision-support assistant preparing a high-signal pre-consultation " +
+                "briefing for a physician. Your goal is NOT to write a chronological diary of minor past visits; " +
+                "instead, extract only clinically critical information that directly impacts today's diagnosis, " +
+                "prescribing safety, and clinical management.\n\n" +
+                "Produce this exact structure and nothing else:\n" +
+                "1. HEADLINE: One single line wrapped in double asterisks (**like this**) summarizing the patient's " +
+                "age/sex, major chronic comorbidities (e.g., Diabetes, Hypertension, Ischemic Heart Disease, CKD, " +
+                "Asthma/COPD), past major surgeries, and severe allergies. Do not put citation markers in the headline.\n" +
+                "2. CLINICAL BULLETS: 3 to 6 concise bullets, each starting with '- ', prioritized in this order:\n" +
+                "   - Chronic Conditions & Major Comorbidities: Highlight lifelong or high-risk conditions (e.g., " +
+                "diabetes, hypertension, cardiac disease, renal/hepatic impairment) and their control status. Ignore " +
+                "resolved minor acute illnesses (like an old common cold) unless recurrent.\n" +
+                "   - Surgical & Procedural History: Any past major operations or surgical interventions.\n" +
+                "   - Allergies & Contraindications: Any documented drug or substance allergies and reaction severity.\n" +
+                "   - Active Maintenance Medications: Ongoing long-term drugs the doctor must consider before prescribing.\n" +
+                "   - Baseline Vitals & Red Flags: Highlight any abnormal latest vitals (elevated BP, high blood sugar, " +
+                "hypoxia, fever, or elevated NEWS2 priority) or state that baseline vitals are stable.\n\n" +
+                "STRICT RULES:\n" +
+                "- Immediately after any bullet fact drawn from a specific 'Record #<id>', append [[rec:<id>]] using " +
+                "that record's exact numeric ID. Never invent an ID.\n" +
+                "- Only state facts explicitly present in the provided profile. Never invent conditions, surgeries, " +
+                "allergies, or doses. Omit any category above that has no noteworthy findings.\n" +
+                "- Use no markdown other than the headline's ** and each bullet's leading '- '.";
 
-            var userContent = $"Patient identifier: Patient-{patient.Uhid}\n\nMedical record history:\n{scrubbed.ScrubbedText}";
+            var userContent = $"Clinical Profile:\n{scrubbed.ScrubbedText}";
 
-            var result = await RunProviderStreamAsync(group, systemInstruction, userContent, scrubbed, ct);
+            var result = await RunProviderStreamAsync(group, systemInstruction, userContent, scrubbed, validRecordIds, ct);
 
             var citedIds = new List<int>();
             var cleanedText = CitationPattern.Replace(result.FinalText, match =>
@@ -346,7 +402,7 @@ namespace HospitalManagementSystem.Services
                 var id = int.Parse(match.Groups[1].Value);
                 if (!validRecordIds.Contains(id))
                 {
-                    return string.Empty; // hallucinated id - drop the marker, keep the sentence
+                    return string.Empty;
                 }
                 if (!citedIds.Contains(id))
                 {
@@ -364,7 +420,7 @@ namespace HospitalManagementSystem.Services
                 PayloadJson = JsonSerializer.Serialize(draft),
                 SourceRecordIds = JsonSerializer.Serialize(records.Select(r => r.Id)),
                 ModelId = result.ModelId,
-                PromptVersion = "case-summary-v1",
+                PromptVersion = "case-summary-v2",
                 Verdict = AiSuggestionVerdict.Pending,
                 InputTokens = result.InputTokens,
                 OutputTokens = result.OutputTokens,
@@ -386,6 +442,7 @@ namespace HospitalManagementSystem.Services
             var group = _streamHub.Clients.Group($"AiStream_{streamId}");
 
             var prescription = await _context.Prescriptions
+                .AsNoTracking()
                 .Include(p => p.Patient)
                 .Include(p => p.PrescriptionItems)
                     .ThenInclude(i => i.Medicine)
@@ -422,12 +479,11 @@ namespace HospitalManagementSystem.Services
                 "take it, referring to the medicine by the exact name given - never invent a medicine, dose, " +
                 "or name not present in the input. After the medicine bullets, add 2 to 3 more bullets: " +
                 "warning signs that mean the patient should return to the hospital, and the importance of " +
-                "completing the full course. Refer to the patient only by the pseudonymous identifier given, " +
-                "never assume a real name. Use no markdown beyond the headline's ** and the bullets' '- '.";
+                "completing the full course. Use no markdown beyond the headline's ** and the bullets' '- '.";
 
-            var userContent = $"Patient identifier: Patient-{prescription.Patient.Uhid}\n\n{scrubbed.ScrubbedText}";
+            var userContent = scrubbed.ScrubbedText;
 
-            var result = await RunProviderStreamAsync(group, systemInstruction, userContent, scrubbed, ct);
+            var result = await RunProviderStreamAsync(group, systemInstruction, userContent, scrubbed, null, ct);
 
             var draft = new CaseSummaryDraft { NarrativeText = result.FinalText.Trim(), CitedRecordIds = new List<int>() };
 
@@ -439,7 +495,7 @@ namespace HospitalManagementSystem.Services
                 PayloadJson = JsonSerializer.Serialize(draft),
                 SourceRecordIds = JsonSerializer.Serialize(new[] { prescription.Id }),
                 ModelId = result.ModelId,
-                PromptVersion = "patient-instructions-v1",
+                PromptVersion = "patient-instructions-v2",
                 Verdict = AiSuggestionVerdict.Pending,
                 InputTokens = result.InputTokens,
                 OutputTokens = result.OutputTokens,

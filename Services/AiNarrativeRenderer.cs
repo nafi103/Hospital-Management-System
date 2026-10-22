@@ -96,7 +96,7 @@ namespace HospitalManagementSystem.Services
             var encoded = System.Net.WebUtility.HtmlEncode(text);
             return CitationPattern.Replace(
                 encoded,
-                m => $"<a href=\"/MedicalRecords/Details/{m.Groups[1].Value}\" target=\"_blank\" class=\"badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle text-decoration-none align-text-top\" title=\"Source: Record #{m.Groups[1].Value}\"><i class=\"bi bi-file-earmark-text\"></i> {m.Groups[1].Value}</a>");
+                m => $"<a href=\"/MedicalRecords/Details/{m.Groups[1].Value}\" data-record-id=\"{m.Groups[1].Value}\" class=\"ai-cite-pill ai-citation-badge\" title=\"Quick view Record #{m.Groups[1].Value}\" role=\"button\"><i class=\"bi bi-file-earmark-text\"></i> {m.Groups[1].Value}</a>");
         }
     }
 }

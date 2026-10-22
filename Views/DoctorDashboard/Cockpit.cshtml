@@ -225,17 +225,20 @@
                     </div>
                     @if (Model.LatestAiCaseSummary != null)
                     {
-                        <span class="badge bg-purple bg-opacity-25 border text-purple" style="font-size: 0.7rem; border-color: var(--ai-border); color: var(--ai-accent);">
-                            @Model.LatestAiCaseSummary.Verdict
+                        <span class="badge bg-purple bg-opacity-10 border text-purple" style="font-size: 0.7rem; border-color: var(--ai-border); color: var(--ai-accent);">
+                            <i class="bi bi-sparkles me-1"></i>Clinical Briefing
                         </span>
                     }
                 </div>
 
                 @if (Model.LatestAiCaseSummary != null)
                 {
-                    <div class="small" id="aiSummaryTextContainer" style="max-height: 220px; overflow-y: auto;">
+                    <div class="small" id="aiSummaryTextContainer" style="max-height: 280px; overflow-y: auto;">
                         @{
-                            var vdAi = new ViewDataDictionary(ViewData) { ["ReturnUrl"] = Url.Action("Cockpit", "DoctorDashboard", new { id = Model.Appointment.Id }) };
+                            var vdAi = new ViewDataDictionary(ViewData) {
+                                ["ReturnUrl"] = Url.Action("Cockpit", "DoctorDashboard", new { id = Model.Appointment.Id }),
+                                ["HideActions"] = true
+                            };
                         }
                         <partial name="_SuggestionCardBody" model="Model.LatestAiCaseSummary" view-data="vdAi" />
                     </div>
@@ -353,12 +356,7 @@
                         <h6 class="fw-bold mb-0 text-strong">
                             <i class="bi bi-journal-medical me-2 text-primary"></i>Encounter Documentation
                         </h6>
-                        @if (Model.LatestAiCaseSummary != null)
-                        {
-                            <button type="button" class="btn btn-sm btn-outline-info py-1 px-3" id="btnInsertAiSummary" title="Auto-populate diagnosis and complaints from AI summary">
-                                <i class="bi bi-magic me-1"></i>Insert AI Summary
-                            </button>
-                        }
+
                     </div>
 
                     <div class="bg-surface-sunken p-2 px-3 rounded mb-3 border d-flex align-items-center justify-content-between" style="font-size: 0.8125rem;">
@@ -698,32 +696,7 @@
             });
         }
 
-        // Insert AI Summary into Documentation
-        $('#btnInsertAiSummary').click(function() {
-            var aiText = $('#aiSummaryTextContainer').text().trim();
-            if (!aiText) return;
 
-            var currentDiagnosis = $('#diagnosisInput').val().trim();
-            var currentComplaint = $('#chiefComplaintInput').val().trim();
-
-            if (!currentComplaint) {
-                $('#chiefComplaintInput').val('@Model.Appointment.ReasonForVisit');
-            }
-
-            if (!currentDiagnosis) {
-                $('#diagnosisInput').val(aiText);
-            } else {
-                $('#diagnosisInput').val(currentDiagnosis + "\n[AI Summary]: " + aiText);
-            }
-
-            Swal.fire({
-                icon: 'success',
-                title: 'AI Summary Inserted',
-                text: 'Clinical findings have been inserted into your diagnosis field.',
-                timer: 1500,
-                showConfirmButton: false
-            });
-        });
 
         // Complete Notes Only (Clears empty medicine rows and submits)
         $('#btnCompleteNotesOnly').click(function() {
@@ -732,7 +705,8 @@
             $('#btnSubmitEncounter').click();
         });
 
-        // Form Submit & Double-Click Prevention
+        // Form Submit & Double-Click Prevention with Unsaved Changes Guard
+        var isEncounterSubmitting = false;
         $('#cockpitForm').on('submit', function(e) {
             reindexRows();
             var hasWarnings = !$('#safetyWarningsAlertBox').hasClass('d-none');
@@ -751,8 +725,22 @@
                 $('#SafetyOverrideReasonInput').val(overrideVal);
             }
 
+            isEncounterSubmitting = true;
             // Disable submit button immediately to prevent double-click race
             $('#btnSubmitEncounter').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Saving Encounter...');
+        });
+
+        // Warn if navigating away with unsaved consultation drafts
+        window.addEventListener('beforeunload', function (e) {
+            if (isEncounterSubmitting) return;
+            var cc = $('#ChiefComplaints').val();
+            var cd = $('#ClinicalDiagnosis').val();
+            var tp = $('#TreatmentPlan').val();
+            var medRows = $('#medicinesListContainer .medicine-row').length;
+            if ((cc && cc.trim().length > 0) || (cd && cd.trim().length > 0) || (tp && tp.trim().length > 0) || medRows > 0) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
         });
 
         function confirmDiscontinueActiveMed(form, medName) {

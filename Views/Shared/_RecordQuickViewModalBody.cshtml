@@ -1,0 +1,129 @@
+@model HospitalManagementSystem.Models.MedicalRecord
+@using HospitalManagementSystem.Models
+
+@{
+    var prescriptions = ViewBag.Prescriptions as List<Prescription> ?? new List<Prescription>();
+}
+
+<div class="p-3 p-md-4">
+    <!-- Header Meta Banner -->
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 border-bottom pb-3 mb-3">
+        <div class="d-flex align-items-center gap-3">
+            <div class="rounded-circle p-2 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 46px; height: 46px; background: rgba(59, 130, 246, 0.12); color: #3b82f6;">
+                <i class="bi bi-file-earmark-medical fs-4"></i>
+            </div>
+            <div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <h5 class="fw-bold mb-0 text-strong">Record #@Model.Id</h5>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-mono-data">
+                        @Model.Patient?.Uhid
+                    </span>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle">
+                        <i class="bi bi-check2-circle me-1"></i>Verified Record
+                    </span>
+                </div>
+                <div class="text-muted small mt-1">
+                    Patient: <strong class="text-strong">@Model.Patient?.FullName</strong>
+                    @if (Model.Patient != null && Model.Patient.DateOfBirth != default)
+                    {
+                        var age = DateTime.UtcNow.Year - Model.Patient.DateOfBirth.Year;
+                        <span> &bull; @age yrs, @Model.Patient.Gender</span>
+                    }
+                    else if (!string.IsNullOrEmpty(Model.Patient?.Gender))
+                    {
+                        <span> &bull; @Model.Patient.Gender</span>
+                    }
+                    @if (!string.IsNullOrEmpty(Model.Patient?.BloodGroup))
+                    {
+                        <span> &bull; Blood: <strong class="text-danger">@Model.Patient.BloodGroup</strong></span>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="text-start text-sm-end ms-auto ms-sm-0">
+            <div class="small fw-bold text-strong font-mono-data">
+                <i class="bi bi-calendar3 me-1 text-primary"></i>@Model.RecordedAt.ToLocalTime().ToString("MMM dd, yyyy")
+            </div>
+            <div class="text-muted small">
+                <i class="bi bi-clock me-1"></i>@Model.RecordedAt.ToLocalTime().ToString("hh:mm tt")
+            </div>
+            @if (Model.Doctor != null)
+            {
+                <div class="badge bg-secondary-subtle text-secondary-emphasis mt-1">
+                    <i class="bi bi-person-badge me-1"></i>@(Model.Doctor.FullName.StartsWith("Dr.") ? Model.Doctor.FullName : $"Dr. {Model.Doctor.FullName}")
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Clinical Details Grid -->
+    <div class="d-flex flex-column gap-3">
+        @if (!string.IsNullOrWhiteSpace(Model.ChiefComplaint))
+        {
+            <div class="p-3 rounded-3 border bg-surface-sunken">
+                <div class="small text-uppercase tracking-wider fw-bold text-muted mb-1" style="font-size: 0.72rem;">
+                    <i class="bi bi-chat-left-quote me-1 text-primary"></i>Chief Complaint
+                </div>
+                <div class="fw-medium text-strong" style="white-space: pre-wrap; font-size: 0.9rem;">@Model.ChiefComplaint</div>
+            </div>
+        }
+
+        <div class="p-3 rounded-3 border" style="background-color: rgba(99, 102, 241, 0.05); border-color: rgba(99, 102, 241, 0.25) !important;">
+            <div class="small text-uppercase tracking-wider fw-bold mb-1" style="color: #6366f1; font-size: 0.72rem;">
+                <i class="bi bi-clipboard-pulse me-1"></i>Clinical Diagnosis
+            </div>
+            <div class="fw-bold fs-6 text-strong" style="white-space: pre-wrap;">@Model.Diagnosis</div>
+        </div>
+
+        <div class="p-3 rounded-3 border bg-surface-sunken">
+            <div class="small text-uppercase tracking-wider fw-bold text-muted mb-1" style="font-size: 0.72rem;">
+                <i class="bi bi-journal-medical me-1 text-primary"></i>Treatment Plan &amp; Advice
+            </div>
+            <div class="text-strong" style="white-space: pre-wrap; font-size: 0.875rem;">@Model.Treatment</div>
+        </div>
+
+        @if (prescriptions.Any(p => p.PrescriptionItems != null && p.PrescriptionItems.Any()))
+        {
+            <div class="p-3 rounded-3 border bg-surface-sunken">
+                <div class="small text-uppercase tracking-wider fw-bold text-muted mb-2" style="font-size: 0.72rem;">
+                    <i class="bi bi-capsule me-1 text-success"></i>Prescribed Medications During This Encounter
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-borderless mb-0 align-middle" style="font-size: 0.8125rem;">
+                        <thead class="text-muted border-bottom">
+                            <tr>
+                                <th>Medicine</th>
+                                <th>Dosage</th>
+                                <th>Duration</th>
+                                <th>Instructions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var rx in prescriptions)
+                            {
+                                @if (rx.PrescriptionItems != null)
+                                {
+                                    @foreach (var item in rx.PrescriptionItems)
+                                    {
+                                        <tr>
+                                            <td class="fw-bold text-strong">
+                                                @(item.Medicine?.Name ?? "Medicine")
+                                                @if (!string.IsNullOrWhiteSpace(item.Medicine?.GenericName))
+                                                {
+                                                    <small class="text-muted d-block font-normal">@item.Medicine.GenericName</small>
+                                                }
+                                            </td>
+                                            <td><span class="badge bg-light text-dark border font-mono-data">@item.DoseDisplay</span></td>
+                                            <td>@(item.DurationDays.HasValue ? $"{item.DurationDays} days" : "-")</td>
+                                            <td class="text-muted">@(string.IsNullOrWhiteSpace(item.Instructions) ? "-" : item.Instructions)</td>
+                                        </tr>
+                                    }
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+</div>
